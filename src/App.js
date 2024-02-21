@@ -10,6 +10,9 @@ import {
   Alignment,
   DirectionCaret,
   Axis,
+  nameDirection,
+  reverseDirection,
+  getDirectionAxis,
 } from "parsegraph";
 import Color from 'parsegraph-color';
 import { BasicGLProvider } from 'parsegraph-compileprogram';
@@ -21,10 +24,32 @@ import {
   makeScale3x3
 } from 'parsegraph-matrix';
 
-const fontSize = 36;
+const fontSize = 24;
 const borderThickness = 3;
 const borderRoundedness = 5;
 const maxClickDelay = 1000;
+const borderColor = new Color(0.7, 0.7, 0.7, 1);
+
+const nodeHasValue = (node) => typeof node.value() === "string" || typeof node.value() === "number";
+
+const nextAlignment = (alignment, childDir) => {
+  if (getDirectionAxis(childDir) === Axis.Z) {
+    if (alignment === Alignment.INWARD_VERTICAL) {
+      return Alignment.INWARD_HORIZONTAL;
+    }
+    return Alignment.INWARD_VERTICAL;
+  }
+  switch (alignment) {
+    case Alignment.NEGATIVE:
+      return Alignment.CENTER;
+    case Alignment.CENTER:
+      return Alignment.POSITIVE;
+    case Alignment.POSITIVE:
+      return Alignment.NONE;
+    default:
+      return Alignment.NEGATIVE;
+  }
+};
 
 function App() {
   const canvasRef = useRef();
@@ -102,6 +127,12 @@ function App() {
       if (showEditor) {
         return;
       }
+      const pull = (dir) => {
+        console.log("Pulling", nameDirection(dir), userCaret.node().value())
+        userCaret.pull(dir);
+        refresh();
+        return;
+      };
       const spawnMove = (dir) => {
         if (userCaret.node().neighbors().hasNode(dir)) {
           userCaret.move(dir);
@@ -110,9 +141,29 @@ function App() {
           userCaret.spawnMove(dir);
           refresh();
         }
-      }
+      };
+
+      const toggleAlignment = () => {
+        const node = userCaret.node();
+        if (node.neighbors().isRoot()) {
+          return;
+        }
+        const childDir = reverseDirection(node.neighbors().parentDirection())
+        const alignment = node.neighbors().parentNode().neighbors().getAlignment(childDir);
+        node.neighbors().parentNode().neighbors().align(
+          childDir,
+          nextAlignment(alignment, childDir)
+        )
+        refresh();
+      };
+
       console.log(e);
       switch (e.key) {
+        case 'Escape':
+          cam.setOrigin(cam.width()/2, cam.height()/2);
+          cam.setScale(1);
+          refresh();
+          break;
         case 'x':
         case 'Backspace':
           if (userCaret.node().neighbors().isRoot()) {
@@ -127,10 +178,28 @@ function App() {
           if (userCaret.has(Direction.OUTWARD)) {
             userCaret.move(Direction.OUTWARD);
             refresh();
+          } else if (!userCaret.node().neighbors().isRoot()) {
+            userCaret.move(userCaret.node().neighbors().parentDirection());
+            refresh();
           }
           break;
         case 'i':
           spawnMove(Direction.INWARD);
+          break;
+        case 'J':
+          pull(Direction.DOWNWARD);
+          break;
+        case 'K':
+          pull(Direction.UPWARD);
+          break;
+        case 'L':
+          pull(Direction.FORWARD);
+          break;
+        case 'H':
+          pull(Direction.BACKWARD);
+          break;
+        case 'v':
+          toggleAlignment();
           break;
         case 'ArrowDown':
         case 'j':
@@ -162,8 +231,7 @@ function App() {
           if (showEditor) {
             editor.style.display = 'block';
             editor.focus();
-            const val = userCaret.node().value();
-            if (typeof val === "string" && val !== '') {
+            if (nodeHasValue(userCaret.node())) {
               editor.value = userCaret.node().value();
             } else {
               editor.value = '';
@@ -240,8 +308,7 @@ function App() {
       return new CommitLayout(widget, {
         size: (node, size) => {
           size[0] = fontSize;
-          const hasValue = typeof node.value() === "string" || typeof node.value() === "number";
-          if (hasValue) {
+          if (nodeHasValue(node)) {
             const { width } = ctx.measureText(node.value());
             size[0] = Math.max(size[0], width + 6*borderThickness);
           }
@@ -253,7 +320,7 @@ function App() {
             child.layout().extentSize(childSize);
 
             if (node.neighbors().getAlignment(Direction.INWARD) === Alignment.INWARD_VERTICAL) {
-              if (!hasValue) {
+              if (!nodeHasValue(node)) {
                 size[0] = 4*borderThickness;
                 size[1] = 4*borderThickness;
               }
@@ -261,7 +328,7 @@ function App() {
               size[0] = Math.max(size[0], 2*borderThickness + childSize[0]);
               size[1] += childSize[1];
             } else {
-              if (!hasValue) {
+              if (!nodeHasValue(node)) {
                 size[0] = borderThickness;
                 size[1] = borderThickness;
               }
@@ -289,7 +356,7 @@ function App() {
           }
 
           let numBlocks = 0;
-          pg.siblings().forEachNode(node => {
+          pg.siblings().forEach(node => {
             paintNodeLines(node, borderThickness, () => {
               ++numBlocks;
             });
@@ -300,26 +367,21 @@ function App() {
 
           painter.initBuffer(numBlocks);
 
-          pg.siblings().forEachNode(node => {
+          pg.siblings().forEach(node => {
             paintNodeLines(node, borderThickness/2, (x, y, w, h) => {
               painter.setBackgroundColor(new Color(0.5, 0.5, 0.5, 0.5));
-              painter.setBorderColor(new Color(1, 1, 1, 1));
+              painter.setBorderColor(borderColor);
               painter.drawBlock(x, y, w, h, 0, 0);
             });
             paintNodeBounds(node, (x, y, w, h) => {
-              if (node.value() === "s") {
-                painter.setBackgroundColor(new Color(0.2, 0.2, 0.2, 0.5));
-                painter.setBorderColor(new Color(0.5, 0.5, 0.5, 0.5));
-              } else if (node.value() === "b") {
-                painter.setBackgroundColor(new Color(0, 0, 0, 1));
-                painter.setBorderColor(new Color(1, 1, 1, 1));
-              }
-              else {
-                painter.setBackgroundColor(new Color(0, 0, 1, .1));
-                painter.setBorderColor(new Color(1, 1, 1, 1));
-              }
+              painter.setBackgroundColor(new Color(0, 0, 1, .1));
+              painter.setBorderColor(borderColor);
               const scale = node.layout().groupScale();
-              painter.drawBlock(x, y, w, h, borderRoundedness * scale, borderThickness * scale);
+              if (nodeHasValue(node) || node.neighbors().hasNode(Direction.INWARD)) {
+                painter.drawBlock(x, y, w, h, borderRoundedness * scale, borderThickness * scale);
+              } else {
+                painter.drawBlock(x, y, w, h, w, 2 * borderThickness * scale);
+              }
             });
           });
         }
@@ -394,17 +456,14 @@ function App() {
         ctx.save();
         ctx.translate(pg.layout().absoluteX(), pg.layout().absoluteY());
         ctx.scale(pg.layout().absoluteScale(), pg.layout().absoluteScale());
-        pg.siblings().forEachNode(node => {
+        pg.siblings().forEach(node => {
           if (node.layout().needsAbsolutePos()) {
             return;
           }
-          if (typeof node.value() !== "string" && typeof node.value() !== "number") {
+          if (!nodeHasValue(node)) {
             return;
           }
-          if (node.value() === "s" || node.value() === "b") {
-            return;
-          }
-          ctx.fillStyle = 'white';
+          ctx.fillStyle = borderColor.asRGBA();
           ctx.save();
           if (node.neighbors().hasNode(Direction.INWARD)) {
             const nodeSize = [0, 0]
@@ -443,13 +502,27 @@ function App() {
           layout.absoluteX() - layout.extentOffsetAt(Direction.DOWNWARD),
           layout.absoluteY() - layout.extentOffsetAt(Direction.FORWARD), extentSize[0], extentSize[1]
         );*/
-        ctx.strokeStyle = 'orange';
+        ctx.lineWidth = borderThickness/2 * layout.absoluteScale();
+        ctx.lineJoin = "round";
+        ctx.strokeStyle = "orange";
         const bodySize = [0, 0];
         layout.size(bodySize);
-        ctx.strokeRect(
-          layout.absoluteX() - layout.absoluteScale() * bodySize[0]/2,
-          layout.absoluteY() - layout.absoluteScale() * bodySize[1]/2, layout.absoluteScale() * bodySize[0], layout.absoluteScale() * bodySize[1]
-        );
+        if (nodeHasValue(userCaret.node()) || userCaret.node().neighbors().hasNode(Direction.INWARD)) {
+          ctx.strokeRect(
+            layout.absoluteX() - layout.absoluteScale() * bodySize[0]/2,
+            layout.absoluteY() - layout.absoluteScale() * bodySize[1]/2, layout.absoluteScale() * bodySize[0], layout.absoluteScale() * bodySize[1]
+          );
+        } else {
+          ctx.beginPath();
+          ctx.arc(
+            layout.absoluteX(),
+            layout.absoluteY(),
+            bodySize[0]/2 * layout.absoluteScale(),
+            0,
+            Math.PI * 2
+          )
+          ctx.stroke();
+        }
 
         ctx.resetTransform();
         ctx.textAlign = 'left';

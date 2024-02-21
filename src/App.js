@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import './App.css';
 
 import { 
+  serializeParsegraph,
+  deserializeParsegraph,
   Direction,
   DirectionNode,
   CommitLayout,
@@ -30,6 +32,19 @@ const borderRoundedness = 5;
 const maxClickDelay = 1000;
 const borderColor = new Color(0.7, 0.7, 0.7, 1);
 
+const buildGraph = () => {
+  try {
+    const graphData = localStorage.getItem("parsegraph-graph");
+    if (graphData) {
+      return deserializeParsegraph(JSON.parse(graphData));
+    }
+  } catch (ex) {
+    console.log(ex);
+  }
+  const widget = new DirectionNode();
+  return widget;
+};
+
 const nodeHasValue = (node) => typeof node.value() === "string" || typeof node.value() === "number";
 
 const nextAlignment = (alignment, childDir) => {
@@ -51,12 +66,30 @@ const nextAlignment = (alignment, childDir) => {
   }
 };
 
+function download(filename, text) {
+  var element = document.createElement('a');
+  element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
+  element.setAttribute('download', filename);
+
+  element.style.display = 'none';
+  document.body.appendChild(element);
+
+  element.click();
+
+  document.body.removeChild(element);
+}
+
 function App() {
   const canvasRef = useRef();
+
+  const [widget, setWidget] = useState(buildGraph());
 
   useEffect(() => {
     if (!canvasRef.current) {
       // No canvas yet.
+      return;
+    }
+    if (!widget) {
       return;
     }
 
@@ -76,17 +109,30 @@ function App() {
       console.log(ex);
     }
 
-    // Build the graph
-    const widget = new DirectionNode("hey it widget root node");
-    widget.connect(Direction.FORWARD, new DirectionNode("its forward node"));
-    widget.neighbors().nodeAt(Direction.FORWARD).connect(Direction.FORWARD, new DirectionNode("its another forward node"));
-
     // Input event callbacks
     let isDown = null;
     const canvas = canvasRef.current;
     canvas.tabIndex = '0';
+    canvas.addEventListener('dragover', e => e.preventDefault());
+    canvas.addEventListener('drop', drop)
     let [mouseX, mouseY] = [NaN, NaN];
     let userCaret = new DirectionCaret(widget);
+    const spawnMove = (dir) => {
+      if (userCaret.node().neighbors().hasNode(dir)) {
+        userCaret.move(dir);
+        refresh();
+      } else {
+        userCaret.spawnMove(dir);
+        refresh();
+      }
+    };
+
+    const refresh = () => {
+      requestAnimationFrame(() => {
+        paint();
+      });
+    };
+
     let showEditor = false;
     canvas.addEventListener('mousedown', e => {
       isDown = Date.now();
@@ -117,6 +163,84 @@ function App() {
       }
       [mouseX, mouseY] = [e.clientX, e.clientY];
     });
+
+    let touchingNode = true;
+    canvas.addEventListener('touchstart', e => {
+      e.preventDefault();
+      for (let i = 0; i < e.changedTouches.length; ++i) {
+        const touch = e.changedTouches[i];
+        [mouseX, mouseY] = [touch.clientX, touch.clientY];
+        const [worldX, worldY] = cam.transform(mouseX, mouseY);
+        const size = [0, 0];
+        let selectedNode = widget.layout().nodeUnderCoords(worldX, worldY, 1, size);
+        if (selectedNode === userCaret.node()) {
+          touchingNode = true;
+          console.log("Touching node")
+        } else if (selectedNode) {
+          console.log(selectedNode);
+          userCaret.moveTo(selectedNode);
+          refresh();
+        } else {
+          isDown = true;
+        }
+      }
+    });
+
+    const distance = (x1, y1, x2, y2) => {
+      return Math.sqrt(Math.pow(y2 - y1, 2) + Math.pow(x2 - x1, 2));
+    }
+
+    canvas.addEventListener('touchend', e => {
+      if (touchingNode) {
+        const layout = userCaret.node().layout();
+        const [worldX, worldY] = cam.transform(mouseX, mouseY);
+        const dist = distance(
+          worldX, worldY,
+          layout.absoluteX(),
+          layout.absoluteY()
+        );
+        const bodySize = [0, 0];
+        userCaret.node().layout().size(bodySize);
+
+        const dy = Math.abs(worldY - layout.absoluteY());
+        const dx = Math.abs(worldX - layout.absoluteX());
+        if (worldX === layout.absoluteX() || dy > dx) {
+          if (dist > bodySize[1]/2) {
+            if (worldY > layout.absoluteY()) {
+              spawnMove(Direction.DOWNWARD);
+            } else {
+              spawnMove(Direction.UPWARD);
+            }
+          }
+        } else {
+          if (dist > bodySize[0]/2) {
+            if (worldX > layout.absoluteX()) {
+              spawnMove(Direction.FORWARD);
+            } else {
+              spawnMove(Direction.BACKWARD);
+            }
+          }
+          console.log(worldX, worldY, layout.absoluteX(), layout.absoluteY());
+        }
+      }
+      touchingNode = false;
+      isDown = null;
+    });
+
+    canvas.addEventListener('touchmove', e => {
+      e.preventDefault();
+      for (let i = 0; i < e.changedTouches.length; ++i) {
+        const touch = e.changedTouches[i];
+        const dx = touch.clientX - mouseX;
+        const dy = touch.clientY - mouseY;
+        if (!touchingNode) {
+          cam.adjustOrigin(dx / cam.scale(), dy / cam.scale());
+          refresh();
+        }
+        [mouseX, mouseY] = [touch.clientX, touch.clientY];
+      }
+    });
+
     canvas.addEventListener('wheel', e => {
       if (!isNaN(mouseX)) {
         cam.zoomToPoint(Math.pow(1.1, e.deltaY > 0 ? -1 : 1), mouseX, mouseY);
@@ -132,15 +256,6 @@ function App() {
         userCaret.pull(dir);
         refresh();
         return;
-      };
-      const spawnMove = (dir) => {
-        if (userCaret.node().neighbors().hasNode(dir)) {
-          userCaret.move(dir);
-          refresh();
-        } else {
-          userCaret.spawnMove(dir);
-          refresh();
-        }
       };
 
       const toggleAlignment = () => {
@@ -253,12 +368,6 @@ function App() {
       refresh();
     }).observe(canvas);
 
-
-    const refresh = () => {
-      requestAnimationFrame(() => {
-        paint();
-      });
-    };
 
     canvas.style.background = 'black';
     canvas.style.overflow = 'hidden';
@@ -389,7 +498,12 @@ function App() {
     }
 
     const paint = () => {
-      localStorage.setItem("parsegraph-camera", JSON.stringify(cam.toJSON()))
+      try {
+        localStorage.setItem("parsegraph-camera", JSON.stringify(cam.toJSON()))
+        localStorage.setItem("parsegraph-graph", JSON.stringify(serializeParsegraph(widget)));
+      } catch (ex) {
+        //console.log(ex);
+      }
       if (!layout || layout.startingNode() !== widget) {
         console.log("Creating new layout");
         layout = createLayout();
@@ -531,12 +645,50 @@ function App() {
       }
     };
 
-    paint();
-}, [canvasRef])
+      paint();
+  }, [canvasRef, widget])
+
+  const openFile = file => {
+    return file.text().then(val => {
+      setWidget(deserializeParsegraph(JSON.parse(val)));
+    }).catch(ex => {
+      console.log(ex);
+    });
+  }
+
+  const fileChanged = e => {
+    for (const file of e.target.files) {
+      openFile(file);
+    }
+  };
+
+  const drop = ev => {
+    ev.preventDefault();
+    if (ev.dataTransfer.items) {
+      // Use DataTransferItemList interface to access the file(s)
+      [...ev.dataTransfer.items].forEach((item, i) => {
+        // If dropped items aren't files, reject them
+        if (item.kind === "file") {
+          openFile(item.getAsFile());
+        }
+      });
+    } else {
+      // Use DataTransfer interface to access the file(s)
+      [...ev.dataTransfer.files].forEach((file, i) => {
+        openFile(file);
+      });
+    }
+  };
 
   return (
     <div className="App">
       <div style={{display: 'flex', alignItems: 'center', justifyContent: 'center', width: "100%", height: "100%", overflow: "hidden"}} ref={canvasRef}/>
+      <div style={{position: 'absolute', top: '0px', left: '0px'}}>
+        <input type="file" onChange={fileChanged} accept='*.parsegraph'></input>
+      </div>
+      <div style={{position: 'absolute', top: '0px', right: '0px'}}>
+        <button onClick={()=>download("graph.parsegraph", JSON.stringify(serializeParsegraph(widget)))}>Download</button>
+      </div>
     </div>
   );
 }

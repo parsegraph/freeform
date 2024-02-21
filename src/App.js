@@ -23,7 +23,8 @@ import Camera from 'parsegraph-camera';
 import {
   makeTranslation3x3,
   matrixMultiply3x3,
-  makeScale3x3
+  makeScale3x3,
+  midPoint
 } from 'parsegraph-matrix';
 import { tokenize } from 'parsegraph-anthonylisp';
 
@@ -91,6 +92,21 @@ function graphLines(input) {
   return car.root();
 }
 
+function graphWords(input) {
+  const car = new DirectionCaret();
+
+  input.split(/(\r\n|\n|\r)/g).forEach(line => {
+    car.push();
+    line.split(/\s/g).forEach(word=>{
+      car.spawnMove('f', word)
+    });
+    car.pop();
+    car.spawnMove('d');
+  });
+
+  return car.root();
+}
+
 function graphJsonObject(data) {
   const car = new DirectionCaret();
   car.spawnMove('i')
@@ -138,7 +154,76 @@ function graphJson(data) {
 }
 
 function exportGraphToLines(root) {
+  const car = new DirectionCaret(root);
+  const lines = [];
+  while (true) {
+    if (car.has('f')) {
+      car.move('f');
+      lines.push(car.node().value());
+      car.move('b');
+    }
+    if (car.has('d')) {
+      car.move('d');
+    } else {
+      break;
+    }
+  }
+  return lines.join('\n');
+};
 
+function exportGraphToWords(root) {
+  const car = new DirectionCaret(root);
+  const lines = [];
+  while (true) {
+    car.push();
+    const words = [];
+    while (car.has('f')) {
+      car.move('f');
+      words.push(car.node().value());
+    }
+    car.pop();
+    lines.push(words.join(" "));
+    if (car.has('d')) {
+      car.move('d');
+    } else {
+      break;
+    }
+  }
+  return lines.join('\n');
+};
+
+let nest = 0;
+
+const tab = () => {
+  const words = [];
+  for (let i = 0; i < nest; ++i) {
+    words.push("  ");
+  }
+  return words.join("");
+}
+
+function exportGraphToLisp(root, tokens) {
+  const hasInward = root.neighbors().hasNode(Direction.INWARD);
+  if (root.neighbors().hasNode(Direction.INWARD)) {
+    tokens.push('(')
+    nest++;
+  }
+  if (root.value() !== undefined) {
+    tokens.push(root.value());
+    tokens.push(' ');
+  }
+  if (hasInward) {
+    exportGraphToLisp(root.neighbors().nodeAt(Direction.INWARD), tokens);
+    tokens.push(')')
+    nest--;
+  }
+  if (root.neighbors().hasNode(Direction.FORWARD)) {
+    exportGraphToLisp(root.neighbors().nodeAt(Direction.FORWARD), tokens);
+  }
+  if (root.neighbors().hasNode(Direction.DOWNWARD)) {
+    tokens.push('\n' + tab());
+    exportGraphToLisp(root.neighbors().nodeAt(Direction.DOWNWARD), tokens);
+  }
 };
 
 function exportGraphToJson(root) {
@@ -176,14 +261,22 @@ function ExportModal({onClose, graph}) {
 
   const performExport = ()=> {
     switch(exportType) {
+      case "lisp":
+        const tokens = [];
+        exportGraphToLisp(graph, tokens);
+        download("parsegraph.lisp", tokens.join(''));
+        break;
       case "json":
         download("parsegraph.json", JSON.stringify(exportGraphToJson(graph)));
         break;
       case "parsegraph":
         download("graph.parsegraph", serializeParsegraph(graph));
         break;
+      case "words":
+        download("parsegraph-words.txt", exportGraphToWords(graph));
+        break;
       case "lines":
-        download("graph.txt", exportGraphToLines(graph));
+        download("parsegraph-lines.txt", exportGraphToLines(graph));
         break;
       default:
         throw new Error("Unsupported export type: " + exportType)
@@ -200,6 +293,7 @@ function ExportModal({onClose, graph}) {
       <option value="json">JSON</option>
     </select>
       <button onClick={performExport}>Export</button>
+      <button onClick={onClose}>Cancel</button>
   </div>
 };
 
@@ -271,6 +365,9 @@ function ImportModal({onClose, openGraph}) {
 
   const performImport = ()=> {
     switch(importType) {
+      case "words":
+        openGraph(graphWords(importData));
+        break;
       case "lisp":
         openGraph(graphLisp(importData));
         break;
@@ -306,6 +403,7 @@ function ImportModal({onClose, openGraph}) {
       <option value="json">JSON</option>
     </select>
       <button onClick={performImport}>Import</button>
+      <button onClick={onClose}>Cancel</button>
   </div>
 }
 
@@ -412,12 +510,25 @@ function App() {
       [mouseX, mouseY] = [e.clientX, e.clientY];
     });
 
+    const ongoingTouches = new Map();
+    const numActiveTouches = () => {
+      let i = 0;
+      for (let _foo of ongoingTouches.keys()) {
+        ++i;
+      }
+      return i;
+    };
+
     let touchingNode = true;
     canvas.addEventListener('touchstart', e => {
       e.preventDefault();
       for (let i = 0; i < e.changedTouches.length; ++i) {
         const touch = e.changedTouches[i];
         [mouseX, mouseY] = [touch.clientX, touch.clientY];
+        ongoingTouches.set(touch.identifier, {
+          mouseX: touch.clientX,
+          mouseY: touch.clientY
+        });
         const [worldX, worldY] = cam.transform(mouseX, mouseY);
         const size = [0, 0];
         let selectedNode = widget.layout().nodeUnderCoords(worldX, worldY, 1, size);
@@ -440,7 +551,16 @@ function App() {
     }
 
     canvas.addEventListener('touchend', e => {
-      if (touchingNode) {
+      let [mouseX, mouseY] = [0, 0]
+      const isGesture = numActiveTouches() === 1;
+      for (let i = 0; i < e.changedTouches.length; ++i) {
+        const touch = e.changedTouches[i];
+        const touchData = ongoingTouches.get(touch.identifier);
+        mouseX = touchData.mouseX;
+        mouseY = touchData.mouseY;
+        ongoingTouches.delete(touch.identifier);
+      }
+      if (touchingNode && isGesture) {
         const layout = userCaret.node().layout();
         const [worldX, worldY] = cam.transform(mouseX, mouseY);
         const dist = distance(
@@ -478,7 +598,7 @@ function App() {
           }
         }
 
-        console.log(isDown);
+        console.log(isDown, Date.now() - isDown);
         if (!isNaN(isDown) && Date.now() - isDown < maxClickDelay) {
           showEditor = false;
           toggleEditor();
@@ -488,15 +608,33 @@ function App() {
 
     canvas.addEventListener('touchmove', e => {
       e.preventDefault();
+
+      if (numActiveTouches() > 1) {
+        const [first, second] = [...ongoingTouches.values()];
+        const origDistance = distance(first.mouseX, first.mouseY, second.mouseX, second.mouseY);
+        for (let i = 0; i < e.changedTouches.length; ++i) {
+          const touch = e.changedTouches[i];
+          const touchData = ongoingTouches.get(touch.identifier);
+          touchData.mouseX = touch.clientX;
+          touchData.mouseY = touch.clientY;
+        }
+        const newDistance = distance(first.mouseX, first.mouseY, second.mouseX, second.mouseY);
+        cam.zoomToPoint(newDistance / origDistance, ...midPoint(first.mouseX, first.mouseY, second.mouseX, second.mouseY));
+        refresh();
+        return;
+      }
+
       for (let i = 0; i < e.changedTouches.length; ++i) {
         const touch = e.changedTouches[i];
-        const dx = touch.clientX - mouseX;
-        const dy = touch.clientY - mouseY;
+        const touchData = ongoingTouches.get(touch.identifier);
+        const dx = touch.clientX - touchData.mouseX;
+        const dy = touch.clientY - touchData.mouseY;
         if (!touchingNode) {
           cam.adjustOrigin(dx / cam.scale(), dy / cam.scale());
           refresh();
         }
-        [mouseX, mouseY] = [touch.clientX, touch.clientY];
+        touchData.mouseX = touch.clientX;
+        touchData.mouseY = touch.clientY;
       }
     });
 
@@ -638,11 +776,17 @@ function App() {
 
     const editor = document.createElement('input');
     editor.style.position = 'absolute';
-    editor.style.bottom = '32px';
-    editor.style.left = '25%';
-    editor.style.right = '25%';
+    editor.style.bottom = '5%';
+    editor.style.bottom = '5%';
+    editor.style.left = '5%';
+    editor.style.right = '5%';
     editor.style.fontSize = '24px';
     editor.style.display = 'none';
+    editor.addEventListener('blur', e => {
+      showEditor = false;
+      editor.style.display = 'none';
+      canvas.focus();
+    });
     editor.addEventListener('keypress', e => {
       if (e.key === 'Escape') {
         showEditor = false;
@@ -944,11 +1088,9 @@ function App() {
       <div style={{display: 'flex', alignItems: 'center', justifyContent: 'center', width: "100%", height: "100%", overflow: "hidden"}} ref={canvasRef}/>
       <div style={{position: 'absolute', top: '3px', left: '3px', display: 'flex', gap: '3px'}}>
         <button onClick={openImportModal}>Import</button>
-        <input type="file" onChange={fileChanged} accept='*.parsegraph'></input>
       </div>
       <div style={{position: 'absolute', top: '3px', right: '3px'}}>
         <button onClick={openExportModal}>Export</button>
-        <button onClick={()=>download("graph.parsegraph", JSON.stringify(serializeParsegraph(widget)))}>Download</button>
       </div>
       {importModalOpen && <div style={{position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', background: 'lightblue', padding: '24px', borderRadius: '6px'}}>
         <ImportModal onClose={() => setImportModalOpen(false)} openGraph={setWidget}/>

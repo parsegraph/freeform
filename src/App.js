@@ -25,6 +25,7 @@ import {
   matrixMultiply3x3,
   makeScale3x3
 } from 'parsegraph-matrix';
+import { tokenize } from 'parsegraph-anthonylisp';
 
 const fontSize = 24;
 const borderThickness = 3;
@@ -77,6 +78,235 @@ function download(filename, text) {
   element.click();
 
   document.body.removeChild(element);
+}
+
+function graphLines(input) {
+  const car = new DirectionCaret();
+
+  input.split(/(\r\n|\n|\r)/g).forEach(line => {
+    car.spawn('f', line)
+    car.spawnMove('d');
+  });
+
+  return car.root();
+}
+
+function graphJsonObject(data) {
+  const car = new DirectionCaret();
+  car.spawnMove('i')
+  let hasKeys = false;
+  Object.keys(data).forEach(key => {
+    hasKeys = true;
+    const value = data[key];
+    car.connect('b', graphJson(key));
+    car.connect('f', graphJson(value));
+    car.spawnMove('d');
+  });
+  if (!hasKeys) {
+    car.spawn('b');
+    car.spawn('f');
+  }
+  return car.root();
+}
+
+function graphJsonArray(data) {
+  const car = new DirectionCaret();
+  data.forEach((elem, index) => {
+    car.connectMove(index === 0 ? 'i' : 'f', graphJson(elem));
+  })
+  return car.root();
+}
+
+function graphJson(data) {
+  switch(typeof data) {
+    case "object":
+      if (data === null) {
+        return new DirectionNode("null");
+      }
+      if (Array.isArray(data)) {
+        return graphJsonArray(data);
+      }
+      return graphJsonObject(data);
+      break;
+      case "string":
+      case "number":
+      case "boolean":
+        return new DirectionNode(JSON.stringify(data));
+      default:
+        throw new Error("Unsupported type: " + typeof data)
+  }
+}
+
+function exportGraphToLines(root) {
+
+};
+
+function exportGraphToJson(root) {
+  if (root.neighbors().hasNode(Direction.INWARD)) {
+    let inner = root.neighbors().nodeAt(Direction.INWARD);
+    if (inner.neighbors().hasNode(Direction.BACKWARD)) {
+      // Object
+      const obj = {};
+      while (inner) {
+        if (inner.neighbors().nodeAt(Direction.BACKWARD) && inner.neighbors().nodeAt(Direction.FORWARD)) {
+          obj[exportGraphToJson(inner.neighbors().nodeAt(Direction.BACKWARD))] = exportGraphToJson(
+            inner.neighbors().nodeAt(Direction.FORWARD)
+          )
+        }
+        inner = inner.neighbors().nodeAt(Direction.DOWNWARD);
+      }
+      return obj;
+    } else {
+      // Array
+      const arr = [];
+      while (inner) {
+        arr.push(exportGraphToJson(inner));
+        inner = inner.neighbors().nodeAt(Direction.FORWARD);
+      }
+      return arr;
+    }
+  } else if (root.value() !== undefined) {
+    return JSON.parse(root.value());
+  }
+  throw new Error("Unhandled empty node");
+};
+
+function ExportModal({onClose, graph}) {
+  const [exportType, setExportType] = useState("parsegraph");
+
+  const performExport = ()=> {
+    switch(exportType) {
+      case "json":
+        download("parsegraph.json", JSON.stringify(exportGraphToJson(graph)));
+        break;
+      case "parsegraph":
+        download("graph.parsegraph", serializeParsegraph(graph));
+        break;
+      case "lines":
+        download("graph.txt", exportGraphToLines(graph));
+        break;
+      default:
+        throw new Error("Unsupported export type: " + exportType)
+    }
+    onClose();
+  };
+
+  return <div style={{width: '100%', height: '100%', display: 'flex', justifyContent: 'stretch', flexDirection: 'column', alignItems: 'stretch', gap: '3px'}}>
+    <select value={exportType} onChange={e=>setExportType(e.target.value)}>
+      <option value="words">Words</option>
+      <option value="parsegraph">Parsegraph</option>
+      <option value="lines">Lines</option>
+      <option value="lisp">Lisp</option>
+      <option value="json">JSON</option>
+    </select>
+      <button onClick={performExport}>Export</button>
+  </div>
+};
+
+function graphLispTokens(tokens, given) {
+  let token = tokens.shift();
+  console.log("Token.val", token.val);
+  if (token.val === "(") {
+    const car = new DirectionCaret();
+    car.spawnMove('i');
+    car.shrink();
+    let newLined = false;
+    car.push();
+    let first = true;
+    while (tokens.length > 1 && tokens[0].val !== ")") {
+      if (tokens[0].val === "\n") {
+        tokens.shift();
+        newLined = true;
+        continue;
+      }
+      const child = graphLispTokens(tokens, first ? car.node() : null)
+      first = false;
+      if (newLined) {
+        car.pop();
+        car.spawnMove('d');
+        car.push();
+        car.connectMove('f', child);
+        newLined = false;
+      } else if (child !== car.node()) {
+        car.connectMove('f', child);
+      }
+    }
+    tokens.shift();
+    //car.connectMove('f', new DirectionNode(endToken.val));
+    return car.root();
+  } else if (given) {
+    given.setValue(token.val);
+    return given;
+  }
+  return new DirectionNode(token.val)
+}
+
+function graphLisp(input) {
+  const tokens = tokenize(input);
+  while (tokens.length > 0 && tokens[0].val === "\n") {
+    tokens.shift();
+  }
+  let node = graphLispTokens(tokens);
+  const root = node;
+  while (tokens.length > 0) {
+    const child = new DirectionNode();
+    const rv = graphLispTokens(tokens, child);
+    if (child === rv) {
+      node.connect(Direction.DOWNWARD, child);
+    } else {
+      child.connect(Direction.FORWARD, rv);
+      node.connect(Direction.DOWNWARD, child);
+    }
+    node = child;
+    while (tokens.length > 0 && tokens[0].val === "\n") {
+      tokens.shift();
+    }
+  }
+  return root;
+}
+
+function ImportModal({onClose, openGraph}) {
+  const [importData, setImportData] = useState(null);
+  const [importType, setImportType] = useState("words");
+
+  const performImport = ()=> {
+    switch(importType) {
+      case "lisp":
+        openGraph(graphLisp(importData));
+        break;
+      case "json":
+        openGraph(graphJson(JSON.parse(importData)));
+        break;
+      case "parsegraph":
+        openGraph(deserializeParsegraph(JSON.parse(importData)));
+        break;
+      case "lines":
+        openGraph(graphLines(importData));
+        break;
+      default:
+        throw new Error("Unsupported import type: " + importType)
+    }
+    onClose();
+  };
+
+  return <div style={{width: '100%', height: '100%', display: 'flex', justifyContent: 'stretch', flexDirection: 'column', alignItems: 'stretch', gap: '3px'}}>
+    <label>File to import: <input type="file" onChange={e=>{
+      for (const file of e.target.files) {
+        file.text().then(content=>{
+          setImportData(content);
+        });
+      }
+    }}/>
+    </label>
+    <select value={importType} onChange={e=>setImportType(e.target.value)}>
+      <option value="words">Words</option>
+      <option value="parsegraph">Parsegraph</option>
+      <option value="lines">Lines</option>
+      <option value="lisp">Lisp</option>
+      <option value="json">JSON</option>
+    </select>
+      <button onClick={performImport}>Import</button>
+  </div>
 }
 
 function App() {
@@ -134,6 +364,21 @@ function App() {
     };
 
     let showEditor = false;
+    const toggleEditor = () => {
+      showEditor = !showEditor;
+      if (showEditor) {
+        editor.style.display = 'block';
+        editor.focus();
+        if (nodeHasValue(userCaret.node())) {
+          editor.value = userCaret.node().value();
+        } else {
+          editor.value = '';
+        }
+      } else {
+        editor.style.display = 'none';
+      }
+    };
+
     canvas.addEventListener('mousedown', e => {
       isDown = Date.now();
       [mouseX, mouseY] = [e.clientX, e.clientY];
@@ -144,7 +389,10 @@ function App() {
         const size = [0, 0];
         const [worldX, worldY] = cam.transform(mouseX, mouseY);
         let selectedNode = widget.layout().nodeUnderCoords(worldX, worldY, 1, size);
-        if (selectedNode) {
+        if (selectedNode === userCaret.node()) {
+          showEditor = false;
+          toggleEditor();
+        } else if (selectedNode) {
           console.log(selectedNode);
           userCaret.moveTo(selectedNode);
           refresh();
@@ -176,12 +424,13 @@ function App() {
         if (selectedNode === userCaret.node()) {
           touchingNode = true;
           console.log("Touching node")
+          isDown = Date.now();
         } else if (selectedNode) {
           console.log(selectedNode);
           userCaret.moveTo(selectedNode);
           refresh();
         } else {
-          isDown = true;
+          isDown = Date.now();
         }
       }
     });
@@ -204,6 +453,9 @@ function App() {
 
         const dy = Math.abs(worldY - layout.absoluteY());
         const dx = Math.abs(worldX - layout.absoluteX());
+
+        touchingNode = false;
+
         if (worldX === layout.absoluteX() || dy > dx) {
           if (dist > bodySize[1]/2) {
             if (worldY > layout.absoluteY()) {
@@ -211,6 +463,8 @@ function App() {
             } else {
               spawnMove(Direction.UPWARD);
             }
+            isDown = NaN;
+            return;
           }
         } else {
           if (dist > bodySize[0]/2) {
@@ -219,12 +473,17 @@ function App() {
             } else {
               spawnMove(Direction.BACKWARD);
             }
+            isDown = NaN;
+            return;
           }
-          console.log(worldX, worldY, layout.absoluteX(), layout.absoluteY());
+        }
+
+        console.log(isDown);
+        if (!isNaN(isDown) && Date.now() - isDown < maxClickDelay) {
+          showEditor = false;
+          toggleEditor();
         }
       }
-      touchingNode = false;
-      isDown = null;
     });
 
     canvas.addEventListener('touchmove', e => {
@@ -342,18 +601,7 @@ function App() {
           refresh();
           break;
         case 'Enter':
-          showEditor = !showEditor;
-          if (showEditor) {
-            editor.style.display = 'block';
-            editor.focus();
-            if (nodeHasValue(userCaret.node())) {
-              editor.value = userCaret.node().value();
-            } else {
-              editor.value = '';
-            }
-          } else {
-            editor.style.display = 'none';
-          }
+          toggleEditor();
           refresh();
           break;
         default:
@@ -402,7 +650,7 @@ function App() {
         canvas.focus();
       } else if (e.key === 'Enter') {
         showEditor = false;
-        userCaret.node().setValue(editor.value);
+        userCaret.node().setValue(editor.value === '' ? undefined : editor.value);
         editor.style.display = 'none';
         canvas.focus();
         refresh();
@@ -434,16 +682,16 @@ function App() {
                 size[1] = 4*borderThickness;
               }
               // Vertically aligned inward node.
-              size[0] = Math.max(size[0], 2*borderThickness + childSize[0]);
-              size[1] += childSize[1];
+              size[0] = Math.max(size[0], 2*borderThickness + child.scale() * childSize[0]);
+              size[1] += childSize[1] * child.scale();
             } else {
               if (!nodeHasValue(node)) {
                 size[0] = borderThickness;
                 size[1] = borderThickness;
               }
               // Default is horizontal
-              size[0] += childSize[0];
-              size[1] = Math.max(size[1], borderThickness + childSize[1]);
+              size[0] += childSize[0] * child.scale();
+              size[1] = Math.max(size[1], borderThickness + child.scale() * childSize[1]);
             }
           }
         },
@@ -680,15 +928,34 @@ function App() {
     }
   };
 
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
+
+  const openImportModal = () => {
+    setImportModalOpen(true);
+  }
+
+  const openExportModal = () => {
+    setExportModalOpen(true);
+  }
+
   return (
     <div className="App">
       <div style={{display: 'flex', alignItems: 'center', justifyContent: 'center', width: "100%", height: "100%", overflow: "hidden"}} ref={canvasRef}/>
-      <div style={{position: 'absolute', top: '0px', left: '0px'}}>
+      <div style={{position: 'absolute', top: '3px', left: '3px', display: 'flex', gap: '3px'}}>
+        <button onClick={openImportModal}>Import</button>
         <input type="file" onChange={fileChanged} accept='*.parsegraph'></input>
       </div>
-      <div style={{position: 'absolute', top: '0px', right: '0px'}}>
+      <div style={{position: 'absolute', top: '3px', right: '3px'}}>
+        <button onClick={openExportModal}>Export</button>
         <button onClick={()=>download("graph.parsegraph", JSON.stringify(serializeParsegraph(widget)))}>Download</button>
       </div>
+      {importModalOpen && <div style={{position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', background: 'lightblue', padding: '24px', borderRadius: '6px'}}>
+        <ImportModal onClose={() => setImportModalOpen(false)} openGraph={setWidget}/>
+      </div>}
+      {exportModalOpen && <div style={{position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', background: 'lightyellow', padding: '24px', borderRadius: '6px'}}>
+        <ExportModal graph={widget} onClose={() => setExportModalOpen(false)}/>
+      </div>}
     </div>
   );
 }

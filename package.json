@@ -1,6 +1,6 @@
 {
   "name": "parsegraph-webgl",
-  "version": "0.1.0",
+  "version": "1.1.0",
   "private": true,
   "dependencies": {
     "@babel/plugin-proposal-private-property-in-object": "^7.21.11",
@@ -8,6 +8,7 @@
     "@testing-library/react": "^13.4.0",
     "@testing-library/user-event": "^13.5.0",
     "parsegraph": "^6.0.1",
+    "parsegraph-anthonylisp": "^2.1.5",
     "parsegraph-blockpainter": "^1.8.0",
     "parsegraph-camera": "^1.4.24",
     "parsegraph-checkglerror": "^1.5.8",

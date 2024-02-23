@@ -3,6 +3,10 @@ import { useState } from 'react';
 import * as exporters from './exporters';
 import { serializeParsegraph } from 'parsegraph';
 
+import SettingsForm from './SettingsForm';
+
+import "./modal.css";
+
 function download(filename, text) {
   var element = document.createElement('a');
   element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
@@ -16,7 +20,7 @@ function download(filename, text) {
   document.body.removeChild(element);
 }
 
-export default function ExportModal({onClose, graph}) {
+function ExportForm({graph, onClose}) {
   const [exportType, setExportType] = useState("parsegraph");
 
   const performExport = ()=> {
@@ -44,15 +48,34 @@ export default function ExportModal({onClose, graph}) {
     onClose();
   };
 
-  return <div style={{width: '100%', height: '100%', display: 'flex', justifyContent: 'stretch', flexDirection: 'column', alignItems: 'stretch', gap: '3px'}}>
-    <select value={exportType} onChange={e=>setExportType(e.target.value)}>
-      <option value="words">Words</option>
-      <option value="parsegraph">Parsegraph</option>
-      <option value="lines">Lines</option>
-      <option value="lisp">Lisp</option>
-      <option value="json">JSON</option>
-    </select>
-      <button onClick={performExport}>Export</button>
-      <button onClick={onClose}>Cancel</button>
+  return <><label style={{display: 'flex', gap:'5px'}}>Format: <select style={{flexGrow:'1'}} value={exportType} onChange={e=>setExportType(e.target.value)}>
+    <option value="words">Words</option>
+    <option value="parsegraph">Parsegraph</option>
+    <option value="lines">Lines</option>
+    <option value="lisp">Lisp</option>
+    <option value="json">JSON</option>
+  </select>
+  </label>
+  <div className="buttons">
+    <button onClick={performExport}>Export</button>
+    <button onClick={onClose}>Cancel</button>
+  </div></>;
+}
+
+export default function ExportModal({onClose, graph}) {
+  const [activeTab, setActiveTab] = useState("export");
+
+  return <div style={{width: '100%', height: '100%', display: 'flex', justifyContent: 'stretch', flexDirection: 'column', alignItems: 'stretch', gap: '3px', padding: '12px', boxSizing: 'border-box'}}>
+    <h3 style={{margin: '0', marginBottom: '.5em'}}>Parsegraph Menu</h3>
+    <div className="tabs" style={{display: 'flex', gap:'5px'}}>
+      <div className={activeTab === "settings" ? "active" : null} onClick={()=>{
+        setActiveTab("settings");
+      }}>Settings</div>
+      <div className={activeTab === "export" ? "active" : null} onClick={()=>{
+        setActiveTab("export");
+      }}>Export</div>
+    </div>
+    {activeTab === "settings" && <SettingsForm graph={graph} onClose={onClose}/>}
+    {activeTab === "export" && <ExportForm graph={graph} onClose={onClose}/>}
   </div>
 };

@@ -11,6 +11,7 @@ import {
   getDirectionAxis,
   PreferredAxis,
   Fit,
+  serializeParsegraph,
 } from "parsegraph";
 import Color from 'parsegraph-color';
 import { BasicGLProvider } from 'parsegraph-compileprogram';
@@ -22,6 +23,8 @@ import {
   makeScale3x3,
   midPoint
 } from 'parsegraph-matrix';
+import { showInCamera, showNodeInCamera } from "parsegraph-showincamera";
+import Rect from "parsegraph-rect";
 
 const fontSize = 24;
 const borderThickness = 3;
@@ -29,6 +32,7 @@ const borderRoundedness = 5;
 const maxClickDelay = 1000;
 const borderColor = new Color(0.7, 0.7, 0.7, 1);
 const initialScale = 4;
+const moveSpeed = fontSize;
 
 let attempts = 0;
 
@@ -58,14 +62,77 @@ const nextAlignment = (alignment, childDir) => {
 };
 export default class Viewport {
     constructor() {
+        this._saveGraph = () => {};
         this._container = null;
         this._widget = null;
         this._painters = new WeakMap();
+        this._mousePos = [NaN, NaN];
+
+        this._showInCamera = true;
 
         // Create and restore the camera if possible
         this._cam = new Camera();
+        try {
+            this._cam.restore(JSON.parse(localStorage.getItem("parsegraph-camera")));
+            this._showInCamera = false;
+        } catch (ex) {
+            console.log(ex);
+        }
         this._showEditor = false;
     }
+
+    setSaveGraph(saveGraph) {
+        this._saveGraph = saveGraph;
+    }
+
+    save() {
+        this._saveGraph(this._widget);
+    }
+
+    showInCamera() {
+        this._showInCamera = true;
+        if (this._widget) {
+            this.repaint();
+        }
+    }
+
+    removeNode() {
+        if (this._userCaret.node().neighbors().isRoot()) {
+            this._userCaret.node().setValue(undefined);
+            this.save();
+            this.repaint();
+            return;
+        }
+        const node = this._userCaret.node();
+        this._userCaret.moveTo(node.neighbors().parentNode());
+        node.disconnect();
+        this.save();
+        this.repaint();
+    }
+
+    toggleAlignment() {
+        const node = this._userCaret.node();
+        if (node.neighbors().isRoot()) {
+            console.log("LAYOUTPREF", node.siblings().getLayoutPreference());
+            node.setNodeFit(Fit.EXACT);
+            node.siblings().setLayoutPreference(
+                node.siblings().getLayoutPreference() === PreferredAxis.HORIZONTAL ?
+                PreferredAxis.VERTICAL : PreferredAxis.HORIZONTAL
+            );
+            this.save();
+            this.repaint();
+            return;
+        }
+        node.setNodeFit(Fit.LOOSE);
+        const childDir = reverseDirection(node.neighbors().parentDirection())
+        const alignment = node.neighbors().parentNode().neighbors().getAlignment(childDir);
+        node.neighbors().parentNode().neighbors().align(
+            childDir,
+            nextAlignment(alignment, childDir)
+        )
+        this.save();
+        this.repaint();
+    };
 
     mount(container) {
         if (this._container === container) {
@@ -85,10 +152,7 @@ export default class Viewport {
         if (this._userCaret.node().neighbors().hasNode(dir)) {
             if (pullIfOccupied && !this._userCaret.node().neighbors().isRoot()) {
                 console.log("Pulling!");
-                this._userCaret.fitExact();
-                this._userCaret.node().neighbors().parentNode().siblings().pull(
-                    reverseDirection(this._userCaret.node().neighbors().parentDirection())
-                )
+                this.pullNode();
             } else {
                 this._userCaret.move(dir);
             }
@@ -96,6 +160,7 @@ export default class Viewport {
         } else {
             this._userCaret.spawnMove(dir);
             this.repaint();
+            this.save();
         }
         };
 
@@ -103,44 +168,52 @@ export default class Viewport {
         const mouseDownPos = [0, 0];
 
         const size = [0, 0];
+
+        let clickedOnSelected = false;
         canvas.addEventListener('mousedown', e => {
         isDown = null;
         [mouseX, mouseY] = [e.clientX, e.clientY];
+        this.setMousePos(mouseX, mouseY);
         const [worldX, worldY] = this._cam.transform(mouseX, mouseY);
         mouseDownPos[0] = worldX;
         mouseDownPos[1] = worldY;
         let selectedNode = this._widget.layout().nodeUnderCoords(worldX, worldY, 1, size);
+        isDown = Date.now();
         if (selectedNode) {
             touchingNode = true;
-            if (this._userCaret.node() !== selectedNode) {
-            this._userCaret.moveTo(selectedNode);
-            this.refresh();
+            clickedOnSelected = this._userCaret.node() === selectedNode;
+            if (!clickedOnSelected) {
+                this._userCaret.moveTo(selectedNode);
+                this.refresh();
             }
-        } else {
-            isDown = Date.now();
+            this.refresh();
         }
         });
         canvas.addEventListener('mouseup', e => {
-        if (touchingNode) {
-            gesture(mouseX, mouseY);
-            this.repaint();
-            touchingNode = false;
-        }
-        else if (!isNaN(isDown) && Date.now() - isDown < maxClickDelay) {
-            const [worldX, worldY] = this._cam.transform(mouseX, mouseY);
-            let selectedNode = this._widget.layout().nodeUnderCoords(worldX, worldY, 1, size);
-            if (selectedNode === this._userCaret.node()) {
-            this._showEditor = false;
-            this.toggleEditor();
-            } else if (selectedNode) {
-            this._userCaret.moveTo(selectedNode);
-            this.refresh();
+            let hadGesture = false;
+            if (touchingNode) {
+                hadGesture = gesture(mouseX, mouseY);
+                if (hadGesture) {
+                    this.repaint();
+                }
             }
-        }
-        isDown = null;
-        [mouseX, mouseY] = [NaN, NaN];
-        this.refresh();
+
+            if (!isNaN(isDown) && Date.now() - isDown < maxClickDelay) {
+                const [worldX, worldY] = this._cam.transform(mouseX, mouseY);
+                let selectedNode = this._widget.layout().nodeUnderCoords(worldX, worldY, 1, size);
+                if (clickedOnSelected && selectedNode === this._userCaret.node()) {
+                    this.toggleEditor();
+                } else if (selectedNode) {
+                    this._userCaret.moveTo(selectedNode);
+                    this.refresh();
+                }
+            }
+
+            isDown = null;
+            [mouseX, mouseY] = [NaN, NaN];
+            this.refresh();
         });
+
         canvas.addEventListener('mousemove', e => {
         const dx = e.clientX - mouseX;
         const dy = e.clientY - mouseY;
@@ -168,21 +241,22 @@ export default class Viewport {
             const touch = e.changedTouches[i];
             [mouseX, mouseY] = [touch.clientX, touch.clientY];
             ongoingTouches.set(touch.identifier, {
-            mouseX: touch.clientX,
-            mouseY: touch.clientY
+                mouseX: touch.clientX,
+                mouseY: touch.clientY
             });
             const [worldX, worldY] = cam.transform(mouseX, mouseY);
             const size = [0, 0];
             let selectedNode = this._widget.layout().nodeUnderCoords(worldX, worldY, 1, size);
             if (selectedNode) {
-            touchingNode = true;
-            if (this._userCaret.node() !== selectedNode) {
-                this._userCaret.moveTo(selectedNode);
-            }
-            isDown = Date.now();
-            this.refresh();
+                touchingNode = true;
+                clickedOnSelected = this._userCaret.node() === selectedNode;
+                if (!clickedOnSelected) {
+                    this._userCaret.moveTo(selectedNode);
+                    this.refresh();
+                }
+                isDown = Date.now();
             } else {
-            isDown = Date.now();
+                isDown = Date.now();
             }
         }
         });
@@ -205,25 +279,26 @@ export default class Viewport {
 
             if (worldX === layout.absoluteX() || dy > dx) {
                 if (dist > bodySize[1]/2) {
-                if (worldY > layout.absoluteY()) {
-                    spawnMove(Direction.DOWNWARD, true);
-                } else {
-                    spawnMove(Direction.UPWARD, true);
-                }
-                isDown = NaN;
-                return;
+                    if (worldY > layout.absoluteY()) {
+                        spawnMove(Direction.DOWNWARD, true);
+                    } else {
+                        spawnMove(Direction.UPWARD, true);
+                    }
+                    isDown = NaN;
+                    return true;
                 }
             } else {
                 if (dist > bodySize[0]/2) {
-                if (worldX > layout.absoluteX()) {
-                    spawnMove(Direction.FORWARD, true);
-                } else {
-                    spawnMove(Direction.BACKWARD, true);
-                }
-                isDown = NaN;
-                return;
+                    if (worldX > layout.absoluteX()) {
+                        spawnMove(Direction.FORWARD, true);
+                    } else {
+                        spawnMove(Direction.BACKWARD, true);
+                    }
+                    isDown = NaN;
+                    return true;
                 }
             }
+            return false;
         };
 
         canvas.addEventListener('touchend', e => {
@@ -234,16 +309,19 @@ export default class Viewport {
             const touchData = ongoingTouches.get(touch.identifier);
             mouseX = touchData.mouseX;
             mouseY = touchData.mouseY;
+            this.setMousePos(mouseX, mouseY);
 
             ongoingTouches.delete(touch.identifier);
         }
         if (touchingNode && isGesture) {
-            gesture(mouseX, mouseY);
-            this.repaint();
-
-            if (!isNaN(isDown) && Date.now() - isDown < maxClickDelay) {
-            this._showEditor = false;
-            this.toggleEditor();
+            if (gesture(mouseX, mouseY)) {
+                this.repaint();
+            } else if (!isNaN(isDown) && Date.now() - isDown < maxClickDelay) {
+                const [worldX, worldY] = this._cam.transform(mouseX, mouseY);
+                let selectedNode = this._widget.layout().nodeUnderCoords(worldX, worldY, 1, size);
+                if (clickedOnSelected && selectedNode === this._userCaret.node()) {
+                    this.toggleEditor();
+                }
             }
         }
         });
@@ -281,10 +359,11 @@ export default class Viewport {
         });
 
         canvas.addEventListener('wheel', e => {
-        if (!isNaN(mouseX)) {
-            cam.zoomToPoint(Math.pow(1.1, e.deltaY > 0 ? -1 : 1), mouseX, mouseY);
-            this.refresh();
-        }
+            if (!isNaN(mouseX)) {
+                cam.zoomToPoint(Math.pow(1.1, e.deltaY > 0 ? -1 : 1), mouseX, mouseY);
+                this._checkScale = true;
+                this.refresh();
+            }
         });
         canvas.addEventListener('keydown', e => {
         if (this._showEditor) {
@@ -304,42 +383,28 @@ export default class Viewport {
             return;
         };
 
-        const toggleAlignment = () => {
-            const node = this._userCaret.node();
-            if (node.neighbors().isRoot()) {
-                console.log("LAYOUTPREF", node.siblings().getLayoutPreference());
-                node.setNodeFit(Fit.EXACT);
-                node.siblings().setLayoutPreference(
-                    node.siblings().getLayoutPreference() === PreferredAxis.HORIZONTAL ?
-                    PreferredAxis.VERTICAL : PreferredAxis.HORIZONTAL
-                );
-                this.repaint();
-                return;
-            }
-            node.setNodeFit(Fit.LOOSE);
-            const childDir = reverseDirection(node.neighbors().parentDirection())
-            const alignment = node.neighbors().parentNode().neighbors().getAlignment(childDir);
-            node.neighbors().parentNode().neighbors().align(
-                childDir,
-                nextAlignment(alignment, childDir)
-            )
-            this.repaint();
-        };
-
         switch (e.key) {
+            case '-':
+                if (!isNaN(mouseX)) {
+                    this._checkScale = true;
+                    cam.zoomToPoint(Math.pow(1.1, -1), mouseX, mouseY);
+                    this.refresh();
+                }
+                break;
+            case '+':
+            case '=':
+                if (!isNaN(mouseX)) {
+                    this._checkScale = true;
+                    cam.zoomToPoint(Math.pow(1.1, 1), mouseX, mouseY);
+                    this.refresh();
+                }
+                break;
             case 'Escape':
-            cam.setScale(initialScale);
-            this.refresh();
-            break;
+                this.showInCamera();
+                break;
             case 'x':
             case 'Backspace':
-            if (this._userCaret.node().neighbors().isRoot()) {
-                return;
-            }
-            const node = this._userCaret.node();
-            this._userCaret.moveTo(node.neighbors().parentNode());
-            node.disconnect();
-            this.repaint();
+                this.removeNode();
             break;
             case 'o':
             if (this._userCaret.has(Direction.OUTWARD)) {
@@ -366,24 +431,36 @@ export default class Viewport {
             pull(Direction.BACKWARD);
             break;
             case 'v':
-            toggleAlignment();
+            this.toggleAlignment();
             break;
-            case 'ArrowDown':
             case 'j':
             spawnMove(Direction.DOWNWARD);
             break;
-            case 'ArrowUp':
             case 'k':
             spawnMove(Direction.UPWARD);
             break;
-            case 'ArrowRight':
             case 'l':
             spawnMove(Direction.FORWARD);
             break;
-            case 'ArrowLeft':
             case 'h':
             spawnMove(Direction.BACKWARD);
             break;
+            case 'ArrowUp':
+                cam.adjustOrigin(0, moveSpeed/cam.scale());
+                this.refresh();
+                break;
+            case 'ArrowDown':
+                cam.adjustOrigin(0, -moveSpeed/cam.scale());
+                this.refresh();
+                break;
+            case 'ArrowRight':
+                cam.adjustOrigin(-moveSpeed/cam.scale(), 0);
+                this.refresh();
+                break;
+            case 'ArrowLeft':
+                cam.adjustOrigin(moveSpeed/cam.scale(), 0);
+                this.refresh();
+                break;
             case '`':
             case '~':
             if (this._userCaret.node().scale() !== 1) {
@@ -393,6 +470,12 @@ export default class Viewport {
             }
             this.repaint();
             break;
+            case 'u':
+                this.undo();
+                break;
+            case 'R':
+                this.removeNode()
+                break;
             case 'Enter':
             this.toggleEditor();
             this.refresh();
@@ -405,12 +488,7 @@ export default class Viewport {
 
         const cam = this._cam;
         new ResizeObserver(() => {
-            let needsPos = !cam.canProject();
             cam.setSize(canvas.offsetWidth, canvas.offsetHeight);
-            if (needsPos) {
-                cam.setScale(initialScale);
-                cam.adjustOrigin(cam.width()/(2*initialScale), cam.height()/(2*initialScale));
-            }
             this.refresh();
         }).observe(canvas);
 
@@ -441,11 +519,100 @@ export default class Viewport {
         canvas.appendChild(this._editor);
     }
 
+    undo() {
+        if (this._undo) {
+            this._undo();
+        }
+    }
+
+    redo() {
+        if (this._redo) {
+            this._redo();
+        }
+    }
+
+    setUndo(undo) {
+        this._undo = undo;
+    }
+
+    setRedo(redo) {
+        this._redo = redo;
+    }
+
     repaint() {
         requestAnimationFrame(() => {
             this._layout = this.createLayout();
+            this._ensureVisible = true;
             this.paint();
         });
+    }
+
+    node() {
+        return this._userCaret.node();
+    }
+
+    layout() {
+        return this._userCaret.node().layout();
+    }
+
+    pullNode() {
+        if (this.node().neighbors().isRoot()) {
+            this.toggleAlignment();
+            return;
+        }
+        if (this.node().nodeFit() === Fit.EXACT) {
+            this._userCaret.fitLoose();
+        } else {
+            this._userCaret.fitExact();
+            this._userCaret.node().neighbors().parentNode().siblings().pull(
+                reverseDirection(this._userCaret.node().neighbors().parentDirection())
+            )
+        }
+        this.save();
+        this.repaint();
+    }
+
+    toggleNodeFit() {
+        if (this.node().nodeFit() === Fit.EXACT) {
+            this.node().setNodeFit(Fit.LOOSE);
+        } else {
+            this.node().setNodeFit(Fit.EXACT);
+        }
+        this.save();
+        this.repaint();
+    }
+
+    toggleNodeScale() {
+        if (this.node().scale() === 1) {
+            this._userCaret.shrink();
+        } else {
+            this._userCaret.grow();
+        }
+        this.save();
+        this.repaint();
+    }
+
+    togglePreferredAxis() {
+        const nextAxis = (curAxis) => {
+            switch(curAxis) {
+                case PreferredAxis.HORIZONTAL:
+                    return PreferredAxis.VERTICAL;
+                case PreferredAxis.VERTICAL:
+                    return PreferredAxis.HORIZONTAL;
+                case PreferredAxis.PARENT:
+                    return PreferredAxis.PERPENDICULAR;
+                case PreferredAxis.PERPENDICULAR:
+                default:
+                    return PreferredAxis.PARENT;
+            }
+        };
+
+        this.node().siblings().setLayoutPreference(nextAxis(
+            this.node().siblings().getLayoutPreference()
+        ));
+
+        this.repaint();
+        this.save();
     }
 
     refresh() {
@@ -455,7 +622,11 @@ export default class Viewport {
     };
 
     show(widget) {
+        if (!widget) {
+            throw new Error("Refusing to show falsy widget");
+        }
         if (this._widget === widget) {
+            this.repaint();
             return;
         }
         this._widget = widget;
@@ -473,11 +644,12 @@ export default class Viewport {
         editor.style.fontSize = '24px';
         editor.style.display = 'none';
         editor.addEventListener('blur', e => {
-        this._showEditor = false;
-        this._userCaret.node().setValue(editor.value === '' ? undefined : editor.value);
-        editor.style.display = 'none';
-        this._container.focus();
-        this.refresh();
+            this._showEditor = false;
+            this._userCaret.node().setValue(editor.value === '' ? undefined : editor.value);
+            editor.style.display = 'none';
+            this._container.focus();
+            this.repaint();
+            this.save();
         });
         editor.addEventListener('keypress', e => {
         if (e.key === 'Escape') {
@@ -489,7 +661,8 @@ export default class Viewport {
             this._userCaret.node().setValue(editor.value === '' ? undefined : editor.value);
             editor.style.display = 'none';
             this._container.focus();
-            this.refresh();
+            this.repaint();
+            this.save();
         }
         })
         return editor;
@@ -514,7 +687,6 @@ export default class Viewport {
         console.log("New layout", this._widget.id());
         return new CommitLayout(this._widget, {
             size: (node, size) => {
-            console.log("SIZE");
             size[0] = fontSize;
             if (nodeHasValue(node)) {
                 const { width } = this._ctx.measureText(node.value());
@@ -608,6 +780,8 @@ export default class Viewport {
             break;
             }
         }
+        localStorage.setItem("parsegraph-camera", JSON.stringify(this._cam.toJSON()));
+        localStorage.setItem("parsegraph-graph", JSON.stringify(serializeParsegraph(this._widget)));
         /*console.log("Layout phase", layout.layoutPhase);
         if (!layout.crank()) {
             console.log("Layout complete", layout.layoutPhase);
@@ -623,11 +797,50 @@ export default class Viewport {
         if (!this._cam.canProject() || !this._glProvider.canProject()) {
             return;
         }
+        const cam = this._cam;
+        if (this._showInCamera) {
+            cam.setScale(initialScale/this._userCaret.node().layout().absoluteScale());
+            showNodeInCamera(this._userCaret.node(), cam);
+            this._showInCamera = false;
+            this.refresh();
+            return;
+        }
+
+        const graphSize = [NaN, NaN];
+        const layout = this._userCaret.node().layout();
+        this._widget.layout().extentSize(graphSize);
+        const scaleFactor = 4;
+        if (this._checkScale && (Math.max(...graphSize) * cam.scale() < Math.min(cam.height(), cam.width())/(scaleFactor))) {
+            cam.zoomToPoint(
+                (Math.min(cam.height(), cam.width())/scaleFactor) / (cam.scale() * Math.max(...graphSize)),
+                cam.width()/2,
+                cam.height()/2
+            );
+            this._checkScale = false;
+            this.refresh();
+            console.log("Too small");
+            return;
+        }
+
+        const bodySize = [NaN, NaN];
+        layout.absoluteSize(bodySize);
+        if (this._ensureVisible && !cam.containsAny(new Rect(
+            layout.absoluteX(),
+            layout.absoluteY(),
+            bodySize[0],
+            bodySize[1]
+        ))) {
+            showNodeInCamera(this._userCaret.node(), cam);
+            this.refresh();
+            return;
+        }
+        this._ensureVisible = false;
+
         const worldMatrix = this._cam.project();
         const userCaret = this._userCaret;
-        const cam = this._cam;
         const glProvider = this._glProvider;
         const ctx = this._ctx;
+
 
         const gl = glProvider.gl();
         glProvider.render();
@@ -651,9 +864,9 @@ export default class Viewport {
         do {
             const painter = this._painters.get(pg);
             if (!painter) {
-            console.log("No painter for node", pg.id());
-            needsPaint = true;
-            continue;
+                //console.log("No painter for node", pg.id());
+                needsPaint = true;
+                continue;
             }
 
             painter.render(matrixMultiply3x3(
@@ -747,9 +960,9 @@ export default class Viewport {
         }
 
         if (needsPaint) {
-            if (attempts > 10) {
-            console.log("Failed to fully render after ", attempts, "attempts");
-            return;
+            if (attempts > 1000) {
+                console.log("Failed to fully render after ", attempts, "attempts");
+                return;
             }
             attempts++;
             console.log("Needs paint");
@@ -759,4 +972,8 @@ export default class Viewport {
         }
     };
 
+    setMousePos(mouseX, mouseY) {
+        this._mousePos[0] = mouseX;
+        this._mousePos[1] = mouseY;
+    }
 };

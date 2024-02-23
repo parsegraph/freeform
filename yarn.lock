@@ -7090,10 +7090,23 @@ parsegraph-shader@^1.5.11:
   resolved "https://registry.yarnpkg.com/parsegraph-shader/-/parsegraph-shader-1.5.11.tgz#72887228eacf5ad0b1576019eee8685f1b368606"
   integrity sha512-uMmolGZcUZ66b/Q8kqlahpbYor+fNdcEgI7hda0UF4K/bzqeCHgPSPJYSp8Ve7lufJsKqhwE9U7lZBBd2VV2zg==
 
-parsegraph@^6.0.1:
-  version "6.0.1"
-  resolved "https://registry.yarnpkg.com/parsegraph/-/parsegraph-6.0.1.tgz#59c67bf83f8ebe0a2829fd6b39f3f4d1fb3479e9"
-  integrity sha512-xBz2apfAWh0C9vR9+BuV1olx3TLYzEH/94mhDtncxK6ETWFw6qek0bcQ79nju7jBjPx5W5cSr3YDY9rRUCSoeg==
+parsegraph-showincamera@2.0.0:
+  version "2.0.0"
+  resolved "https://registry.yarnpkg.com/parsegraph-showincamera/-/parsegraph-showincamera-2.0.0.tgz#55b6d60665b4c29ddd32230cddfcae7fb081c13b"
+  integrity sha512-rjqNxK995alYyFfFH/awNrP1kZ8SXaenu4GBzsjbnIrB4uz5I9ARsT1Kyb5vgk3f2nGqgNNQPd63KdlQXA4pTg==
+  dependencies:
+    parsegraph "^6.1.0"
+    parsegraph-camera "^1.4.24"
+
+parsegraph@^6.1.0:
+  version "6.1.0"
+  resolved "https://registry.yarnpkg.com/parsegraph/-/parsegraph-6.1.0.tgz#4bf3a2884029e38299434c718eb3f21378d9f70a"
+  integrity sha512-ZwVYLOl4T4qSQvoSpvNei+SAfShNEKiYug+37q3DjqJAAk8I7CaU/2RvyU1SuFdyFMzIvqeI0snwlIyHnNep+Q==
+
+parsegraph@^6.1.1:
+  version "6.1.1"
+  resolved "https://registry.yarnpkg.com/parsegraph/-/parsegraph-6.1.1.tgz#ffe37cf6700c396987a94e9d085a6bec23d326e7"
+  integrity sha512-qIuMt/9WPhwsJ/emb/jthLRo0bdNY/OqNzTSNSPQPvH/s3/nQZMemaxxVvaAUfWrSy1l7WiOJphRf67RdALc/Q==
 
 parseurl@~1.3.2, parseurl@~1.3.3:
   version "1.3.3"

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import * as exporters from './exporters';
+import * as exporters from '../exporters';
 import { serializeParsegraph } from 'parsegraph';
 
 import SettingsForm from './SettingsForm';

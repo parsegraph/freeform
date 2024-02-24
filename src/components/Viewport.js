@@ -12,6 +12,9 @@ import {
   PreferredAxis,
   Fit,
   serializeParsegraph,
+  namePreferredAxis,
+  nameDirection,
+  nameAlignment,
 } from "parsegraph";
 import Color from 'parsegraph-color';
 import { BasicGLProvider } from 'parsegraph-compileprogram';
@@ -26,6 +29,7 @@ import {
 import { showInCamera, showNodeInCamera } from "parsegraph-showincamera";
 import Rect from "parsegraph-rect";
 import { USE_LOCAL_STORAGE } from "./settings";
+import { WorldLabels } from "./WorldLabel";
 
 const fontSize = 24;
 const lineHeight = fontSize/2;
@@ -35,6 +39,7 @@ const maxClickDelay = 1000;
 const borderColor = new Color(0.7, 0.7, 0.7, 1);
 const initialScale = 4;
 const moveSpeed = fontSize;
+const minVisibleTextScale = 0.5;
 
 let attempts = 0;
 
@@ -70,6 +75,8 @@ export default class Viewport {
         this._painters = new WeakMap();
         this._mousePos = [NaN, NaN];
 
+        this._worldLabels = new WorldLabels(minVisibleTextScale);
+
         this._showInCamera = true;
 
         // Create and restore the camera if possible
@@ -83,6 +90,32 @@ export default class Viewport {
             }
         }
         this._showEditor = false;
+    }
+
+    logMessage(msg) {
+        const elem = document.createElement('span');
+        elem.style.pointerEvents = 'none';
+        elem.style.color = 'grey';
+        elem.innerText = msg;
+        while(this._logContainer.childElementCount > 10) {
+            this._logContainer.firstChild.remove();
+        }
+        this._logContainer.appendChild(elem);
+
+        setTimeout(()=>{
+            elem.remove();
+        }, 5000);
+    }
+
+    createLog() {
+        this._logContainer = document.createElement("div");
+        this._logContainer.style.display = 'flex';
+        this._logContainer.style.flexDirection = 'column';
+    }
+
+    mountLog(logContainer) {
+        this.createLog();
+        logContainer.appendChild(this._logContainer);
     }
 
     setSaveGraph(saveGraph) {
@@ -121,6 +154,7 @@ export default class Viewport {
                 node.siblings().getLayoutPreference() === PreferredAxis.HORIZONTAL ?
                 PreferredAxis.VERTICAL : PreferredAxis.HORIZONTAL
             );
+            this.logMessage("Preferred axis is now " + namePreferredAxis(node.siblings().getLayoutPreference()));
             this.save();
             this.repaint();
             return;
@@ -131,6 +165,7 @@ export default class Viewport {
             childDir,
             nextAlignment(alignment, childDir)
         )
+        this.logMessage("Alignment is now " + nameAlignment(node.neighbors().parentNode().neighbors().getAlignment(childDir)))
         this.save();
         this.repaint();
     };
@@ -572,10 +607,10 @@ export default class Viewport {
         if (this.node().nodeFit() === Fit.EXACT) {
             this._userCaret.fitLoose();
         } else {
+            const dir = this._userCaret.node().neighbors().parentDirection();
+            this.logMessage("Pulling this node " + nameDirection(dir));
             this._userCaret.fitExact();
-            this._userCaret.node().neighbors().parentNode().siblings().pull(
-                reverseDirection(this._userCaret.node().neighbors().parentDirection())
-            )
+            this._userCaret.node().neighbors().parentNode().siblings().pull(reverseDirection(dir));
         }
         this.save();
         this.repaint();
@@ -584,8 +619,10 @@ export default class Viewport {
     toggleNodeFit() {
         if (this.node().nodeFit() === Fit.EXACT) {
             this.node().setNodeFit(Fit.LOOSE);
+            this.logMessage("Fit is now LOOSE")
         } else {
             this.node().setNodeFit(Fit.EXACT);
+            this.logMessage("Fit is now EXACT")
         }
         this.save();
         this.repaint();
@@ -619,6 +656,9 @@ export default class Viewport {
         this.node().siblings().setLayoutPreference(nextAxis(
             this.node().siblings().getLayoutPreference()
         ));
+        this.logMessage("Preferred axis is now " + 
+            namePreferredAxis(this.node().siblings().getLayoutPreference())
+        );
 
         this.repaint();
         this.save();
@@ -972,15 +1012,19 @@ export default class Viewport {
                 ctx.textBaseline = 'middle';
                 ctx.translate(node.layout().groupX(), node.layout().groupY());
             }
-            ctx.scale(node.layout().groupScale(), node.layout().groupScale());
             const lines = node.value().toString().split('\n');
-            if (lines.length > 1) {
-                ctx.translate(0, -lines.length * lineHeight / 2 / 2);
+            if (node.layout().absoluteScale() * cam.scale() >= minVisibleTextScale) {
+                ctx.scale(node.layout().groupScale(), node.layout().groupScale());
+                if (lines.length > 1) {
+                    ctx.translate(0, -lines.length * lineHeight / 2 / 2);
+                }
+                lines.forEach(line => {
+                    ctx.fillText(line, 0, 0)
+                    ctx.translate(0, lineHeight);
+                });
             }
-            lines.forEach(line => {
-                ctx.fillText(line, 0, 0)
-                ctx.translate(0, lineHeight);
-            });
+            this._worldLabels.draw(lines[0], node.layout().absoluteX(), node.layout().absoluteY(), fontSize,
+                node.layout().absoluteScale(), new Color(1, 1, 1, 1), new Color(0, 0, 0, 1));
             ctx.restore();
             });
             ctx.restore();
@@ -1036,6 +1080,16 @@ export default class Viewport {
             this.refresh();
         } else {
             attempts = 0;
+            ctx.scale(cam.scale(), cam.scale());
+            ctx.translate(cam.x(), cam.y());
+            this._worldLabels.render(
+                ctx, 
+                cam.x(),
+                cam.y(),
+                cam.width(),
+                cam.height(),
+                cam.scale()
+            )
         }
     };
 

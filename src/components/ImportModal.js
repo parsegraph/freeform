@@ -1,63 +1,11 @@
 import { useState } from 'react';
 
-import { DirectionCaret, DirectionNode, deserializeParsegraph } from 'parsegraph';
+import { DirectionNode, deserializeParsegraph } from 'parsegraph';
 
-import * as importers from './importers';
+import * as importers from '../importers';
 
 import './modal.css';
-
-const SIZE = 25;
-
-const buildGrid = () => {
-  const car = new DirectionCaret();
-  for(let col = 0; col < SIZE; ++col) {
-    car.spawnMove('d', col);
-    car.push();
-    for(let row = 0; row < SIZE; ++row) {
-      car.spawnMove('f', row);
-    }
-    car.pop();
-  }
-  return car.root();
-};
-
-const buildAlternatingColumns = () => {
-  const car = new DirectionCaret();
-  for(let col = 0; col < SIZE; ++col) {
-    car.spawnMove('f', col);
-    car.push();
-    for(let row = 0; row < SIZE; ++row) {
-      car.spawnMove(col % 2 !== 0 ? 'u' : 'd', row);
-    }
-    car.pop();
-  }
-  return car.root();
-}
-
-const buildPlanner = (inc = 15) => {
-  const car = new DirectionCaret();
-  for(let hour = 0; hour < 24; ++hour) {
-    for(let min = 0; min < 60; min += inc) {
-      let str = "";
-      if (hour === 0 || hour === 12) {
-        str += 12;
-      } else if (hour < 12) {
-        str += (hour);
-      } else {
-        str += (hour - 12);
-      }
-      str += ":";
-      if (min < 10) {
-        str += "0" + min;
-      } else {
-        str += min;
-      }
-      str += " " + (hour >= 12 ? "PM" : "AM");
-      car.spawnMove('d', str);
-    }
-  }
-  return car.root();
-}
+import { buildAlternatingColumns, buildGrid, buildPlanner, buildRandom } from '../builders';
 
 function ImportFromFile({openGraph, onClose}) {
   const [importData, setImportData] = useState(null);
@@ -140,6 +88,9 @@ function ImportFromTemplate({openGraph, onClose}) {
       case "grid":
         openGraph(buildGrid());
         break;
+      case "daily_planner_1":
+        openGraph(buildPlanner(1));
+        break;
       case "daily_planner_15":
         openGraph(buildPlanner(15));
         break;
@@ -148,6 +99,9 @@ function ImportFromTemplate({openGraph, onClose}) {
         break;
       case "daily_planner_60":
         openGraph(buildPlanner(60));
+        break;
+      case "random":
+        openGraph(buildRandom(250));
         break;
       case "alt_columns":
         openGraph(buildAlternatingColumns());
@@ -167,10 +121,12 @@ function ImportFromTemplate({openGraph, onClose}) {
     <option value="json">Sample JSON</option>
     <option value="lisp">Sample Lisp</option>
     <option value="grid">Grid</option>
+    <option value="daily_planner_1">Daily planner (1m)</option>
     <option value="daily_planner_15">Daily planner (15m)</option>
     <option value="daily_planner_30">Daily planner (30m)</option>
     <option value="daily_planner_60">Daily planner (hourly)</option>
-    <option value="alt_columns">Alternating columns</option>
+    <option value="blank">--- ART ---</option>
+    <option value="alt_columns">Satellite</option>
     <option value="random">Random graph</option>
   </select>
   </label> 

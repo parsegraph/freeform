@@ -73,6 +73,7 @@ class GraphStack {
 function App() {
   const canvasRef = useRef();
   const editorContainerRef = useRef();
+  const logRef = useRef();
 
   const [viewport] = useState(new Viewport());
   const [graphs] = useState(new GraphStack());
@@ -88,6 +89,16 @@ function App() {
   }, [viewport, graphs]);
 
   const [showNodeActions, setShowNodeActions] = useState(false);
+
+  useEffect(() => {
+    if (!viewport) {
+      return;
+    }
+    if (!logRef.current) {
+      return;
+    }
+    viewport.mountLog(logRef.current);
+  })
 
   useEffect(() => {
     if (!viewport) {
@@ -165,9 +176,7 @@ function App() {
         </div>}
         {hasWidget && <button onClick={openExportModal}>Export</button>}
         </div>
-        <div id="log">
-          log message
-        </div>
+        <div id="log" ref={logRef}/>
       </div>
       {(!hasWidget || importModalOpen) && <div className="modal">
         <ImportModal onClose={hasWidget ? () => setImportModalOpen(false) : null} openGraph={graph=>{

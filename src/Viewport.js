@@ -25,8 +25,10 @@ import {
 } from 'parsegraph-matrix';
 import { showInCamera, showNodeInCamera } from "parsegraph-showincamera";
 import Rect from "parsegraph-rect";
+import { USE_LOCAL_STORAGE } from "./settings";
 
 const fontSize = 24;
+const lineHeight = fontSize/2;
 const borderThickness = 3;
 const borderRoundedness = 5;
 const maxClickDelay = 1000;
@@ -72,11 +74,13 @@ export default class Viewport {
 
         // Create and restore the camera if possible
         this._cam = new Camera();
-        try {
-            this._cam.restore(JSON.parse(localStorage.getItem("parsegraph-camera")));
-            this._showInCamera = false;
-        } catch (ex) {
-            console.log(ex);
+        if (USE_LOCAL_STORAGE) {
+            try {
+                this._cam.restore(JSON.parse(localStorage.getItem("parsegraph-camera")));
+                this._showInCamera = false;
+            } catch (ex) {
+                console.log(ex);
+            }
         }
         this._showEditor = false;
     }
@@ -113,8 +117,6 @@ export default class Viewport {
     toggleAlignment() {
         const node = this._userCaret.node();
         if (node.neighbors().isRoot()) {
-            console.log("LAYOUTPREF", node.siblings().getLayoutPreference());
-            node.setNodeFit(Fit.EXACT);
             node.siblings().setLayoutPreference(
                 node.siblings().getLayoutPreference() === PreferredAxis.HORIZONTAL ?
                 PreferredAxis.VERTICAL : PreferredAxis.HORIZONTAL
@@ -123,7 +125,6 @@ export default class Viewport {
             this.repaint();
             return;
         }
-        node.setNodeFit(Fit.LOOSE);
         const childDir = reverseDirection(node.neighbors().parentDirection())
         const alignment = node.neighbors().parentNode().neighbors().getAlignment(childDir);
         node.neighbors().parentNode().neighbors().align(
@@ -151,7 +152,6 @@ export default class Viewport {
         const spawnMove = (dir, pullIfOccupied) => {
         if (this._userCaret.node().neighbors().hasNode(dir)) {
             if (pullIfOccupied && !this._userCaret.node().neighbors().isRoot()) {
-                console.log("Pulling!");
                 this.pullNode();
             } else {
                 this._userCaret.move(dir);
@@ -217,7 +217,6 @@ export default class Viewport {
         canvas.addEventListener('mousemove', e => {
         const dx = e.clientX - mouseX;
         const dy = e.clientY - mouseY;
-        //console.log("isDown", isDown, "touchingNode", touchingNode);
         if (isDown && !touchingNode) {
             this._cam.adjustOrigin(dx / this._cam.scale(), dy / this._cam.scale());
             this.refresh();
@@ -327,35 +326,36 @@ export default class Viewport {
         });
 
         canvas.addEventListener('touchmove', e => {
-        e.preventDefault();
+            e.preventDefault();
 
-        if (numActiveTouches() > 1) {
-            const [first, second] = [...ongoingTouches.values()];
-            const origDistance = distance(first.mouseX, first.mouseY, second.mouseX, second.mouseY);
-            for (let i = 0; i < e.changedTouches.length; ++i) {
-            const touch = e.changedTouches[i];
-            const touchData = ongoingTouches.get(touch.identifier);
-            touchData.mouseX = touch.clientX;
-            touchData.mouseY = touch.clientY;
-            }
-            const newDistance = distance(first.mouseX, first.mouseY, second.mouseX, second.mouseY);
-            cam.zoomToPoint(newDistance / origDistance, ...midPoint(first.mouseX, first.mouseY, second.mouseX, second.mouseY));
-            this.refresh();
-            return;
-        }
-
-        for (let i = 0; i < e.changedTouches.length; ++i) {
-            const touch = e.changedTouches[i];
-            const touchData = ongoingTouches.get(touch.identifier);
-            const dx = touch.clientX - touchData.mouseX;
-            const dy = touch.clientY - touchData.mouseY;
-            if (!touchingNode) {
-                cam.adjustOrigin(dx / cam.scale(), dy / cam.scale());
+            if (numActiveTouches() > 1) {
+                const [first, second] = [...ongoingTouches.values()];
+                const origDistance = distance(first.mouseX, first.mouseY, second.mouseX, second.mouseY);
+                for (let i = 0; i < e.changedTouches.length; ++i) {
+                const touch = e.changedTouches[i];
+                const touchData = ongoingTouches.get(touch.identifier);
+                touchData.mouseX = touch.clientX;
+                touchData.mouseY = touch.clientY;
+                }
+                const newDistance = distance(first.mouseX, first.mouseY, second.mouseX, second.mouseY);
+                cam.zoomToPoint(newDistance / origDistance, ...midPoint(first.mouseX, first.mouseY, second.mouseX, second.mouseY));
+                this._checkScale = true;
                 this.refresh();
+                return;
             }
-            touchData.mouseX = touch.clientX;
-            touchData.mouseY = touch.clientY;
-        }
+
+            for (let i = 0; i < e.changedTouches.length; ++i) {
+                const touch = e.changedTouches[i];
+                const touchData = ongoingTouches.get(touch.identifier);
+                const dx = touch.clientX - touchData.mouseX;
+                const dy = touch.clientY - touchData.mouseY;
+                if (!touchingNode) {
+                    cam.adjustOrigin(dx / cam.scale(), dy / cam.scale());
+                    this.refresh();
+                }
+                touchData.mouseX = touch.clientX;
+                touchData.mouseY = touch.clientY;
+            }
         });
 
         canvas.addEventListener('wheel', e => {
@@ -477,11 +477,11 @@ export default class Viewport {
                 this.removeNode()
                 break;
             case 'Enter':
-            this.toggleEditor();
-            this.refresh();
-            break;
+                this.toggleEditor();
+                this.refresh();
+                break;
             default:
-            return;
+                return;
         }
         e.preventDefault();
         });
@@ -494,7 +494,7 @@ export default class Viewport {
 
 
         canvas.style.background = 'black';
-        canvas.style.overflow = 'hidden';
+        //canvas.style.overflow = 'hidden';
 
         const textCanvas = document.createElement('canvas');
         textCanvas.style.position = 'absolute';
@@ -515,8 +515,17 @@ export default class Viewport {
         this._glProvider = glProvider;
         canvas.appendChild(textCanvas);
 
-        this._editor = this.createEditor();
-        canvas.appendChild(this._editor);
+        canvas.addEventListener("focus", () => {
+            if (this._showEditor) {
+                this.toggleEditor();
+            }
+        });
+    }
+
+    mountEditor(editorContainer) {
+        console.log("mount editor");
+        this.createEditor();
+        editorContainer.appendChild(this._editorContainer);
     }
 
     undo() {
@@ -635,31 +644,61 @@ export default class Viewport {
     }
 
     createEditor() {
-        const editor = document.createElement('input');
-        editor.style.position = 'absolute';
-        editor.style.bottom = '5%';
-        editor.style.bottom = '5%';
-        editor.style.left = '5%';
-        editor.style.right = '5%';
-        editor.style.fontSize = '24px';
-        editor.style.display = 'none';
-        editor.addEventListener('blur', e => {
-            this._showEditor = false;
+        const editorContainer = document.createElement('div');
+        editorContainer.style.display = 'none';
+        editorContainer.style.flexGrow = '1';
+
+        this._editorContainer = editorContainer;
+
+        const editor = this.createEditorComp();
+
+        editorContainer.appendChild(editor);
+        this._editor = editor;
+
+        const buttons = document.createElement('div');
+        buttons.className = 'buttons';
+        editorContainer.appendChild(buttons);
+
+        const saveBtn = document.createElement("button");
+
+        const save = () => {
             this._userCaret.node().setValue(editor.value === '' ? undefined : editor.value);
-            editor.style.display = 'none';
-            this._container.focus();
+            this.toggleEditor();
             this.repaint();
             this.save();
-        });
+        };
+        saveBtn.addEventListener('click', save);
+        saveBtn.addEventListener('touchend', save);
+        saveBtn.innerHTML = "Save";
+        buttons.appendChild(saveBtn);
+
+        const cancelBtn = document.createElement("button");
+        cancelBtn.addEventListener('click', () => this.toggleEditor());
+        cancelBtn.addEventListener('touchend', () => this.toggleEditor());
+        cancelBtn.innerHTML = "Cancel";
+        buttons.appendChild(cancelBtn);
+
+        return editorContainer;
+    }
+
+    setToggleNodeActions(cb) {
+        this._toggleNodeActions = cb;
+    }
+
+    createEditorComp() {
+        const editor = document.createElement('textarea');
+        editor.style.width = '100%';
+        editor.style.boxSizing = 'border-box';
         editor.addEventListener('keypress', e => {
         if (e.key === 'Escape') {
-            this._showEditor = false;
-            editor.style.display = 'none';
+            this.toggleEditor();
             this._container.focus();
         } else if (e.key === 'Enter') {
-            this._showEditor = false;
+            if (e.shiftKey) {
+                return;
+            }
             this._userCaret.node().setValue(editor.value === '' ? undefined : editor.value);
-            editor.style.display = 'none';
+            this.toggleEditor();
             this._container.focus();
             this.repaint();
             this.save();
@@ -669,9 +708,12 @@ export default class Viewport {
     }
 
     toggleEditor() {
+        if (this._toggleNodeActions) {
+            this._toggleNodeActions();
+        }
         this._showEditor = !this._showEditor;
         if (this._showEditor) {
-            this._editor.style.display = 'block';
+            this._editorContainer.style.display = 'block';
             this._editor.focus();
             if (nodeHasValue(this._userCaret.node())) {
             this._editor.value = this._userCaret.node().value();
@@ -679,20 +721,24 @@ export default class Viewport {
             this._editor.value = '';
             }
         } else {
-            this._editor.style.display = 'none';
+            this._editorContainer.style.display = 'none';
         }
     }
 
     createLayout() {
-        console.log("New layout", this._widget.id());
         return new CommitLayout(this._widget, {
             size: (node, size) => {
             size[0] = fontSize;
             if (nodeHasValue(node)) {
-                const { width } = this._ctx.measureText(node.value());
-                size[0] = Math.max(size[0], width + 6*borderThickness);
+                size[1] = 0;
+                node.value().toString().split('\n').forEach(line => {
+                    size[1] += fontSize;
+                    const { width } = this._ctx.measureText(line);
+                    size[0] = Math.max(size[0], width + 6*borderThickness);
+                });
+            } else {
+                size[1] = fontSize;
             }
-            size[1] = fontSize;
 
             if (node.neighbors().hasNode(Direction.INWARD)) {
                 const child = node.neighbors().nodeAt(Direction.INWARD);
@@ -725,7 +771,6 @@ export default class Viewport {
             return fontSize/2;
             },
             paint: (pg) => {
-            console.log("PAINT", pg.id())
             let painter = this._painters.get(pg);
             if (!painter || painter.glProvider() !== this._glProvider) {
                 painter = new WebGLBlockPainter(this._glProvider);
@@ -769,7 +814,14 @@ export default class Viewport {
         });
     }
 
+    canPaint() {
+        return this._container && this._widget;
+    }
+
     paint() {
+        if (!this.canPaint()) {
+            return;
+        }
         if (!this._layout || this._layout.startingNode() !== this._widget) {
             this._layout = this.createLayout();
         }
@@ -780,8 +832,10 @@ export default class Viewport {
             break;
             }
         }
-        localStorage.setItem("parsegraph-camera", JSON.stringify(this._cam.toJSON()));
-        localStorage.setItem("parsegraph-graph", JSON.stringify(serializeParsegraph(this._widget)));
+        if (USE_LOCAL_STORAGE) {
+            localStorage.setItem("parsegraph-camera", JSON.stringify(this._cam.toJSON()));
+            localStorage.setItem("parsegraph-graph", JSON.stringify(serializeParsegraph(this._widget)));
+        }
         /*console.log("Layout phase", layout.layoutPhase);
         if (!layout.crank()) {
             console.log("Layout complete", layout.layoutPhase);
@@ -794,14 +848,20 @@ export default class Viewport {
     };
 
     render() {
+        if (!this.canPaint()) {
+            return;
+        }
         if (!this._cam.canProject() || !this._glProvider.canProject()) {
             return;
         }
         const cam = this._cam;
         if (this._showInCamera) {
-            cam.setScale(initialScale/this._userCaret.node().layout().absoluteScale());
-            showNodeInCamera(this._userCaret.node(), cam);
-            this._showInCamera = false;
+            const scale = initialScale/this._userCaret.node().layout().absoluteScale();
+            if (!isNaN(scale)) {
+                cam.setScale(initialScale/this._userCaret.node().layout().absoluteScale());
+                showNodeInCamera(this._userCaret.node(), cam);
+                this._showInCamera = false;
+            }
             this.refresh();
             return;
         }
@@ -811,14 +871,16 @@ export default class Viewport {
         this._widget.layout().extentSize(graphSize);
         const scaleFactor = 4;
         if (this._checkScale && (Math.max(...graphSize) * cam.scale() < Math.min(cam.height(), cam.width())/(scaleFactor))) {
-            cam.zoomToPoint(
-                (Math.min(cam.height(), cam.width())/scaleFactor) / (cam.scale() * Math.max(...graphSize)),
-                cam.width()/2,
-                cam.height()/2
-            );
-            this._checkScale = false;
+            const scale = (Math.min(cam.height(), cam.width())/scaleFactor) / (cam.scale() * Math.max(...graphSize));
+            if (!isNaN(scale)) {
+                cam.zoomToPoint(
+                    scale,
+                    cam.width()/2,
+                    cam.height()/2
+                );
+                this._checkScale = false;
+            }
             this.refresh();
-            console.log("Too small");
             return;
         }
 
@@ -864,7 +926,6 @@ export default class Viewport {
         do {
             const painter = this._painters.get(pg);
             if (!painter) {
-                //console.log("No painter for node", pg.id());
                 needsPaint = true;
                 continue;
             }
@@ -885,7 +946,6 @@ export default class Viewport {
             // eslint-disable-next-line no-loop-func
             pg.siblings().forEach(node => {
             if (node.layout().needsAbsolutePos()) {
-                console.log("Needs absolute pos");
                 needsPaint = true;
                 return;
             }
@@ -913,7 +973,14 @@ export default class Viewport {
                 ctx.translate(node.layout().groupX(), node.layout().groupY());
             }
             ctx.scale(node.layout().groupScale(), node.layout().groupScale());
-            ctx.fillText(node.value(), 0, 0)
+            const lines = node.value().toString().split('\n');
+            if (lines.length > 1) {
+                ctx.translate(0, -lines.length * lineHeight / 2 / 2);
+            }
+            lines.forEach(line => {
+                ctx.fillText(line, 0, 0)
+                ctx.translate(0, lineHeight);
+            });
             ctx.restore();
             });
             ctx.restore();
@@ -965,7 +1032,7 @@ export default class Viewport {
                 return;
             }
             attempts++;
-            console.log("Needs paint");
+            //console.log("Needs paint");
             this.refresh();
         } else {
             attempts = 0;

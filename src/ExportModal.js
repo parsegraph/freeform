@@ -66,16 +66,7 @@ export default function ExportModal({onClose, graph}) {
   const [activeTab, setActiveTab] = useState("export");
 
   return <div style={{width: '100%', height: '100%', display: 'flex', justifyContent: 'stretch', flexDirection: 'column', alignItems: 'stretch', gap: '3px', padding: '12px', boxSizing: 'border-box'}}>
-    <h3 style={{margin: '0', marginBottom: '.5em'}}>Parsegraph Menu</h3>
-    <div className="tabs" style={{display: 'flex', gap:'5px'}}>
-      <div className={activeTab === "settings" ? "active" : null} onClick={()=>{
-        setActiveTab("settings");
-      }}>Settings</div>
-      <div className={activeTab === "export" ? "active" : null} onClick={()=>{
-        setActiveTab("export");
-      }}>Export</div>
-    </div>
-    {activeTab === "settings" && <SettingsForm graph={graph} onClose={onClose}/>}
+    <h3 style={{margin: '0', marginBottom: '.5em'}}>Export Parsegraph</h3>
     {activeTab === "export" && <ExportForm graph={graph} onClose={onClose}/>}
   </div>
 };

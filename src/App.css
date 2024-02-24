@@ -1,7 +1,19 @@
 .App {
   text-align: center;
+  font-size: 18px;
   width: 100vw;
   height: 100vh;
+}
+
+input, textarea, select, button {
+  font-size: 18px;
+}
+
+button {
+  background: #282c34;
+  padding: 5px;
+  color: #f1f1f1;
+  border: 0;
 }
 
 .App-logo {
@@ -13,6 +25,12 @@
   .App-logo {
     animation: App-logo-spin infinite 20s linear;
   }
+}
+
+#log {
+  color: #eee;
+  text-align: left;
+  pointer-events: none;
 }
 
 .App-header {
@@ -28,6 +46,10 @@
 
 .App-link {
   color: #61dafb;
+}
+
+.buttons {
+  gap: 5px;
 }
 
 .modal {

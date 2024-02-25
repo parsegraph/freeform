@@ -1,6 +1,6 @@
 import { Direction, DirectionCaret, PreferredAxis } from 'parsegraph';
 
-const SIZE = 25;
+const SIZE = 10;
 
 const buildRandom = (steps) => {
   const car = new DirectionCaret();
@@ -61,7 +61,7 @@ const buildRandom = (steps) => {
 const buildGrid = () => {
   const car = new DirectionCaret();
   for(let col = 0; col < SIZE; ++col) {
-    car.spawnMove('d', col);
+    car.spawnMove('d');
     car.push();
     for(let row = 0; row < SIZE; ++row) {
       car.spawnMove('f', row);

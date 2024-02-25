@@ -22,6 +22,7 @@ function download(filename, text) {
 
 function ExportForm({graph, onClose}) {
   const [exportType, setExportType] = useState("parsegraph");
+  const [roomName, setRoomName] = useState(graph.value());
 
   const performExport = ()=> {
     switch(exportType) {
@@ -42,6 +43,17 @@ function ExportForm({graph, onClose}) {
       case "lines":
         download("parsegraph-lines.txt", exporters.exportGraphToLines(graph));
         break;
+      case "public":
+        fetch('/public/' + roomName, {
+          body: JSON.stringify(serializeParsegraph(graph)),
+          headers: {
+            "Content-Type": "application/json"
+          },
+          method: 'POST'
+        }).then(resp=>{
+          console.log(resp);
+        });
+        break;
       default:
         throw new Error("Unsupported export type: " + exportType)
     }
@@ -54,8 +66,13 @@ function ExportForm({graph, onClose}) {
     <option value="lines">Lines</option>
     <option value="lisp">Lisp</option>
     <option value="json">JSON</option>
+    <option value="public">Public</option>
   </select>
   </label>
+  {exportType === "public" && <label style={{display: 'flex', gap: '5px'}}>Name:&nbsp;
+    <input style={{flexGrow: '1'}} value={roomName} onChange={e => setRoomName(e.target.value)}/>
+  </label>
+  }
   <div className="buttons">
     <button onClick={performExport}>Export</button>
     <button onClick={onClose}>Cancel</button>

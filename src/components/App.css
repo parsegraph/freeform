@@ -14,11 +14,24 @@ button {
   padding: 5px;
   color: #f1f1f1;
   border: 0;
+  border-radius: 3px;
 }
 
 .App-logo {
   height: 40vmin;
   pointer-events: none;
+}
+
+button.dir {
+  background: green;
+  border-radius: 3px;
+}
+
+button.edit {
+  background: rgb(245, 230, 25);
+  color: black;
+  border: 0;
+  border-radius: 3px;
 }
 
 @media (prefers-reduced-motion: no-preference) {

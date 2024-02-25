@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { DirectionNode, deserializeParsegraph } from 'parsegraph';
 
@@ -24,7 +24,8 @@ function ImportFromFile({openGraph, onClose}) {
         openGraph(importers.graphJson(JSON.parse(importData)));
         break;
       case "parsegraph":
-        openGraph(deserializeParsegraph(JSON.parse(importData)));
+        const data = JSON.parse(importData);
+        openGraph(deserializeParsegraph(data), data.selectedNode);
         break;
       case "lines":
         openGraph(importers.graphLines(importData));
@@ -63,6 +64,31 @@ function ImportFromFile({openGraph, onClose}) {
   </div></>;
 }
 
+const loadRoom = (openGraph, roomName) => {
+  return fetch("/public/" + roomName).then(resp=>resp.json()).then(roomData =>{
+    openGraph(deserializeParsegraph(roomData));
+  });
+}
+
+function JoinPublic({openGraph, onClose}) {
+  const [importType, setImportType] = useState("");
+
+  const joinRoom = ()=> {
+    loadRoom(openGraph, importType);
+    if (onClose) {
+      onClose();
+    }
+  };
+
+  return <>
+  <label style={{display: 'flex', gap:'5px'}}>Name: <input style={{flexGrow:'1'}} value={importType} onChange={e=>setImportType(e.target.value)}/>
+  </label>
+  <div className="buttons">
+    <button style={{flexGrow:'1'}} onClick={joinRoom}>Load</button>
+    {onClose && <button style={{flexGrow:'1'}} onClick={onClose}>Cancel</button>}
+  </div></>;
+}
+
 function ImportFromTemplate({openGraph, onClose}) {
   const [importType, setImportType] = useState("blank");
 
@@ -88,8 +114,11 @@ function ImportFromTemplate({openGraph, onClose}) {
       case "grid":
         openGraph(buildGrid());
         break;
-      case "daily_planner_1":
-        openGraph(buildPlanner(1));
+      case "daily_planner_5":
+        openGraph(buildPlanner(5));
+        break;
+      case "daily_planner_10":
+        openGraph(buildPlanner(10));
         break;
       case "daily_planner_15":
         openGraph(buildPlanner(15));
@@ -121,12 +150,12 @@ function ImportFromTemplate({openGraph, onClose}) {
     <option value="json">Sample JSON</option>
     <option value="lisp">Sample Lisp</option>
     <option value="grid">Grid</option>
-    <option value="daily_planner_1">Daily planner (1m)</option>
+    <option value="daily_planner_5">Daily planner (5m)</option>
+    <option value="daily_planner_10">Daily planner (10m)</option>
     <option value="daily_planner_15">Daily planner (15m)</option>
     <option value="daily_planner_30">Daily planner (30m)</option>
     <option value="daily_planner_60">Daily planner (hourly)</option>
-    <option value="blank">--- ART ---</option>
-    <option value="alt_columns">Satellite</option>
+    <option value="alt_columns">Alternating columns</option>
     <option value="random">Random graph</option>
   </select>
   </label> 
@@ -141,16 +170,20 @@ export default function ImportModal({onClose, openGraph}) {
   const [activeTab, setActiveTab] = useState("import");
 
   return <div style={{width: '100%', height: '100%', display: 'flex', justifyContent: 'stretch', flexDirection: 'column', alignItems: 'stretch', gap: '3px', padding: '12px', boxSizing: 'border-box'}}>
-    <h3 style={{margin: '0', marginBottom: '.5em'}}>{activeTab === "template" ? "New": "Open"} Parsegraph</h3>
+    <h3 style={{margin: '0', marginBottom: '.5em'}}>{activeTab === "template" ? "New": (activeTab === "public" ? "Load" : "Open")} Parsegraph</h3>
     <div className="tabs" style={{display: 'flex', gap:'5px'}}>
-      <div className={activeTab === "template" ? "active" : null} onClick={()=>{
+      <button className={activeTab === "template" ? "active" : null} onClick={()=>{
         setActiveTab("template");
-      }}>New</div>
-      <div className={activeTab === "import" ? "active" : null} onClick={()=>{
+      }}>New</button>
+      <button className={activeTab === "import" ? "active" : null} onClick={()=>{
         setActiveTab("import");
-      }}>Open</div>
+      }}>Open</button>
+      <button className={activeTab === "public" ? "active" : null} onClick={()=>{
+        setActiveTab("public");
+      }}>Public</button>
     </div>
     {activeTab === "template" && <ImportFromTemplate openGraph={openGraph} onClose={onClose}/>}
     {activeTab === "import" && <ImportFromFile openGraph={openGraph} onClose={onClose}/>}
+    {activeTab === "public" && <JoinPublic openGraph={openGraph} onClose={onClose}/>}
   </div>
 }

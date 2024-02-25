@@ -31,20 +31,45 @@ import Rect from "parsegraph-rect";
 import { USE_LOCAL_STORAGE } from "./settings";
 import { WorldLabels } from "./WorldLabel";
 
-const fontSize = 24;
-const lineHeight = fontSize/2;
-const borderThickness = 3;
+const fontSize = 10;
+const lineHeight = fontSize;
+const borderThickness = 1;
+const lineThickness = 3;
 const borderRoundedness = 5;
 const maxClickDelay = 1000;
-const borderColor = new Color(0.7, 0.7, 0.7, 1);
 const initialScale = 4;
 const moveSpeed = fontSize;
-const minVisibleTextScale = 0.5;
+const minVisibleTextScale = 0.2;
+const budSize = .75;
+const inwardSeparation = lineThickness * 4;
+
+const pageBackgroundColor = new Color(
+    .2, .2, .9, 1
+)
+const caretColor = new Color(.95, .9, 0, 1);
+
+// Node colors
+const backgroundColor = new Color(0.5, 1, 0.5, 0.1);
+const borderColor = new Color(0, 0, 0, 0.5);
+const textColor = new Color(0, 0, 0, 1);
+const lineColor = new Color(.9, .9, .9, .8);
 
 let attempts = 0;
 
 const distance = (x1, y1, x2, y2) => {
     return Math.sqrt(Math.pow(y2 - y1, 2) + Math.pow(x2 - x1, 2));
+}
+
+const findNodeById = (root, id) => {
+    let foundNode = null;
+    root.paintGroup().forEach(pg => {
+        pg.siblings().forEach(node => {
+            if (node.id() === id) {
+                foundNode = node;
+            }
+        });
+    });
+    return foundNode;
 }
 
 const nodeHasValue = (node) => typeof node.value() === "string" || typeof node.value() === "number";
@@ -92,10 +117,10 @@ export default class Viewport {
         this._showEditor = false;
     }
 
-    logMessage(msg) {
+    logMessage(...msgParts) {
+        const msg = msgParts.join(" ");
         const elem = document.createElement('span');
         elem.style.pointerEvents = 'none';
-        elem.style.color = 'grey';
         elem.innerText = msg;
         while(this._logContainer.childElementCount > 10) {
             this._logContainer.firstChild.remove();
@@ -109,6 +134,8 @@ export default class Viewport {
 
     createLog() {
         this._logContainer = document.createElement("div");
+        this._logContainer.style.fontSize = '18px';
+        this._logContainer.style.color = 'grey';
         this._logContainer.style.display = 'flex';
         this._logContainer.style.flexDirection = 'column';
     }
@@ -122,8 +149,17 @@ export default class Viewport {
         this._saveGraph = saveGraph;
     }
 
+    moveToId(id) {
+        const root = this._userCaret.root();
+        const selectedNode = findNodeById(root, id);
+        if (selectedNode) {
+            this._userCaret.moveTo(selectedNode);
+            this.refresh();
+        }
+    }
+
     save() {
-        this._saveGraph(this._widget);
+        this._saveGraph(this._widget, this._userCaret.node());
     }
 
     showInCamera() {
@@ -170,6 +206,36 @@ export default class Viewport {
         this.repaint();
     };
 
+    spawnMove(dir, pullIfOccupied) {
+        if (this._userCaret.node().neighbors().hasNode(dir)) {
+            if (pullIfOccupied && !this._userCaret.node().neighbors().isRoot()) {
+                this.pullNode();
+            } else {
+                this._userCaret.move(dir);
+            }
+            this.repaint();
+        } else {
+            this._userCaret.spawnMove(dir);
+            this.repaint();
+            this.save();
+        }
+    };
+
+    absoluteSizeRect(node) {
+        if (!node) {
+            return null;
+        }
+        const boundsRect = new Rect();
+        const layout = node.layout();
+        boundsRect.setX(layout.absoluteX());
+        boundsRect.setY(layout.absoluteY());
+        const absSize = [0,0];
+        layout.absoluteSize(absSize);
+        boundsRect.setWidth(absSize[0]);
+        boundsRect.setHeight(absSize[1]);
+        return boundsRect;
+    }
+
     mount(container) {
         if (this._container === container) {
             return;
@@ -184,21 +250,6 @@ export default class Viewport {
         let isDown = null;
         let [mouseX, mouseY] = [NaN, NaN];
 
-        const spawnMove = (dir, pullIfOccupied) => {
-        if (this._userCaret.node().neighbors().hasNode(dir)) {
-            if (pullIfOccupied && !this._userCaret.node().neighbors().isRoot()) {
-                this.pullNode();
-            } else {
-                this._userCaret.move(dir);
-            }
-            this.repaint();
-        } else {
-            this._userCaret.spawnMove(dir);
-            this.repaint();
-            this.save();
-        }
-        };
-
 
         const mouseDownPos = [0, 0];
 
@@ -206,25 +257,33 @@ export default class Viewport {
 
         let clickedOnSelected = false;
         canvas.addEventListener('mousedown', e => {
-        isDown = null;
-        [mouseX, mouseY] = [e.clientX, e.clientY];
-        this.setMousePos(mouseX, mouseY);
-        const [worldX, worldY] = this._cam.transform(mouseX, mouseY);
-        mouseDownPos[0] = worldX;
-        mouseDownPos[1] = worldY;
-        let selectedNode = this._widget.layout().nodeUnderCoords(worldX, worldY, 1, size);
-        isDown = Date.now();
-        if (selectedNode) {
-            touchingNode = true;
+            if (!this._widget) {
+                return;
+            }
+            isDown = null;
+            [mouseX, mouseY] = [e.clientX, e.clientY];
+            this.setMousePos(mouseX, mouseY);
+            const [worldX, worldY] = this._cam.transform(mouseX, mouseY);
+            mouseDownPos[0] = worldX;
+            mouseDownPos[1] = worldY;
+            let selectedNode = this._widget.layout().nodeUnderCoords(worldX, worldY, 1, size);
+            isDown = Date.now();
             clickedOnSelected = this._userCaret.node() === selectedNode;
-            if (!clickedOnSelected) {
-                this._userCaret.moveTo(selectedNode);
+            const boundsRect = this.absoluteSizeRect(selectedNode);
+            if (selectedNode && (clickedOnSelected || cam.containsAll(boundsRect) || selectedNode.neighbors().hasAncestor(this._userCaret.node()))) {
+                if (!clickedOnSelected && cam.containsAll(boundsRect)) {
+                    this._userCaret.moveTo(selectedNode);
+                    this.refresh();
+                }
+                this.logMessage("Mouse down on node");
+                touchingNode = true;
                 this.refresh();
             }
-            this.refresh();
-        }
         });
         canvas.addEventListener('mouseup', e => {
+            if (!this._widget) {
+                return;
+            }
             let hadGesture = false;
             if (touchingNode) {
                 hadGesture = gesture(mouseX, mouseY);
@@ -250,49 +309,56 @@ export default class Viewport {
         });
 
         canvas.addEventListener('mousemove', e => {
-        const dx = e.clientX - mouseX;
-        const dy = e.clientY - mouseY;
-        if (isDown && !touchingNode) {
-            this._cam.adjustOrigin(dx / this._cam.scale(), dy / this._cam.scale());
-            this.refresh();
-        }
-        [mouseX, mouseY] = [e.clientX, e.clientY];
-        });
+            if (!this._widget) {
+                return;
+            }
+            const dx = e.clientX - mouseX;
+            const dy = e.clientY - mouseY;
+            if (isDown && !touchingNode) {
+                this._cam.adjustOrigin(dx / this._cam.scale(), dy / this._cam.scale());
+                this.refresh();
+            }
+            [mouseX, mouseY] = [e.clientX, e.clientY];
+            });
 
-        const ongoingTouches = new Map();
-        const numActiveTouches = () => {
-        let i = 0;
-        for (let _foo of ongoingTouches.keys()) {
-            ++i;
-        }
-        return i;
+            const ongoingTouches = new Map();
+            const numActiveTouches = () => {
+            let i = 0;
+            for (let _foo of ongoingTouches.keys()) {
+                ++i;
+            }
+            return i;
         };
 
         let touchingNode = false;
         canvas.addEventListener('touchstart', e => {
-        e.preventDefault();
-        for (let i = 0; i < e.changedTouches.length; ++i) {
-            const touch = e.changedTouches[i];
-            [mouseX, mouseY] = [touch.clientX, touch.clientY];
-            ongoingTouches.set(touch.identifier, {
-                mouseX: touch.clientX,
-                mouseY: touch.clientY
-            });
-            const [worldX, worldY] = cam.transform(mouseX, mouseY);
-            const size = [0, 0];
-            let selectedNode = this._widget.layout().nodeUnderCoords(worldX, worldY, 1, size);
-            if (selectedNode) {
-                touchingNode = true;
-                clickedOnSelected = this._userCaret.node() === selectedNode;
-                if (!clickedOnSelected) {
-                    this._userCaret.moveTo(selectedNode);
-                    this.refresh();
-                }
-                isDown = Date.now();
-            } else {
-                isDown = Date.now();
+            if (!this._widget) {
+                return;
             }
-        }
+            e.preventDefault();
+            for (let i = 0; i < e.changedTouches.length; ++i) {
+                const touch = e.changedTouches[i];
+                [mouseX, mouseY] = [touch.clientX, touch.clientY];
+                ongoingTouches.set(touch.identifier, {
+                    mouseX: touch.clientX,
+                    mouseY: touch.clientY
+                });
+                const [worldX, worldY] = cam.transform(mouseX, mouseY);
+                const size = [0, 0];
+                let selectedNode = this._widget.layout().nodeUnderCoords(worldX, worldY, 1, size);
+                const boundsRect = this.absoluteSizeRect(selectedNode);
+                if (selectedNode && cam.containsAll(boundsRect)) {
+                    touchingNode = true;
+                    clickedOnSelected = this._userCaret.node() === selectedNode;
+                    if (!clickedOnSelected) {
+                        this._userCaret.moveTo(selectedNode);
+                        this.refresh();
+                    }
+                    isDown = Date.now();
+                } else {
+                    isDown = Date.now();
+                }
+            }
         });
 
         const gesture = (mouseX, mouseY) => {
@@ -305,6 +371,8 @@ export default class Viewport {
             );
             const bodySize = [0, 0];
             this._userCaret.node().layout().size(bodySize);
+            bodySize[0] *= layout.absoluteScale();
+            bodySize[1] *= layout.absoluteScale();
 
             const dy = Math.abs(worldY - layout.absoluteY());
             const dx = Math.abs(worldX - layout.absoluteX());
@@ -314,9 +382,9 @@ export default class Viewport {
             if (worldX === layout.absoluteX() || dy > dx) {
                 if (dist > bodySize[1]/2) {
                     if (worldY > layout.absoluteY()) {
-                        spawnMove(Direction.DOWNWARD, true);
+                        this.spawnMove(Direction.DOWNWARD, true);
                     } else {
-                        spawnMove(Direction.UPWARD, true);
+                        this.spawnMove(Direction.UPWARD, true);
                     }
                     isDown = NaN;
                     return true;
@@ -324,9 +392,9 @@ export default class Viewport {
             } else {
                 if (dist > bodySize[0]/2) {
                     if (worldX > layout.absoluteX()) {
-                        spawnMove(Direction.FORWARD, true);
+                        this.spawnMove(Direction.FORWARD, true);
                     } else {
-                        spawnMove(Direction.BACKWARD, true);
+                        this.spawnMove(Direction.BACKWARD, true);
                     }
                     isDown = NaN;
                     return true;
@@ -336,28 +404,31 @@ export default class Viewport {
         };
 
         canvas.addEventListener('touchend', e => {
-        let [mouseX, mouseY] = [0, 0]
-        const isGesture = numActiveTouches() === 1;
-        for (let i = 0; i < e.changedTouches.length; ++i) {
-            const touch = e.changedTouches[i];
-            const touchData = ongoingTouches.get(touch.identifier);
-            mouseX = touchData.mouseX;
-            mouseY = touchData.mouseY;
-            this.setMousePos(mouseX, mouseY);
+            if (!this._widget) {
+                return;
+            }
+            let [mouseX, mouseY] = [0, 0]
+            const isGesture = numActiveTouches() === 1;
+            for (let i = 0; i < e.changedTouches.length; ++i) {
+                const touch = e.changedTouches[i];
+                const touchData = ongoingTouches.get(touch.identifier);
+                mouseX = touchData.mouseX;
+                mouseY = touchData.mouseY;
+                this.setMousePos(mouseX, mouseY);
 
-            ongoingTouches.delete(touch.identifier);
-        }
-        if (touchingNode && isGesture) {
-            if (gesture(mouseX, mouseY)) {
-                this.repaint();
-            } else if (!isNaN(isDown) && Date.now() - isDown < maxClickDelay) {
-                const [worldX, worldY] = this._cam.transform(mouseX, mouseY);
-                let selectedNode = this._widget.layout().nodeUnderCoords(worldX, worldY, 1, size);
-                if (clickedOnSelected && selectedNode === this._userCaret.node()) {
-                    this.toggleEditor();
+                ongoingTouches.delete(touch.identifier);
+            }
+            if (touchingNode && isGesture) {
+                if (gesture(mouseX, mouseY)) {
+                    this.repaint();
+                } else if (!isNaN(isDown) && Date.now() - isDown < maxClickDelay) {
+                    const [worldX, worldY] = this._cam.transform(mouseX, mouseY);
+                    let selectedNode = this._widget.layout().nodeUnderCoords(worldX, worldY, 1, size);
+                    if (clickedOnSelected && selectedNode === this._userCaret.node()) {
+                        this.toggleEditor();
+                    }
                 }
             }
-        }
         });
 
         canvas.addEventListener('touchmove', e => {
@@ -451,7 +522,7 @@ export default class Viewport {
             }
             break;
             case 'i':
-            spawnMove(Direction.INWARD);
+            this.spawnMove(Direction.INWARD);
             break;
             case 'J':
             pull(Direction.DOWNWARD);
@@ -469,16 +540,16 @@ export default class Viewport {
             this.toggleAlignment();
             break;
             case 'j':
-            spawnMove(Direction.DOWNWARD);
+            this.spawnMove(Direction.DOWNWARD);
             break;
             case 'k':
-            spawnMove(Direction.UPWARD);
+            this.spawnMove(Direction.UPWARD);
             break;
             case 'l':
-            spawnMove(Direction.FORWARD);
+            this.spawnMove(Direction.FORWARD);
             break;
             case 'h':
-            spawnMove(Direction.BACKWARD);
+            this.spawnMove(Direction.BACKWARD);
             break;
             case 'ArrowUp':
                 cam.adjustOrigin(0, moveSpeed/cam.scale());
@@ -509,7 +580,7 @@ export default class Viewport {
                 this.undo();
                 break;
             case 'R':
-                this.removeNode()
+                this.redo()
                 break;
             case 'Enter':
                 this.toggleEditor();
@@ -528,7 +599,7 @@ export default class Viewport {
         }).observe(canvas);
 
 
-        canvas.style.background = 'black';
+        canvas.style.background = pageBackgroundColor.asRGBA();
         //canvas.style.overflow = 'hidden';
 
         const textCanvas = document.createElement('canvas');
@@ -558,7 +629,6 @@ export default class Viewport {
     }
 
     mountEditor(editorContainer) {
-        console.log("mount editor");
         this.createEditor();
         editorContainer.appendChild(this._editorContainer);
     }
@@ -586,6 +656,7 @@ export default class Viewport {
     repaint() {
         requestAnimationFrame(() => {
             this._layout = this.createLayout();
+            this._worldLabels = new WorldLabels(minVisibleTextScale);
             this._ensureVisible = true;
             this.paint();
         });
@@ -772,12 +843,17 @@ export default class Viewport {
             if (nodeHasValue(node)) {
                 size[1] = 0;
                 node.value().toString().split('\n').forEach(line => {
-                    size[1] += fontSize;
+                    size[1] += lineHeight;
+                    this._ctx.resetTransform();
+                    this._ctx.font = `${fontSize}px sans-serif`;
                     const { width } = this._ctx.measureText(line);
                     size[0] = Math.max(size[0], width + 6*borderThickness);
                 });
+                size[1] = Math.max(size[1], lineHeight);
+                size[1] += lineHeight/2;
             } else {
-                size[1] = fontSize;
+                size[0] = fontSize * budSize;
+                size[1] = fontSize * budSize;
             }
 
             if (node.neighbors().hasNode(Direction.INWARD)) {
@@ -786,36 +862,36 @@ export default class Viewport {
                 child.layout().extentSize(childSize);
 
                 if (node.neighbors().getAlignment(Direction.INWARD) === Alignment.INWARD_VERTICAL) {
-                if (!nodeHasValue(node)) {
-                    size[0] = 4*borderThickness;
-                    size[1] = 4*borderThickness;
-                }
-                // Vertically aligned inward node.
-                size[0] = Math.max(size[0], 2*borderThickness + child.scale() * childSize[0]);
-                size[1] += childSize[1] * child.scale();
+                    if (!nodeHasValue(node)) {
+                        size[0] = 4*borderThickness;
+                        size[1] = 4*borderThickness;
+                    }
+                    // Vertically aligned inward node.
+                    size[0] = Math.max(size[0], 2*borderThickness + child.scale() * childSize[0]);
+                    size[0] += lineHeight/8;
+                    size[1] += (inwardSeparation/2 + childSize[1]) * child.scale();
                 } else {
-                if (!nodeHasValue(node)) {
-                    size[0] = borderThickness;
-                    size[1] = borderThickness;
-                }
-                // Default is horizontal
-                size[0] += childSize[0] * child.scale();
-                size[1] = Math.max(size[1], borderThickness + child.scale() * childSize[1]);
+                    if (!nodeHasValue(node)) {
+                        size[0] = borderThickness;
+                        size[1] = borderThickness;
+                    }
+                    // Default is horizontal
+                    size[0] += (inwardSeparation/2 + childSize[0]) * child.scale();
+                    size[1] = Math.max(size[1], borderThickness + child.scale() * childSize[1]);
+                    size[1] += lineHeight/4;
                 }
             }
             },
             getSeparation: (node, axis) => {
-            if (axis === Axis.Z) {
-                return borderThickness;
-            }
-            return fontSize/2;
+                if (axis === Axis.Z) {
+                    return inwardSeparation/2;
+                }
+                return fontSize/2;
             },
             paint: (pg) => {
             let painter = this._painters.get(pg);
             if (!painter || painter.glProvider() !== this._glProvider) {
                 painter = new WebGLBlockPainter(this._glProvider);
-                painter.setBackgroundColor(new Color(1, 1, 1, 0.01));
-                painter.setBorderColor(new Color(0.5, 0.5, 0.5, 0.1));
                 this._painters.set(pg, painter);
             } else {
                 painter.clear();
@@ -834,123 +910,129 @@ export default class Viewport {
             painter.initBuffer(numBlocks);
 
             pg.siblings().forEach(node => {
-                paintNodeLines(node, borderThickness/2, (x, y, w, h) => {
-                painter.setBackgroundColor(new Color(0.5, 0.5, 0.5, 0.5));
-                painter.setBorderColor(borderColor);
-                painter.drawBlock(x, y, w, h, 0, 0);
+                paintNodeLines(node, lineThickness/2, (x, y, w, h) => {
+                    painter.setBorderColor(new Color(0, 0, 0, 0));
+                    painter.setBackgroundColor(lineColor);
+                    painter.drawBlock(x, y, w, h, 0, 0);
                 });
                 paintNodeBounds(node, (x, y, w, h) => {
-                painter.setBackgroundColor(new Color(0, 0, 1, .1));
-                painter.setBorderColor(borderColor);
-                const scale = node.layout().groupScale();
-                if (nodeHasValue(node) || node.neighbors().hasNode(Direction.INWARD)) {
-                    painter.drawBlock(x, y, w, h, borderRoundedness * scale, borderThickness * scale);
-                } else {
-                    painter.drawBlock(x, y, w, h, w, 2 * borderThickness * scale);
-                }
+                    painter.setBackgroundColor(backgroundColor);
+                    painter.setBorderColor(borderColor);
+                    const scale = node.layout().groupScale();
+                    if (nodeHasValue(node) || node.neighbors().hasNode(Direction.INWARD)) {
+                        painter.drawBlock(x, y, w, h, borderRoundedness * scale, borderThickness * scale);
+                    } else {
+                        painter.drawBlock(x, y, w, h, w, borderThickness * scale);
+                    }
+                    });
                 });
+                }
             });
+        }
+
+        canPaint() {
+            return this._container && this._widget;
+        }
+
+        paint() {
+            if (!this.canPaint()) {
+                return;
             }
-        });
-    }
-
-    canPaint() {
-        return this._container && this._widget;
-    }
-
-    paint() {
-        if (!this.canPaint()) {
-            return;
-        }
-        if (!this._layout || this._layout.startingNode() !== this._widget) {
-            this._layout = this.createLayout();
-        }
-        const start = Date.now();
-        while (this._layout.crank()) {
-            if (Date.now() - start > 1000/60) {
-            this.refresh();
-            break;
+            if (!this._layout || this._layout.startingNode() !== this._widget) {
+                this._layout = this.createLayout();
             }
-        }
-        if (USE_LOCAL_STORAGE) {
-            localStorage.setItem("parsegraph-camera", JSON.stringify(this._cam.toJSON()));
-            localStorage.setItem("parsegraph-graph", JSON.stringify(serializeParsegraph(this._widget)));
-        }
-        /*console.log("Layout phase", layout.layoutPhase);
-        if (!layout.crank()) {
-            console.log("Layout complete", layout.layoutPhase);
-            layout = null;
-        } else {
-            console.log("Layout timeout", layout.layoutPhase);
-        }*/
+            const start = Date.now();
+            while (this._layout.crank()) {
+                if (Date.now() - start > 1000/60) {
+                this.refresh();
+                break;
+                }
+            }
+            if (USE_LOCAL_STORAGE) {
+                localStorage.setItem("parsegraph-camera", JSON.stringify(this._cam.toJSON()));
+                localStorage.setItem("parsegraph-graph", JSON.stringify(serializeParsegraph(this._widget)));
+            }
+            /*console.log("Layout phase", layout.layoutPhase);
+            if (!layout.crank()) {
+                console.log("Layout complete", layout.layoutPhase);
+                layout = null;
+            } else {
+                console.log("Layout timeout", layout.layoutPhase);
+            }*/
 
-        this.render();
-    };
+            this.render();
+        };
 
-    render() {
-        if (!this.canPaint()) {
-            return;
-        }
-        if (!this._cam.canProject() || !this._glProvider.canProject()) {
-            return;
-        }
-        const cam = this._cam;
-        if (this._showInCamera) {
-            const scale = initialScale/this._userCaret.node().layout().absoluteScale();
-            if (!isNaN(scale)) {
-                cam.setScale(initialScale/this._userCaret.node().layout().absoluteScale());
+        render() {
+            if (!this.canPaint()) {
+                return;
+            }
+            if (!this._cam.canProject() || !this._glProvider.canProject()) {
+                return;
+            }
+            const cam = this._cam;
+            if (this._showInCamera) {
+                const scale = initialScale/this._userCaret.node().layout().absoluteScale();
+                if (!isNaN(scale) && isFinite(scale)) {
+                    cam.setScale(initialScale/this._userCaret.node().layout().absoluteScale());
+                    showNodeInCamera(this._userCaret.node(), cam);
+                    this._showInCamera = false;
+                }
+                this.refresh();
+                return;
+            }
+
+            const graphSize = [NaN, NaN];
+            const layout = this._userCaret.node().layout();
+            this._widget.layout().extentSize(graphSize);
+            if (graphSize[0] > 0 && graphSize[1] > 0) {
+                const scaleFactor = 4;
+                if (this._checkScale && (Math.max(...graphSize) * cam.scale() < Math.min(cam.height(), cam.width())/(scaleFactor))) {
+                    const scale = (Math.min(cam.height(), cam.width())/scaleFactor) / (cam.scale() * Math.max(...graphSize));
+                    if (!isNaN(scale)) {
+                        cam.zoomToPoint(
+                            scale,
+                            cam.width()/2,
+                            cam.height()/2
+                        );
+                        this._checkScale = false;
+                    }
+                    this.refresh();
+                    return;
+                }
+            }
+
+            const bodySize = [NaN, NaN];
+            layout.absoluteSize(bodySize);
+            if (bodySize[0] > 0 && bodySize[1] > 0 && this._ensureVisible && !cam.containsAny(new Rect(
+                layout.absoluteX(),
+                layout.absoluteY(),
+                bodySize[0],
+                bodySize[1]
+            ))) {
                 showNodeInCamera(this._userCaret.node(), cam);
-                this._showInCamera = false;
+                this.refresh();
+                return;
             }
-            this.refresh();
-            return;
-        }
+            this._ensureVisible = false;
 
-        const graphSize = [NaN, NaN];
-        const layout = this._userCaret.node().layout();
-        this._widget.layout().extentSize(graphSize);
-        const scaleFactor = 4;
-        if (this._checkScale && (Math.max(...graphSize) * cam.scale() < Math.min(cam.height(), cam.width())/(scaleFactor))) {
-            const scale = (Math.min(cam.height(), cam.width())/scaleFactor) / (cam.scale() * Math.max(...graphSize));
-            if (!isNaN(scale)) {
-                cam.zoomToPoint(
-                    scale,
-                    cam.width()/2,
-                    cam.height()/2
-                );
-                this._checkScale = false;
-            }
-            this.refresh();
-            return;
-        }
-
-        const bodySize = [NaN, NaN];
-        layout.absoluteSize(bodySize);
-        if (this._ensureVisible && !cam.containsAny(new Rect(
-            layout.absoluteX(),
-            layout.absoluteY(),
-            bodySize[0],
-            bodySize[1]
-        ))) {
-            showNodeInCamera(this._userCaret.node(), cam);
-            this.refresh();
-            return;
-        }
-        this._ensureVisible = false;
-
-        const worldMatrix = this._cam.project();
-        const userCaret = this._userCaret;
-        const glProvider = this._glProvider;
-        const ctx = this._ctx;
+            const worldMatrix = this._cam.project();
+            const userCaret = this._userCaret;
+            const glProvider = this._glProvider;
+            const ctx = this._ctx;
 
 
         const gl = glProvider.gl();
         glProvider.render();
         gl.viewport(0, 0, cam.width(), cam.height());
 
-        gl.clearColor(0.1, 0.1, 0.1, 1);
+        gl.clearColor(pageBackgroundColor.r(),
+            pageBackgroundColor.g(),
+            pageBackgroundColor.b(),
+            pageBackgroundColor.a()
+        );
         gl.enable(gl.BLEND);
-        gl.blendFunc(gl.SRC_ALPHA, gl.DST_ALPHA);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
         gl.clear(gl.COLOR_BUFFER_BIT);
 
         this._textCanvas.width = cam.width();
@@ -994,37 +1076,43 @@ export default class Viewport {
             }
             ctx.fillStyle = borderColor.asRGBA();
             ctx.save();
+            const lines = node.value().toString().split('\n');
             if (node.neighbors().hasNode(Direction.INWARD)) {
                 const nodeSize = [0, 0]
                 node.layout().size(nodeSize);
                 const scale = node.layout().groupScale();
                 if (node.neighbors().getAlignment(Direction.INWARD) === Alignment.INWARD_VERTICAL) {
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'top';
-                ctx.translate(node.layout().groupX(), node.layout().groupY() - scale * nodeSize[1]/2 + scale * 3);
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'top';
+                    ctx.translate(node.layout().groupX(), node.layout().groupY() - scale * nodeSize[1]/2 + scale * 3);
+                    if (lines.length > 1) {
+                        ctx.translate(0, node.layout().groupScale() * (-(lines.length - 1) * lineHeight / 2 + lineHeight/2));
+                    }
                 } else {
-                ctx.textAlign = 'left';
-                ctx.textBaseline = 'middle';
-                ctx.translate(node.layout().groupX() - scale * nodeSize[0]/2 + scale * 3/2, node.layout().groupY());
+                    ctx.textAlign = 'left';
+                    ctx.textBaseline = 'middle';
+                    ctx.translate(node.layout().groupX() - scale * nodeSize[0]/2 + 3*borderThickness, node.layout().groupY());
+                    if (lines.length > 1) {
+                        ctx.translate(0, -(lines.length - 1) * (node.layout().groupScale() * lineHeight) / 2);
+                    }
                 }
             } else {
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 ctx.translate(node.layout().groupX(), node.layout().groupY());
-            }
-            const lines = node.value().toString().split('\n');
-            if (node.layout().absoluteScale() * cam.scale() >= minVisibleTextScale) {
-                ctx.scale(node.layout().groupScale(), node.layout().groupScale());
                 if (lines.length > 1) {
-                    ctx.translate(0, -lines.length * lineHeight / 2 / 2);
+                    ctx.translate(0, -(lines.length - 1) * (node.layout().groupScale() * lineHeight) / 2);
                 }
+            }
+                this._ctx.font = `${fontSize}px sans-serif`;
+                ctx.scale(node.layout().groupScale(), node.layout().groupScale());
+                ctx.fillStyle = textColor.asRGBA();
                 lines.forEach(line => {
                     ctx.fillText(line, 0, 0)
                     ctx.translate(0, lineHeight);
                 });
-            }
-            this._worldLabels.draw(lines[0], node.layout().absoluteX(), node.layout().absoluteY(), fontSize,
-                node.layout().absoluteScale(), new Color(1, 1, 1, 1), new Color(0, 0, 0, 1));
+            this._worldLabels.draw(lines[0], node.layout().absoluteX(), node.layout().absoluteY(), 1.5*fontSize,
+                cam.scale()/node.layout().absoluteScale(), new Color(1, 1, 1, 1), new Color(0, 0, 0, 1));
             ctx.restore();
             });
             ctx.restore();
@@ -1044,24 +1132,29 @@ export default class Viewport {
             );*/
             ctx.lineWidth = borderThickness/2 * layout.absoluteScale();
             ctx.lineJoin = "round";
-            ctx.strokeStyle = "orange";
+            ctx.strokeStyle = caretColor.asRGBA();
             const bodySize = [0, 0];
             layout.size(bodySize);
             if (nodeHasValue(userCaret.node()) || userCaret.node().neighbors().hasNode(Direction.INWARD)) {
-            ctx.strokeRect(
-                layout.absoluteX() - layout.absoluteScale() * bodySize[0]/2,
-                layout.absoluteY() - layout.absoluteScale() * bodySize[1]/2, layout.absoluteScale() * bodySize[0], layout.absoluteScale() * bodySize[1]
-            );
+                ctx.beginPath();
+                ctx.roundRect(
+                    layout.absoluteX() - layout.absoluteScale() * bodySize[0]/2 + borderThickness/4 * layout.absoluteScale(),
+                    layout.absoluteY() - layout.absoluteScale() * bodySize[1]/2 + borderThickness/4 * layout.absoluteScale(),
+                    layout.absoluteScale() * bodySize[0] - borderThickness/2 * layout.absoluteScale(),
+                    layout.absoluteScale() * bodySize[1] - borderThickness/2 * layout.absoluteScale(),
+                    borderRoundedness * layout.absoluteScale() /2.13
+                );
+                ctx.stroke();
             } else {
-            ctx.beginPath();
-            ctx.arc(
-                layout.absoluteX(),
-                layout.absoluteY(),
-                bodySize[0]/2 * layout.absoluteScale(),
-                0,
-                Math.PI * 2
-            )
-            ctx.stroke();
+                ctx.beginPath();
+                ctx.arc(
+                    layout.absoluteX(),
+                    layout.absoluteY(),
+                    bodySize[0]/2 * layout.absoluteScale() - borderThickness/4 * layout.absoluteScale(),
+                    0,
+                    Math.PI * 2
+                )
+                ctx.stroke();
             }
 
             ctx.resetTransform();

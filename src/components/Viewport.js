@@ -1,6 +1,5 @@
 import { 
   Direction,
-  DirectionNode,
   CommitLayout,
   paintNodeBounds,
   paintNodeLines,
@@ -26,7 +25,7 @@ import {
   makeScale3x3,
   midPoint
 } from 'parsegraph-matrix';
-import { showInCamera, showNodeInCamera } from "parsegraph-showincamera";
+import { showNodeInCamera } from "parsegraph-showincamera";
 import Rect from "parsegraph-rect";
 import { USE_LOCAL_STORAGE } from "./settings";
 import { WorldLabels } from "./WorldLabel";
@@ -324,7 +323,8 @@ export default class Viewport {
             const ongoingTouches = new Map();
             const numActiveTouches = () => {
             let i = 0;
-            for (let _foo of ongoingTouches.keys()) {
+            // eslint-disable-next-line
+            for (let _ of ongoingTouches.keys()) {
                 ++i;
             }
             return i;
@@ -513,13 +513,7 @@ export default class Viewport {
                 this.removeNode();
             break;
             case 'o':
-            if (this._userCaret.has(Direction.OUTWARD)) {
-                this._userCaret.move(Direction.OUTWARD);
-                this.refresh();
-            } else if (!this._userCaret.node().neighbors().isRoot()) {
-                this._userCaret.move(this._userCaret.node().neighbors().parentDirection());
-                this.refresh();
-            }
+                this.moveOutward();
             break;
             case 'i':
             this.spawnMove(Direction.INWARD);
@@ -569,13 +563,8 @@ export default class Viewport {
                 break;
             case '`':
             case '~':
-            if (this._userCaret.node().scale() !== 1) {
-                this._userCaret.node().setScale(1);
-            } else {
-                this._userCaret.shrink();
-            }
-            this.repaint();
-            break;
+                this.toggleNodeScale();
+                break;
             case 'u':
                 this.undo();
                 break;
@@ -627,6 +616,16 @@ export default class Viewport {
             }
         });
     }
+
+    moveOutward() {
+            if (this._userCaret.has(Direction.OUTWARD)) {
+                this._userCaret.move(Direction.OUTWARD);
+                this.refresh();
+            } else if (!this._userCaret.node().neighbors().isRoot()) {
+                this._userCaret.move(this._userCaret.node().neighbors().parentDirection());
+                this.refresh();
+            }
+        }
 
     mountEditor(editorContainer) {
         this.createEditor();

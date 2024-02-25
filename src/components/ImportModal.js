@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 import { DirectionNode, deserializeParsegraph } from 'parsegraph';
 
@@ -66,7 +66,7 @@ function ImportFromFile({openGraph, onClose}) {
 
 const loadRoom = (openGraph, roomName) => {
   return fetch("/public/" + roomName).then(resp=>resp.json()).then(roomData =>{
-    openGraph(deserializeParsegraph(roomData));
+    openGraph(deserializeParsegraph(roomData), null, roomName);
   });
 }
 

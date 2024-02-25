@@ -2,13 +2,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import './App.css';
 
 import { 
-  Direction,
-  DirectionNode, deserializeParsegraph, serializeParsegraph,
+  Direction, deserializeParsegraph, serializeParsegraph,
 } from "parsegraph";
 import Viewport from './Viewport';
 import ImportModal from './ImportModal';
 import ExportModal from './ExportModal';
 import { USE_LOCAL_STORAGE } from './settings';
+
+const sessionId = crypto.randomUUID();
 
 const loadGraph = () => {
   if (!USE_LOCAL_STORAGE) {
@@ -55,6 +56,9 @@ class GraphStack {
     const newGraphData = serializeParsegraph(newGraph);
     if (selectedNode) {
       newGraphData.selectedNode = typeof selectedNode === "object" ? selectedNode.id() : selectedNode;
+    }
+    if (this.hasWidget() && JSON.stringify(this._actions[this._actionIndex]) === JSON.stringify(newGraphData)) {
+      return;
     }
     if (this._actionIndex < this._actions.length - 1) {
       this._actions.splice(this._actionIndex + 1);
@@ -107,27 +111,89 @@ function App() {
   const [viewport] = useState(new Viewport());
   const [graphs] = useState(new GraphStack());
 
-  const refresh = useCallback(() => {
+  const [hasWidget, setHasWidget] = useState(false);
+
+
+  const [autopublish, setAutopublish] = useState(false);
+
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
+
+  const urlParams = new URLSearchParams(window.location.search);
+  const [roomName, setRoomName] = useState(urlParams.get("public"));
+
+  const refresh = useCallback((dontTouchCamera) => {
     setHasWidget(graphs.hasWidget());
     if (graphs.hasWidget()) {
       viewport.show(graphs.widget());
       viewport.moveToId(graphs.selectedNode());
-      viewport.showInCamera();
+      if (!dontTouchCamera) {
+        viewport.showInCamera();
+      }
     }
   }, [viewport, graphs]);
 
-  const [hasWidget, setHasWidget] = useState(false);
+  const publish = useCallback(() => {
+    if (!roomName) {
+      return;
+    }
+    fetch('/public/' + roomName + "?sid=" + sessionId, {
+      body: JSON.stringify(serializeParsegraph(graphs.widget())),
+      headers: {
+        "Content-Type": "application/json"
+      },
+      method: 'POST'
+    }).then(resp=>{
+      viewport.logMessage("Saved to " + roomName);
+    }).catch(ex => {
+      console.log(ex);
+      viewport.logMessage("Failed to save");
+    }); 
+  }, [graphs, roomName, viewport]);
 
+  const openImportModal = () => {
+    setExportModalOpen(false);
+    setImportModalOpen(old=>!old);
+  }
+
+  const openExportModal = () => {
+    setImportModalOpen(false);
+    setExportModalOpen(old=>!old);
+  }
+
+  useEffect(() => {
+    if (!autopublish) {
+      return;
+    }
+    if (!roomName) {
+      return;
+    }
+    const es = new EventSource("/public/" + roomName + "?sid=" + sessionId)
+    es.onmessage = e => {
+      const selectedNode = viewport._userCaret.node().id();
+      graphs.save(deserializeParsegraph(JSON.parse(e.data)));
+      refresh(true);
+      viewport.moveToId(selectedNode);
+    };
+    es.onerror = () => {
+      setAutopublish(false);
+    }
+    return () => {
+      es.close();
+    }
+  }, [autopublish, graphs, refresh, roomName, viewport]);
 
   useEffect(() => {
     if (!graphs) {
       return;
     }
     loadInitialRoom((graph, selectedNode) => {
-      graphs.save(graph, selectedNode);
-      refresh();
+      if (selectedNode || autopublish) {
+        graphs.save(graph, selectedNode);
+        refresh(true);
+      }
     });
-  }, [graphs, refresh]);
+  }, [autopublish, graphs, refresh]);
 
   const [showNodeActions, setShowNodeActions] = useState(false);
 
@@ -151,6 +217,22 @@ function App() {
     viewport.mountEditor(editorContainerRef.current);
   }, [viewport, editorContainerRef, hasWidget]);
 
+  const undo = useCallback(() => {
+    graphs.undo();
+    if (autopublish) {
+      publish();
+    }
+    refresh();
+  }, [autopublish, publish, graphs, refresh]);
+
+  const redo = useCallback(() => {
+    graphs.redo();
+    if (autopublish) {
+      publish();
+    }
+    refresh();
+  }, [autopublish, publish, graphs, refresh]);
+
   useEffect(() => {
     if (!canvasRef.current) {
       // No canvas yet.
@@ -160,15 +242,14 @@ function App() {
     if (!graphs) {
       return;
     }
-    viewport.setSaveGraph((graph, selectedNode)=>graphs.save(graph, selectedNode));
-    viewport.setUndo(()=>{
-      graphs.undo();
-      refresh();
+    viewport.setSaveGraph((graph, selectedNode)=>{
+      graphs.save(graph, selectedNode);
+      if (autopublish) {
+        publish();
+      }
     });
-    viewport.setRedo(()=>{
-      graphs.redo();
-      refresh();
-    });
+    viewport.setUndo(undo);
+    viewport.setRedo(redo);
     viewport.setToggleNodeActions(() => {
       setShowNodeActions(orig=>!orig);
     });
@@ -176,28 +257,12 @@ function App() {
       return;
     }
     viewport.show(graphs.widget());
-  }, [graphs, canvasRef, viewport, refresh])
-
-  const [importModalOpen, setImportModalOpen] = useState(false);
-  const [exportModalOpen, setExportModalOpen] = useState(false);
-
-  const openImportModal = () => {
-    setExportModalOpen(false);
-    setImportModalOpen(old=>!old);
-  }
-
-  const openExportModal = () => {
-    setImportModalOpen(false);
-    setExportModalOpen(old=>!old);
-  }
-
-  const urlParams = new URLSearchParams(window.location.search);
-  const roomName = urlParams.get("public");
+  }, [graphs, canvasRef, viewport, refresh, autopublish, publish, undo, redo])
 
   return (
     <div className="App">
       <div style={{display: 'flex', alignItems: 'center', justifyContent: 'center', width: "100%", height: "100%"}} ref={canvasRef}/>
-      <div style={{position: 'absolute', top: '3px', left: '3px', right: '3px', display: 'flex', gap: '2px', flexDirection: 'column'}}>
+      <div style={{position: 'fixed', top: '3px', left: '3px', right: '3px', display: 'flex', gap: '2px', flexDirection: 'column'}}>
         <div style={{flexGrow: '1', display: 'flex', gap: '5px'}}>
         {hasWidget && <button tabIndex={0} onClick={openImportModal}>Open</button>}
         {hasWidget && <div style={{flexGrow: '1', display: 'flex', flexDirection: 'column'}}>
@@ -218,33 +283,25 @@ function App() {
               <button className="dir" onClick={()=>viewport.spawnMove(Direction.FORWARD)}>Forward</button>
               <button className="dir" onClick={()=>viewport.spawnMove(Direction.BACKWARD)}>Backward</button>
               <button className="dir" onClick={()=>viewport.spawnMove(Direction.UPWARD)}>Upward</button>
+              <button className="dir" onClick={()=>viewport.moveOutward()}>Outward</button>
             </>}
-            <button onClick={()=>{graphs.undo();refresh()}}>Undo</button>
-            <button onClick={()=>{graphs.redo();refresh();}}>Redo</button>
+            <button onClick={()=>undo()}>Undo</button>
+            <button onClick={()=>redo()}>Redo</button>
+            <button onClick={()=>{setAutopublish(orig=>{
+              return !orig
+            })}}>Auto-publish {autopublish ? "ON" : "OFF"}</button>
           </div>
           <div ref={editorContainerRef}>
           </div>
         </div>}
         {hasWidget && <button onClick={openExportModal}>Export</button>}
-        {roomName && <button onClick={() => {
-                 fetch('/public/' + roomName, {
-          body: JSON.stringify(serializeParsegraph(graphs.widget())),
-          headers: {
-            "Content-Type": "application/json"
-          },
-          method: 'POST'
-        }).then(resp=>{
-          viewport.logMessage("Saved to " + roomName);
-        }).catch(ex => {
-          console.log(ex);
-          viewport.logMessage("Failed to save");
-        }); 
-        }}>Publish to {roomName}</button>}
+        {roomName && <button onClick={() => publish()}>Publish to {roomName}</button>}
         </div>
         <div id="log" ref={logRef}/>
       </div>
       {(!hasWidget || importModalOpen) && <div className="modal">
-        <ImportModal onClose={hasWidget ? () => setImportModalOpen(false) : null} openGraph={(graph, selectedNode)=>{
+        <ImportModal onClose={hasWidget ? () => setImportModalOpen(false) : null} openGraph={(graph, selectedNode, roomName)=>{
+          setRoomName(roomName);
           graphs.save(graph, selectedNode);
           refresh();
         }}/>

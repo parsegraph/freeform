@@ -592,20 +592,16 @@ export default class Viewport {
         //canvas.style.overflow = 'hidden';
 
         const textCanvas = document.createElement('canvas');
-        textCanvas.style.position = 'absolute';
-        textCanvas.style.left = 0;
-        textCanvas.style.right = 0;
-        textCanvas.style.top = 0;
-        textCanvas.style.bottom = 0;
+        textCanvas.style.position = 'fixed';
+        textCanvas.style.inset = 0;
         this._textCanvas = textCanvas;
 
         this._ctx = textCanvas.getContext("2d");
 
         const glProvider = new BasicGLProvider();
         glProvider.container();
-        glProvider.container().style.position = 'relative';
-        glProvider.container().style.width = '100%';
-        glProvider.container().style.height = '100%';
+        glProvider.container().style.position = 'fixed';
+        glProvider.container().style.inset = 0;
         canvas.appendChild(glProvider.container());
         this._glProvider = glProvider;
         canvas.appendChild(textCanvas);
@@ -1157,9 +1153,9 @@ export default class Viewport {
             }
 
             ctx.resetTransform();
-            ctx.textAlign = 'left';
-            ctx.textBaseline = 'top';
-            ctx.fillText(this._userCaret.node()?.value(), 0, 0);
+            //ctx.textAlign = 'left';
+            //ctx.textBaseline = 'top';
+            //ctx.fillText(this._userCaret.node()?.value(), 0, 0);
         }
 
         if (needsPaint) {

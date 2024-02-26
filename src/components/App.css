@@ -17,6 +17,16 @@ button {
   border-radius: 3px;
 }
 
+.AppMenu {
+ position: fixed;
+ top: 3px;
+ left: 3px;
+ right: 3px;
+ display: flex;
+ gap: 2px;
+ flex-direction: column;
+}
+
 .App-logo {
   height: 40vmin;
   pointer-events: none;
@@ -43,6 +53,11 @@ button.edit {
 #log {
   color: #eee;
   text-align: left;
+  pointer-events: none;
+  font-size: 16px;
+}
+
+#log * {
   pointer-events: none;
 }
 

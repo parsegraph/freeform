@@ -58,12 +58,24 @@ const buildRandom = (steps) => {
   return car.root();
 };
 
-const buildGrid = () => {
+const buildGrid = (sizeStr) => {
+  let size = SIZE;
+  if (sizeStr) {
+    try {
+      if (typeof sizeStr === "string") {
+        size = Number.parseInt(sizeStr);
+      } else if (typeof sizeStr === "number") {
+        size = sizeStr;
+      }
+    } catch (ex) {
+      console.log(ex);
+    }
+  }
   const car = new DirectionCaret();
-  for(let col = 0; col < SIZE; ++col) {
+  for(let col = 0; col < size; ++col) {
     car.spawnMove('d');
     car.push();
-    for(let row = 0; row < SIZE; ++row) {
+    for(let row = 0; row < size; ++row) {
       car.spawnMove('f', row);
     }
     car.pop();

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { DirectionNode, deserializeParsegraph } from 'parsegraph';
 
@@ -10,6 +10,7 @@ import { buildAlternatingColumns, buildGrid, buildPlanner, buildRandom } from '.
 function ImportFromFile({openGraph, onClose}) {
   const [importData, setImportData] = useState(null);
   const [importType, setImportType] = useState("words");
+  const [importName, setImportName] = useState(null);
 
   const performImport = ()=> {
     try {
@@ -42,14 +43,20 @@ function ImportFromFile({openGraph, onClose}) {
     }
   };
 
-  return <><label>File: <input type="file" style={{maxWidth: '200px'}} onChange={e=>{
+  return <form onSubmit={e => {
+    e.preventDefault();
+    performImport();
+  }} style={{display: 'flex', flexDirection: "column", justifyContent: "stretch"}}>
+  <span style={{display: 'block', paddingBottom: '0.5em', fontSize: '18px'}}>Load a Parsegraph from a file.</span>
+  <label htmlFor="fileUpload" style={{display: 'block', background: importData ? '#0a8a0a' : '#5f5fff', color: 'white', padding: '5px', borderRadius: '3px', marginBottom: '5px', flexGrow: '1'}}>{importData ? (importName ?? "File selected") : "Choose file"}</label>
+  <input style={{display: 'none'}} id="fileUpload" type="file" onChange={e=>{
     for (const file of e.target.files) {
       file.text().then(content=>{
+        setImportName(file.name);
         setImportData(content);
       });
     }
   }}/>
-  </label>
   <label style={{display: 'flex', gap:'5px'}}>Type: <select style={{flexGrow:'1'}} value={importType} onChange={e=>setImportType(e.target.value)}>
     <option value="words">Words</option>
     <option value="parsegraph">Parsegraph</option>
@@ -59,9 +66,9 @@ function ImportFromFile({openGraph, onClose}) {
   </select>
   </label>
   <div className="buttons">
-    <button style={{flexGrow:'1'}} onClick={performImport}>Import</button>
+    <input type="submit" style={{flexGrow:'1'}} onClick={performImport} value="Import"/>
     {onClose && <button style={{flexGrow:'1'}} onClick={onClose}>Cancel</button>}
-  </div></>;
+  </div></form>;
 }
 
 const loadRoom = (openGraph, roomName) => {
@@ -80,14 +87,34 @@ function JoinPublic({openGraph, onClose}) {
     }
   };
 
-  return <>
+  return <form onSubmit={e=>{
+    e.preventDefault();
+    joinRoom();
+  }}>
+  <span style={{display: 'block', paddingBottom: '0.5em', fontSize: '18px'}}>Load a public Parsegraph.</span>
   <label style={{display: 'flex', gap:'5px'}}>Name: <input style={{flexGrow:'1'}} value={importType} onChange={e=>setImportType(e.target.value)}/>
   </label>
   <div className="buttons">
-    <button style={{flexGrow:'1'}} onClick={joinRoom}>Load</button>
+    <input type="submit" style={{flexGrow:'1'}} onClick={joinRoom} value="Load"/>
     {onClose && <button style={{flexGrow:'1'}} onClick={onClose}>Cancel</button>}
-  </div></>;
+  </div></form>;
 }
+
+const openSampleLisp = (openGraph) => {
+  return fetch("/surface.lisp")
+    .then(resp=>resp.text())
+    .then(text=>{
+      openGraph(importers.graphLisp(text));
+    });
+};
+
+const openSampleJson = (openGraph) => {
+  return fetch("/package.json")
+    .then(resp=>resp.text())
+    .then(text=>{
+      openGraph(importers.graphJson(JSON.parse(text)));
+    });
+};
 
 function ImportFromTemplate({openGraph, onClose}) {
   const [importType, setImportType] = useState("blank");
@@ -98,18 +125,10 @@ function ImportFromTemplate({openGraph, onClose}) {
         openGraph(new DirectionNode());
         break;
       case "lisp":
-        fetch("/surface.lisp")
-          .then(resp=>resp.text())
-          .then(text=>{
-            openGraph(importers.graphLisp(text));
-          });
+        openSampleLisp(openGraph);
         break;
       case "json":
-        fetch("/package.json")
-          .then(resp=>resp.text())
-          .then(text=>{
-            openGraph(importers.graphJson(JSON.parse(text)));
-          });
+        openSampleJson(openGraph);
         break;
       case "grid":
         openGraph(buildGrid());
@@ -144,7 +163,11 @@ function ImportFromTemplate({openGraph, onClose}) {
     }
   };
 
-  return <>
+  return <form onSubmit={e => {
+    e.preventDefault();
+    createFromTemplate();
+  }}>
+   <span style={{display: 'block', paddingBottom: '0.5em', fontSize: '18px'}}>Create a new Parsegraph.</span>
    <label style={{display: 'flex', gap:'5px'}}>Template: <select style={{flexGrow:'1'}} value={importType} onChange={e=>setImportType(e.target.value)}>
     <option value="blank">Blank</option>
     <option value="json">Sample JSON</option>
@@ -160,14 +183,34 @@ function ImportFromTemplate({openGraph, onClose}) {
   </select>
   </label> 
   <div className="buttons">
-    <button style={{flexGrow:'1'}} onClick={createFromTemplate}>Create</button>
+    <input type="submit" style={{flexGrow:'1'}} onClick={createFromTemplate} value="Create"/>
     {onClose && <button style={{flexGrow:'1'}} onClick={onClose}>Cancel</button>}
-  </div></>;
+  </div></form>;
 }
 
-export default function ImportModal({onClose, openGraph}) {
+export default function ImportModal({onClose, openGraph, sampleName}) {
 
-  const [activeTab, setActiveTab] = useState("import");
+  const [activeTab, setActiveTab] = useState("template");
+
+  useEffect(() => {
+    if (!sampleName) {
+      return;
+    }
+    const sampleParts = sampleName.split("_");
+    switch (sampleParts[0]) {
+    case "lisp":
+      openSampleLisp(openGraph);
+      break;
+    case "json":
+      openSampleJson(openGraph);
+      break;
+    case "grid":
+      openGraph(buildGrid(sampleParts[1]));
+      break;
+    default:
+      return;
+    }
+  }, [sampleName]);
 
   return <div style={{width: '100%', height: '100%', display: 'flex', justifyContent: 'stretch', flexDirection: 'column', alignItems: 'stretch', gap: '3px', padding: '12px', boxSizing: 'border-box'}}>
     <h3 style={{margin: '0', marginBottom: '.5em'}}>{activeTab === "template" ? "New": (activeTab === "public" ? "Load" : "Open")} Parsegraph</h3>

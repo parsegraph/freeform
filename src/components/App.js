@@ -103,6 +103,46 @@ const loadInitialRoom = (openGraph) => {
   });
 }
 
+function AppMenu({hasWidget, openImportModal, viewport, showNodeActions, undo, redo, setAutopublish, autopublish, editorContainerRef, openExportModal, roomName, publish, logRef}) {
+  return <div className="AppMenu">
+      <div style={{flexGrow: '1', display: 'flex', gap: '5px'}}>
+      {hasWidget && <button tabIndex={0} onClick={openImportModal}>Open</button>}
+      {hasWidget && <div style={{flexGrow: '1', display: 'flex', flexDirection: 'column'}}>
+        <div className="buttons" style={{paddingTop: '0'}}>
+          <button onClick={()=>viewport.showInCamera()}>Re-center</button>
+          {(!showNodeActions && hasWidget) && <button onClick={()=>viewport.toggleEditor()}>Edit</button>}
+          {showNodeActions && <>
+            <button className="edit" onClick={()=>viewport.toggleAlignment()}>Align</button>
+            <button className="edit" onClick={()=>viewport.togglePreferredAxis()}>Preferred Axis</button>
+            <button className="edit" onClick={()=>viewport.toggleNodeScale()}>Scale</button>
+            <button className="edit" onClick={()=>viewport.toggleNodeFit()}>Fit</button>
+            <button className="edit" onClick={()=>viewport.pullNode()}>Pull</button>
+            <button className="edit" onClick={()=>viewport.removeNode()}>Remove</button>
+          </>}
+          {(!showNodeActions && hasWidget) && <>
+            <button className="dir" onClick={()=>viewport.spawnMove(Direction.INWARD)}>Inward</button>
+            <button className="dir" onClick={()=>viewport.spawnMove(Direction.DOWNWARD)}>Downward</button>
+            <button className="dir" onClick={()=>viewport.spawnMove(Direction.FORWARD)}>Forward</button>
+            <button className="dir" onClick={()=>viewport.spawnMove(Direction.BACKWARD)}>Backward</button>
+            <button className="dir" onClick={()=>viewport.spawnMove(Direction.UPWARD)}>Upward</button>
+            <button className="dir" onClick={()=>viewport.moveOutward()}>Outward</button>
+          </>}
+          <button onClick={()=>undo()}>Undo</button>
+          <button onClick={()=>redo()}>Redo</button>
+          {roomName && <button onClick={()=>{setAutopublish(orig=>{
+            return !orig
+          })}}>Auto-publish {autopublish ? "ON" : "OFF"}</button>}
+        </div>
+        <div ref={editorContainerRef}>
+        </div>
+      </div>}
+      {hasWidget && <button onClick={openExportModal}>Save</button>}
+      {roomName && <button onClick={() => publish()}>Publish to {roomName}</button>}
+      </div>
+      <div id="log" ref={logRef}/>
+    </div>
+}
+
 function App() {
   const canvasRef = useRef();
   const editorContainerRef = useRef();
@@ -110,6 +150,8 @@ function App() {
 
   const [viewport] = useState(new Viewport());
   const [graphs] = useState(new GraphStack());
+
+  const [needsSave, setNeedsSave] = useState(false);
 
   const [hasWidget, setHasWidget] = useState(false);
 
@@ -121,6 +163,7 @@ function App() {
 
   const urlParams = new URLSearchParams(window.location.search);
   const [roomName, setRoomName] = useState(urlParams.get("public"));
+  const [sampleName, setSampleName] = useState(urlParams.get("sample"));
 
   const refresh = useCallback((dontTouchCamera) => {
     setHasWidget(graphs.hasWidget());
@@ -145,6 +188,7 @@ function App() {
       method: 'POST'
     }).then(resp=>{
       viewport.logMessage("Saved to " + roomName);
+      setNeedsSave(false);
     }).catch(ex => {
       console.log(ex);
       viewport.logMessage("Failed to save");
@@ -246,6 +290,8 @@ function App() {
       graphs.save(graph, selectedNode);
       if (autopublish) {
         publish();
+      } else {
+        setNeedsSave(true);
       }
     });
     viewport.setUndo(undo);
@@ -258,58 +304,54 @@ function App() {
     }
     viewport.show(graphs.widget());
   }, [graphs, canvasRef, viewport, refresh, autopublish, publish, undo, redo])
+  
+  useEffect(() => {
+    if (autopublish) {
+      return;
+    }
+    if (!needsSave) {
+      window.onbeforeunload = null;
+      return;
+    }
 
-  return (
-    <div className="App">
-      <div style={{display: 'flex', alignItems: 'center', justifyContent: 'center', width: "100%", height: "100%"}} ref={canvasRef}/>
-      <div style={{position: 'fixed', top: '3px', left: '3px', right: '3px', display: 'flex', gap: '2px', flexDirection: 'column'}}>
-        <div style={{flexGrow: '1', display: 'flex', gap: '5px'}}>
-        {hasWidget && <button tabIndex={0} onClick={openImportModal}>Open</button>}
-        {hasWidget && <div style={{flexGrow: '1', display: 'flex', flexDirection: 'column'}}>
-          <div className="buttons" style={{paddingTop: '0'}}>
-            <button onClick={()=>viewport.showInCamera()}>Re-center</button>
-            {(!showNodeActions && hasWidget) && <button onClick={()=>viewport.toggleEditor()}>Edit</button>}
-            {showNodeActions && <>
-              <button className="edit" onClick={()=>viewport.toggleAlignment()}>Align</button>
-              <button className="edit" onClick={()=>viewport.togglePreferredAxis()}>Preferred Axis</button>
-              <button className="edit" onClick={()=>viewport.toggleNodeScale()}>Scale</button>
-              <button className="edit" onClick={()=>viewport.toggleNodeFit()}>Fit</button>
-              <button className="edit" onClick={()=>viewport.pullNode()}>Pull</button>
-              <button className="edit" onClick={()=>viewport.removeNode()}>Remove</button>
-            </>}
-            {(!showNodeActions && hasWidget) && <>
-              <button className="dir" onClick={()=>viewport.spawnMove(Direction.INWARD)}>Inward</button>
-              <button className="dir" onClick={()=>viewport.spawnMove(Direction.DOWNWARD)}>Downward</button>
-              <button className="dir" onClick={()=>viewport.spawnMove(Direction.FORWARD)}>Forward</button>
-              <button className="dir" onClick={()=>viewport.spawnMove(Direction.BACKWARD)}>Backward</button>
-              <button className="dir" onClick={()=>viewport.spawnMove(Direction.UPWARD)}>Upward</button>
-              <button className="dir" onClick={()=>viewport.moveOutward()}>Outward</button>
-            </>}
-            <button onClick={()=>undo()}>Undo</button>
-            <button onClick={()=>redo()}>Redo</button>
-            <button onClick={()=>{setAutopublish(orig=>{
-              return !orig
-            })}}>Auto-publish {autopublish ? "ON" : "OFF"}</button>
-          </div>
-          <div ref={editorContainerRef}>
-          </div>
-        </div>}
-        {hasWidget && <button onClick={openExportModal}>Export</button>}
-        {roomName && <button onClick={() => publish()}>Publish to {roomName}</button>}
-        </div>
-        <div id="log" ref={logRef}/>
-      </div>
+    window.onbeforeunload = () => {
+      return 'Are you sure you want to lose your unexported changes?';
+    };
+  }, [needsSave, autopublish]);
+
+  return (<>
+  <div className="App">
+      <div style={{position: 'fixed', inset: '0'}} ref={canvasRef}/>
       {(!hasWidget || importModalOpen) && <div className="modal">
-        <ImportModal onClose={hasWidget ? () => setImportModalOpen(false) : null} openGraph={(graph, selectedNode, roomName)=>{
+        <ImportModal sampleName={sampleName} onClose={hasWidget ? () => setImportModalOpen(false) : null} openGraph={(graph, selectedNode, roomName)=>{
+          setSampleName(null);
           setRoomName(roomName);
           graphs.save(graph, selectedNode);
           refresh();
         }}/>
       </div>}
       {(exportModalOpen && hasWidget) && <div className="modal">
-        <ExportModal graph={graphs.widget()} onClose={() => setExportModalOpen(false)}/>
+        <ExportModal onExport={() => {
+          setNeedsSave(false);
+        }} graph={graphs.widget()} onClose={() => setExportModalOpen(false)}/>
       </div>}
     </div>
+    <AppMenu 
+      publish={publish}
+      editorContainerRef={editorContainerRef}
+      logRef={logRef}
+      hasWidget={hasWidget}
+      openImportModal={openImportModal}
+      openExportModal={openExportModal}
+      viewport={viewport}
+      undo={undo}
+      redo={redo}
+      showNodeActions={showNodeActions}
+      roomName={roomName}
+      autopublish={autopublish}
+      setAutopublish={setAutopublish}
+    />
+    </>
   );
 }
 

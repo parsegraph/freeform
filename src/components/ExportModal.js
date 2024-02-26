@@ -20,7 +20,7 @@ function download(filename, text) {
   document.body.removeChild(element);
 }
 
-function ExportForm({graph, onClose}) {
+function ExportForm({graph, onExport, onClose}) {
   const [exportType, setExportType] = useState("parsegraph");
   const [roomName, setRoomName] = useState(graph.value());
 
@@ -57,7 +57,12 @@ function ExportForm({graph, onClose}) {
       default:
         throw new Error("Unsupported export type: " + exportType)
     }
-    onClose();
+    if (onExport) {
+      onExport();
+    }
+    if (onClose) {
+      onClose();
+    }
   };
 
   return <><label style={{display: 'flex', gap:'5px'}}>Format: <select style={{flexGrow:'1'}} value={exportType} onChange={e=>setExportType(e.target.value)}>
@@ -74,16 +79,16 @@ function ExportForm({graph, onClose}) {
   </label>
   }
   <div className="buttons">
-    <button onClick={performExport}>Export</button>
+    <button onClick={performExport}>Save</button>
     <button onClick={onClose}>Cancel</button>
   </div></>;
 }
 
-export default function ExportModal({onClose, graph}) {
+export default function ExportModal({onExport, onClose, graph}) {
   const [activeTab, setActiveTab] = useState("export");
 
   return <div style={{width: '100%', height: '100%', display: 'flex', justifyContent: 'stretch', flexDirection: 'column', alignItems: 'stretch', gap: '3px', padding: '12px', boxSizing: 'border-box'}}>
-    <h3 style={{margin: '0', marginBottom: '.5em'}}>Export Parsegraph</h3>
-    {activeTab === "export" && <ExportForm graph={graph} onClose={onClose}/>}
+    <h3 style={{margin: '0', marginBottom: '.5em'}}>Save Parsegraph</h3>
+    {activeTab === "export" && <ExportForm graph={graph} onExport={onExport} onClose={onClose}/>}
   </div>
 };

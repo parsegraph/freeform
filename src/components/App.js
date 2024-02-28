@@ -108,19 +108,19 @@ const loadInitialRoom = (openGraph) => {
 function Carousel({viewport}) {
   return <>
     <button className="dir" style={{position: 'absolute', right: '50%', top: '50%', transform: 'translate(50%, -50%)'}} onClick={()=>viewport.spawnMove(Direction.INWARD)}>
-      INWARD
+    +
     </button>
   <button className="dir" style={{position: 'absolute', right: '100%', top: '50%', transform: 'translate(0, -50%)'}} onClick={()=>viewport.spawnMove(Direction.BACKWARD)}>
-    BACKWARD
+    +
   </button>
   <button className="dir" style={{position: 'absolute', bottom: '100%', left: '50%', transform: 'translate(-50%, 0)'}} onClick={()=>viewport.spawnMove(Direction.UPWARD)}>
-    UPWARD
+    +
   </button>
   <button className="dir" style={{position: 'absolute', left: '50%', top: '100%', transform: 'translate(-50%, 0)'}} onClick={()=>viewport.spawnMove(Direction.DOWNWARD)}>
-    DOWNWARD
+    +
   </button>
   <button className="dir" style={{position: 'absolute', left: '100%', top: '50%', transform: 'translate(0, -50%)'}} onClick={()=>viewport.spawnMove(Direction.FORWARD)}>
-    FORWARD
+    +
   </button>
   </>;
 }

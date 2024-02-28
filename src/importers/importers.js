@@ -137,9 +137,24 @@ function graphLisp(input) {
   return root;
 }
 
+const extractPngChunks = require('png-chunks-extract');
+
+function readString(data) {
+  return String.fromCharCode(...data);
+}
+
+function graphPng(input) {
+  try {
+    return graphJson(extractPngChunks(input).map(chunk => ({name: chunk.name, length: chunk.data.length, data: chunk.data.length < 200 ? readString(chunk.data) : null})));
+  } catch (ex) {
+    return new DirectionNode(ex.toString());
+  }
+}
+
 export {
     graphLines,
     graphWords,
     graphLisp,
-    graphJson
+    graphJson,
+    graphPng
 }

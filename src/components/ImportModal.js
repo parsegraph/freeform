@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { DirectionNode, deserializeParsegraph } from 'parsegraph';
 
@@ -12,36 +12,55 @@ function ImportFromFile({openGraph, onClose}) {
   const [importType, setImportType] = useState("words");
   const [importName, setImportName] = useState(null);
 
-  const performImport = ()=> {
+  const performImport = useCallback(()=> {
+    console.log(importType);
     try {
-    switch(importType) {
-      case "words":
-        openGraph(importers.graphWords(importData));
-        break;
-      case "lisp":
-        openGraph(importers.graphLisp(importData));
-        break;
-      case "json":
-        openGraph(importers.graphJson(JSON.parse(importData)));
-        break;
-      case "parsegraph":
-        const data = JSON.parse(importData);
-        openGraph(deserializeParsegraph(data), data.selectedNode);
-        break;
-      case "lines":
-        openGraph(importers.graphLines(importData));
-        break;
-      default:
-        throw new Error("Unsupported import type: " + importType)
+      if (importType === "png") {
+        importData.arrayBuffer().then((buff) => {
+          openGraph(importers.graphPng(new Uint8Array(buff)));
+        });
+        return;
+      }
+
+      importData.text().then(importData => {
+        switch (importType) {
+        case "words":
+          openGraph(importers.graphWords(importData));
+          break;
+        case "lisp":
+          openGraph(importers.graphLisp(importData));
+          break;
+        case "json":
+          openGraph(importers.graphJson(JSON.parse(importData)));
+          break;
+        case "parsegraph":
+          const data = JSON.parse(importData);
+          openGraph(deserializeParsegraph(data), data.selectedNode);
+          break;
+        case "lines":
+          openGraph(importers.graphLines(importData));
+          break;
+        default:
+          throw new Error("Unsupported import type: " + importType)
+        }
+      });
+    } catch (ex) {
+      console.log(ex);
+      alert (ex);
+    } finally {
+      if (onClose) {
+        onClose();
+      }
     }
-  } catch (ex) {
-    console.log(ex);
-    alert (ex);
-  }
-    if (onClose) {
-      onClose();
+  }, [onClose, importType, importData, openGraph]);
+
+  const loadFiles = useCallback(e => {
+      console.log(importType);
+    for (const file of e.target.files) {
+      setImportName(file.name);
+      setImportData(file);
     }
-  };
+  }, [importType]);
 
   return <form onSubmit={e => {
     e.preventDefault();
@@ -49,20 +68,14 @@ function ImportFromFile({openGraph, onClose}) {
   }} style={{display: 'flex', flexDirection: "column", justifyContent: "stretch"}}>
   <span style={{display: 'block', paddingBottom: '0.5em', fontSize: '18px'}}>Load a Parsegraph from a file.</span>
   <label htmlFor="fileUpload" style={{display: 'block', background: importData ? '#0a8a0a' : '#5f5fff', color: 'white', padding: '5px', borderRadius: '3px', marginBottom: '5px', flexGrow: '1'}}>{importData ? (importName ?? "File selected") : "Choose file"}</label>
-  <input style={{display: 'none'}} id="fileUpload" type="file" onChange={e=>{
-    for (const file of e.target.files) {
-      file.text().then(content=>{
-        setImportName(file.name);
-        setImportData(content);
-      });
-    }
-  }}/>
+  <input style={{display: 'none'}} id="fileUpload" type="file" onChange={loadFiles}/>
   <label style={{display: 'flex', gap:'5px'}}>Type: <select style={{flexGrow:'1'}} value={importType} onChange={e=>setImportType(e.target.value)}>
     <option value="words">Words</option>
     <option value="parsegraph">Parsegraph</option>
     <option value="lines">Lines</option>
     <option value="lisp">Lisp</option>
     <option value="json">JSON</option>
+    <option value="png">PNG</option>
   </select>
   </label>
   <div className="buttons">

@@ -21,34 +21,51 @@ function download(filename, text) {
   document.body.removeChild(element);
 }
 
+const addExtension = (name, ext) => {
+  if (name.endsWith(ext)) {
+    return name;
+  }
+  if (name.endsWith(".")) {
+    if (ext.startsWith(".")) {
+      return name + ext.substring(1);
+    }
+    return name + ext;
+  }
+  if (ext.startsWith('.')) {
+    return name + ext;
+  }
+  return name + '.' + ext;
+};
+
 function ExportForm({graph, onExport, onClose}) {
   const [exportType, setExportType] = useState("parsegraph");
-  const [roomName, setRoomName] = useState(graph.value());
+  const [name, setName] = useState(graph.value() ?? "graph");
 
   const performExport = ()=> {
+    try {
     switch(exportType) {
       case "lisp":
         const tokens = [];
         exporters.exportGraphToLisp(graph, tokens);
-        download("parsegraph.lisp", tokens.join(''));
+        download(addExtension(name, ".lisp"), tokens.join(''));
         break;
       case "json":
-        download("parsegraph.json", JSON.stringify(exporters.exportGraphToJson(graph)));
+        download(addExtension(name, ".json"), JSON.stringify(exporters.exportGraphToJson(graph)));
         break;
       case "parsegraph":
-        download("graph.parsegraph", JSON.stringify(serializeParsegraph(graph)));
+        download(addExtension(name, ".parsegraph"), JSON.stringify(serializeParsegraph(graph)));
         break;
       case "words":
-        download("parsegraph-words.txt", exporters.exportGraphToWords(graph));
+        download(addExtension(name, ".txt"), exporters.exportGraphToWords(graph));
         break;
       case "lines":
-        download("parsegraph-lines.txt", exporters.exportGraphToLines(graph));
+        download(addExtension(name, ".txt"), exporters.exportGraphToLines(graph));
         break;
       case "public":
         if (!PUBLIC_SERVERS) {
           throw new Error("Public servers not accessible");
         }
-        fetch('/public/' + roomName, {
+        fetch('/public/' + name, {
           body: JSON.stringify(serializeParsegraph(graph)),
           headers: {
             "Content-Type": "application/json"
@@ -64,12 +81,23 @@ function ExportForm({graph, onExport, onClose}) {
     if (onExport) {
       onExport();
     }
+  } catch (ex) {
+    alert(ex);
+    console.log(ex);
+  }
     if (onClose) {
       onClose();
     }
   };
 
-  return <><label style={{display: 'flex', gap:'5px'}}>Format: <select style={{flexGrow:'1'}} value={exportType} onChange={e=>setExportType(e.target.value)}>
+  return <form onSubmit={e=>{
+    e.preventDefault();
+    performExport();
+  }} style={{display: 'flex', flexDirection: 'column', gap: '3px'}}>
+  <label style={{display: 'flex', gap: '5px'}}>Name:&nbsp;
+    <input style={{flexGrow: '1'}} value={name} onChange={e => setName(e.target.value)}/>
+  </label>
+  <label style={{display: 'flex', gap:'5px'}}>Format: <select style={{flexGrow:'1'}} value={exportType} onChange={e=>setExportType(e.target.value)}>
     <option value="parsegraph">Parsegraph</option>
     <option value="words">Words</option>
     <option value="lines">Lines</option>
@@ -78,14 +106,10 @@ function ExportForm({graph, onExport, onClose}) {
     {PUBLIC_SERVERS && <option value="public">Public</option>}
   </select>
   </label>
-  {exportType === "public" && <label style={{display: 'flex', gap: '5px'}}>Name:&nbsp;
-    <input style={{flexGrow: '1'}} value={roomName} onChange={e => setRoomName(e.target.value)}/>
-  </label>
-  }
   <div className="buttons">
-    <button onClick={performExport}>Save</button>
+    <input type="submit" onClick={performExport} value="Save"/>
     <button onClick={onClose}>Cancel</button>
-  </div></>;
+  </div></form>;
 }
 
 export default function ExportModal({onExport, onClose, graph}) {

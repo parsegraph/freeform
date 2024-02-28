@@ -859,7 +859,6 @@ export default class Viewport {
         }
         this._showEditor = true;
         this._editorContainer.style.display = 'block';
-        this._editor.focus();
         if (nodeHasValue(this._userCaret.node())) {
             this._editor.value = this._userCaret.node().value();
         } else {

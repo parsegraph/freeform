@@ -104,7 +104,6 @@ const loadInitialRoom = (openGraph) => {
 }
 
 function App() {
-  const logRef = useRef();
 
   const [viewport] = useState(new Viewport());
   const [graphs] = useState(new GraphStack());
@@ -199,16 +198,6 @@ function App() {
 
   const [showNodeActions, setShowNodeActions] = useState(false);
 
-  useEffect(() => {
-    if (!viewport) {
-      return;
-    }
-    if (!logRef.current) {
-      return;
-    }
-    viewport.mountLog(logRef.current);
-  })
-
   const undo = useCallback(() => {
     graphs.undo();
     if (autopublish) {
@@ -298,10 +287,26 @@ function App() {
       {hasWidget && <button onClick={openExportModal}>Save</button>}
       {roomName && <button onClick={() => publish()}>Publish to {roomName}</button>}
       </div>
-      <div id="log" ref={logRef}/>
+      <ParsegraphLog viewport={viewport}/>
     </div>
     </>
   );
+}
+
+function ParsegraphLog({viewport}) {
+  const logRef = useRef();
+
+  useEffect(() => {
+    if (!viewport) {
+      return;
+    }
+    if (!logRef.current) {
+      return;
+    }
+    viewport.mountLog(logRef.current);
+  })
+
+  return <div id="log" ref={logRef}/>;
 }
 
 function ParsegraphEditor({viewport}) {

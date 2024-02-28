@@ -1,4 +1,4 @@
-import { Direction, DirectionCaret, PreferredAxis } from 'parsegraph';
+import { Alignment, Direction, DirectionCaret, DirectionNode, PreferredAxis, reverseDirection, turnPositive } from 'parsegraph';
 
 const SIZE = 10;
 
@@ -121,7 +121,75 @@ const buildPlanner = (inc = 15) => {
   return car.root();
 }
 
+const marchSpawn = (car, dir, labels) =>
+{
+  if (!labels || labels.length <= 0) {
+    throw new Error("No labels to spawn from");
+  }
+  car.push();
+  try {
+    car.node().setValue(labels[0]);
+
+    labels = [...labels];
+    if (labels.length % 4 === 0) {
+      car.crease();
+    }
+    labels.shift();
+
+    if (labels.length === 0) {
+      return car.root();
+    }
+
+    car.align(dir, 'c');
+    car.spawnMove(dir);
+    car.push();
+    try {
+      car.pull(dir);
+      car.spawnMove(dir);
+      car.shrink();
+      marchSpawn(car, dir, labels);
+    } finally {
+      car.pop();
+    }
+    car.spawnMove(turnPositive(dir));
+    car.pull(dir);
+    car.spawnMove(dir);
+    car.shrink();
+    marchSpawn(car, dir, labels);
+  } finally {
+    car.pop();
+  }
+
+  return car.root();
+};
+
+const buildTournament = (vertical, ...rounds) => {
+  const root = new DirectionNode(rounds[0]);
+
+  const dir = vertical ? Direction.DOWNWARD : Direction.FORWARD;
+  const revdir = reverseDirection(dir);
+
+  if (rounds.length > 0) {
+    root.connect(dir, marchSpawn(new DirectionCaret(), dir, rounds));
+    root.connect(revdir, marchSpawn(new DirectionCaret(), revdir, rounds));
+  }
+  root.neighbors().nodeAt(dir).setValue();
+  root.neighbors().nodeAt(revdir).setValue();
+  return root;
+}
+
+const buildMarchMadness = (vertical) => {
+  return buildTournament(vertical, "Finals", "Conference Finals", "Conference Semifinals", "First Round");
+};
+;
+const buildFootballPlayoffs = (vertical) => {
+  return buildTournament(vertical, "Championship", "Conference Championship", "Divisional Round", "Wild Card");
+};
+
 export {
+    buildMarchMadness,
+    buildFootballPlayoffs,
+    buildTournament,
     buildAlternatingColumns,
     buildGrid,
     buildPlanner,

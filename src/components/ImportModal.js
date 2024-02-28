@@ -5,7 +5,7 @@ import { DirectionNode, deserializeParsegraph } from 'parsegraph';
 import * as importers from '../importers';
 
 import './modal.css';
-import { buildAlternatingColumns, buildGrid, buildPlanner, buildRandom } from '../builders';
+import { buildAlternatingColumns, buildGrid, buildPlanner, buildRandom, buildMarchMadness, buildFootballPlayoffs, buildTournament } from '../builders';
 
 function ImportFromFile({openGraph, onClose}) {
   const [importData, setImportData] = useState(null);
@@ -138,6 +138,8 @@ const openSampleJson = (openGraph) => {
 
 function ImportFromTemplate({openGraph, onClose}) {
   const [importType, setImportType] = useState("blank");
+  const [numRounds, setNumRounds] = useState(5);
+  const [vertical, setVertical] = useState(false);
 
   const createFromTemplate = () => {
     switch(importType) {
@@ -174,6 +176,21 @@ function ImportFromTemplate({openGraph, onClose}) {
       case "alt_columns":
         openGraph(buildAlternatingColumns());
         break;
+      case "march_madness":
+        openGraph(buildMarchMadness(false));
+        break;
+      case "march_madness_vert":
+        openGraph(buildMarchMadness(true));
+        break;
+      case "playoffs":
+        openGraph(buildFootballPlayoffs(false));
+        break;
+      case "playoffs_vert":
+        openGraph(buildFootballPlayoffs(true));
+        break;
+      case "march":
+        openGraph(buildTournament(vertical, ...createTournamentRounds(numRounds)));
+        break;
       default:
         openGraph(new DirectionNode("Unknown import type: " + importType));
         break;
@@ -200,12 +217,45 @@ function ImportFromTemplate({openGraph, onClose}) {
     <option value="daily_planner_60">Daily planner (hourly)</option>
     <option value="alt_columns">Alternating columns</option>
     <option value="random">Random graph</option>
+    <option value="march_madness">March Madness</option>
+    <option value="march_madness_vert">March Madness (Vertical)</option>
+    <option value="playoffs">Playoffs</option>
+    <option value="playoffs_vert">Playoffs (Vertical)</option>
+    <option value="march">Tournament</option>
   </select>
   </label> 
+  {importType === "march" && <div style={{display: "flex", flexDirection: "column", justifyContent: "space-between"}}><label>Rounds:&nbsp;
+  <input value={numRounds} onChange={e=>setNumRounds(Number.parseInt(e.target.value))} type="range" min="1" max="10"></input><span style={{display: 'inline-block', minWidth: "2em"}}>{numRounds}</span>
+  </label>
+  <label style={{display: 'flex', justifyContent: 'end'}}><input style={{minWidth: "2em"}} type="checkbox" checked={vertical} onChange={e=>setVertical(e.target.checked)}/>Vertical</label></div>}
   <div className="buttons">
     <input type="submit" style={{flexGrow:'1'}} onClick={createFromTemplate} value="Create"/>
     {onClose && <button style={{flexGrow:'1'}} onClick={onClose}>Cancel</button>}
   </div></form>;
+}
+
+const createTournamentRounds = (numRounds) => {
+  if (typeof numRounds === "string") {
+    try {
+      numRounds = Number.parseInt(numRounds);
+    } catch (ex) {
+      //console.log(ex);
+      numRounds = 2;
+    }
+  }
+  const rounds = [];
+  const getLabel = (i) => {
+    switch(i) {
+      case 0: return "Championship";
+      case 1: return "Semifinals";
+      case 2: return "Quarterfinals";
+      default: return "Round " + (numRounds - i);
+    }
+  }
+  for (let i = 0; i < numRounds; ++i) {
+    rounds.push(getLabel(i));
+  }
+  return rounds;
 }
 
 export default function ImportModal({onClose, openGraph, sampleName}) {
@@ -213,7 +263,7 @@ export default function ImportModal({onClose, openGraph, sampleName}) {
   const [activeTab, setActiveTab] = useState("template");
 
   useEffect(() => {
-    if (!sampleName) {
+    if (!sampleName || !openGraph) {
       return;
     }
     const sampleParts = sampleName.split("_");
@@ -227,10 +277,21 @@ export default function ImportModal({onClose, openGraph, sampleName}) {
     case "grid":
       openGraph(buildGrid(sampleParts[1]));
       break;
+    case "playoffs":
+      openGraph(buildFootballPlayoffs(sampleParts[1]?.toLowerCase().startsWith("vert")));
+      break;
+    case "march":
+      const vert = sampleParts[2]?.toLowerCase().startsWith("vert");
+      if (sampleParts[1] === "madness") {
+        openGraph(buildMarchMadness(vert));
+        break;
+      }
+      openGraph(buildTournament(vert, ...createTournamentRounds(sampleParts[1])));
+      break;
     default:
       return;
     }
-  }, [sampleName]);
+  }, [sampleName, openGraph]);
 
   return <div style={{width: '100%', height: '100%', display: 'flex', justifyContent: 'stretch', flexDirection: 'column', alignItems: 'stretch', gap: '3px', padding: '12px', boxSizing: 'border-box'}}>
     <h3 style={{margin: '0', marginBottom: '.5em'}}>{activeTab === "template" ? "New": (activeTab === "public" ? "Load" : "Open")} Parsegraph</h3>

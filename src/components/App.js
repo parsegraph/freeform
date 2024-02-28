@@ -104,7 +104,6 @@ const loadInitialRoom = (openGraph) => {
 }
 
 function App() {
-  const canvasRef = useRef();
   const editorContainerRef = useRef();
   const logRef = useRef();
 
@@ -238,11 +237,6 @@ function App() {
   }, [autopublish, publish, graphs, refresh]);
 
   useEffect(() => {
-    if (!canvasRef.current) {
-      // No canvas yet.
-      return;
-    }
-    viewport.mount(canvasRef.current);
     if (!graphs) {
       return;
     }
@@ -263,7 +257,7 @@ function App() {
       return;
     }
     viewport.show(graphs.widget());
-  }, [graphs, canvasRef, viewport, refresh, autopublish, publish, undo, redo])
+  }, [graphs, viewport, refresh, autopublish, publish, undo, redo])
   
   useEffect(() => {
     if (autopublish) {
@@ -281,7 +275,7 @@ function App() {
 
   return (<>
   <div className="App">
-      <div style={{position: 'fixed', inset: '0'}} ref={canvasRef}/>
+      <Parsegraph viewport={viewport}/>
       {(!hasWidget || importModalOpen) && <div className="modal">
         <ImportModal sampleName={sampleName} onClose={hasWidget ? () => setImportModalOpen(false) : null} openGraph={(graph, selectedNode, roomName)=>{
           setSampleName(null);
@@ -320,6 +314,20 @@ function App() {
     </div>
     </>
   );
+}
+
+function Parsegraph({viewport}) {
+  const canvasRef = useRef();
+
+  useEffect(() => {
+    if (!canvasRef.current) {
+      // No canvas yet.
+      return;
+    }
+    viewport.mount(canvasRef.current);
+  }, [canvasRef, viewport]);
+
+  return <div style={{position: 'fixed', inset: '0'}} ref={canvasRef}/>;
 }
 
 function NodeActions({viewport}) {

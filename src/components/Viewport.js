@@ -27,7 +27,7 @@ import {
 } from 'parsegraph-matrix';
 import { showNodeInCamera } from "parsegraph-showincamera";
 import Rect from "parsegraph-rect";
-import { USE_LOCAL_STORAGE } from "./settings";
+import { USE_LOCAL_STORAGE } from "../settings";
 import { WorldLabels } from "./WorldLabel";
 
 const fontSize = 10;

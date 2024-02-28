@@ -6,6 +6,7 @@ import { serializeParsegraph } from 'parsegraph';
 import SettingsForm from './SettingsForm';
 
 import "./modal.css";
+import { PUBLIC_SERVERS } from '../settings';
 
 function download(filename, text) {
   var element = document.createElement('a');
@@ -44,6 +45,9 @@ function ExportForm({graph, onExport, onClose}) {
         download("parsegraph-lines.txt", exporters.exportGraphToLines(graph));
         break;
       case "public":
+        if (!PUBLIC_SERVERS) {
+          throw new Error("Public servers not accessible");
+        }
         fetch('/public/' + roomName, {
           body: JSON.stringify(serializeParsegraph(graph)),
           headers: {
@@ -71,7 +75,7 @@ function ExportForm({graph, onExport, onClose}) {
     <option value="lines">Lines</option>
     <option value="lisp">Lisp</option>
     <option value="json">JSON</option>
-    <option value="public">Public</option>
+    {PUBLIC_SERVERS && <option value="public">Public</option>}
   </select>
   </label>
   {exportType === "public" && <label style={{display: 'flex', gap: '5px'}}>Name:&nbsp;

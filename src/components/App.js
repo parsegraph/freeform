@@ -9,7 +9,7 @@ import {
 import Viewport from './Viewport';
 import ImportModal from './ImportModal';
 import ExportModal from './ExportModal';
-import { USE_LOCAL_STORAGE } from './settings';
+import { PUBLIC_SERVERS, USE_LOCAL_STORAGE } from '../settings';
 
 const sessionId = crypto.randomUUID();
 
@@ -155,6 +155,9 @@ function App() {
   }, [viewport, graphs]);
 
   const publish = useCallback(() => {
+    if (!PUBLIC_SERVERS) {
+      return;
+    }
     if (!roomName) {
       return;
     }
@@ -219,6 +222,9 @@ function App() {
     if (!roomName) {
       return;
     }
+    if (!PUBLIC_SERVERS) {
+      return;
+    }
     const es = new EventSource("/public/" + roomName + "?sid=" + sessionId)
     es.onmessage = e => {
       const selectedNode = viewport._userCaret.node().id();
@@ -238,6 +244,9 @@ function App() {
     if (!graphs) {
       return;
     }
+    if (!PUBLIC_SERVERS) {
+      return;
+    }
     loadInitialRoom((graph, selectedNode) => {
       if (selectedNode || autopublish) {
         graphs.save(graph, selectedNode);
@@ -250,7 +259,7 @@ function App() {
 
   const undo = useCallback(() => {
     graphs.undo();
-    if (autopublish) {
+    if (autopublish && PUBLIC_SERVERS) {
       publish();
     }
     refresh();
@@ -258,7 +267,7 @@ function App() {
 
   const redo = useCallback(() => {
     graphs.redo();
-    if (autopublish) {
+    if (autopublish && PUBLIC_SERVERS) {
       publish();
     }
     refresh();
@@ -270,7 +279,7 @@ function App() {
     }
     viewport.setSaveGraph((graph, selectedNode)=>{
       graphs.save(graph, selectedNode);
-      if (autopublish) {
+      if (autopublish && PUBLIC_SERVERS) {
         publish();
       } else {
         setNeedsSave(true);
@@ -331,14 +340,14 @@ function App() {
           {showNodeActions && <NodeActions viewport={viewport}/>}
           {!showNodeActions && <button className="edit" style={{background: 'red', color: 'white'}} onClick={()=>viewport.removeNode()}>Remove</button>}
           {!showNodeActions && <UndoRedoActions undo={undo} redo={redo}/>}
-          {roomName && <button onClick={()=>{setAutopublish(orig=>{
+          {PUBLIC_SERVERS && roomName && <button onClick={()=>{setAutopublish(orig=>{
             return !orig
           })}}>Auto-publish {autopublish ? "ON" : "OFF"}</button>}
         </div>
         <ParsegraphEditor viewport={viewport}/>
       </div>}
       {(hasWidget && !showNodeActions) && <button onClick={openExportModal}>Save</button>}
-      {roomName && <button onClick={() => publish()}>Publish to {roomName}</button>}
+      {PUBLIC_SERVERS && roomName && <button onClick={() => publish()}>Publish to {roomName}</button>}
       </div>
       <ParsegraphLog viewport={viewport}/>
     </div>

@@ -6,6 +6,7 @@ import * as importers from '../importers';
 
 import './modal.css';
 import { buildAlternatingColumns, buildGrid, buildPlanner, buildRandom, buildMarchMadness, buildFootballPlayoffs, buildTournament } from '../builders';
+import { PUBLIC_SERVERS } from '../settings';
 
 function ImportFromFile({openGraph, onClose}) {
   const [importData, setImportData] = useState(null);
@@ -136,11 +137,11 @@ function JoinPublic({openGraph, onClose}) {
     e.preventDefault();
     joinRoom();
   }}>
-  <span style={{display: 'block', paddingBottom: '0.5em', fontSize: '18px'}}>Load a public Parsegraph.</span>
-  <label style={{display: 'flex', gap:'5px'}}>Name: <input style={{flexGrow:'1'}} value={importType} onChange={e=>setImportType(e.target.value)}/>
+  <span style={{display: 'block', paddingBottom: '0.5em', fontSize: '18px'}}>{PUBLIC_SERVERS ? "Load a public Parsegraph." : "Public servers not accessible"}</span>
+  <label style={{display: 'flex', gap:'5px'}}>Name: <input disabled={!PUBLIC_SERVERS} style={{flexGrow:'1'}} value={importType} onChange={e=>setImportType(e.target.value)}/>
   </label>
   <div className="buttons">
-    <input type="submit" style={{flexGrow:'1'}} onClick={joinRoom} value="Load"/>
+    <input disabled={!PUBLIC_SERVERS || !importType} type="submit" style={{flexGrow:'1'}} onClick={joinRoom} value="Load"/>
     {onClose && <button style={{flexGrow:'1'}} onClick={onClose}>Cancel</button>}
   </div></form>;
 }
@@ -327,9 +328,9 @@ export default function ImportModal({onClose, openGraph, sampleName}) {
       <button className={activeTab === "import" ? "active" : null} onClick={()=>{
         setActiveTab("import");
       }}>Open</button>
-      <button className={activeTab === "public" ? "active" : null} onClick={()=>{
+      {!PUBLIC_SERVERS && <button className={activeTab === "public" ? "active" : null} onClick={()=>{
         setActiveTab("public");
-      }}>Public</button>
+      }}>Public</button>}
     </div>
     {activeTab === "template" && <ImportFromTemplate openGraph={openGraph} onClose={onClose}/>}
     {activeTab === "import" && <ImportFromFile openGraph={openGraph} onClose={onClose}/>}

@@ -35,7 +35,7 @@ function ExportForm({graph, onExport, onClose}) {
         download("parsegraph.json", JSON.stringify(exporters.exportGraphToJson(graph)));
         break;
       case "parsegraph":
-        download("graph.parsegraph", serializeParsegraph(graph));
+        download("graph.parsegraph", JSON.stringify(serializeParsegraph(graph)));
         break;
       case "words":
         download("parsegraph-words.txt", exporters.exportGraphToWords(graph));

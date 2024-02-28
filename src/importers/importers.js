@@ -143,9 +143,31 @@ function readString(data) {
   return String.fromCharCode(...data);
 }
 
+const Buffer = require("buffer/").Buffer;
+
 function graphPng(input) {
+  const mapData = (name, data)=>{
+    if (name.toLowerCase() === "exif") {
+      try {
+        return require("exif-reader")(Buffer.from(data.buffer));
+      } catch (ex) {
+        return ex.toString() + " " + readString(data);
+      }
+    }
+    return data.length < 200 ? readString(data) : data.toString().substring(0, 50);
+  };
   try {
-    return graphJson(extractPngChunks(input).map(chunk => ({name: chunk.name, length: chunk.data.length, data: chunk.data.length < 200 ? readString(chunk.data) : null})));
+    return graphJson(extractPngChunks(input).map(chunk => ({name: chunk.name, length: chunk.data.length, data: mapData(chunk.name, chunk.data)})));
+  } catch (ex) {
+    return new DirectionNode(ex.toString());
+  }
+}
+
+
+function graphJpeg(input) {
+  try {
+    console.log(input);
+    return graphJson(require('exif-parser').create(input).parse());
   } catch (ex) {
     return new DirectionNode(ex.toString());
   }
@@ -153,6 +175,7 @@ function graphPng(input) {
 
 export {
     graphLines,
+    graphJpeg,
     graphWords,
     graphLisp,
     graphJson,

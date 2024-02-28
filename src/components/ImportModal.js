@@ -21,6 +21,12 @@ function ImportFromFile({openGraph, onClose}) {
         });
         return;
       }
+      if (importType === "jpeg") {
+        importData.arrayBuffer().then((buff) => {
+          openGraph(importers.graphJpeg(buff));
+        });
+        return;
+      }
 
       importData.text().then(importData => {
         switch (importType) {
@@ -76,6 +82,7 @@ function ImportFromFile({openGraph, onClose}) {
     <option value="lisp">Lisp</option>
     <option value="json">JSON</option>
     <option value="png">PNG</option>
+    <option value="jpeg">JPEG</option>
   </select>
   </label>
   <div className="buttons">

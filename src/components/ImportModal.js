@@ -81,9 +81,19 @@ function ImportFromFile({openGraph, onClose}) {
         setImportType("parsegraph");
         break;
       case "json":
+        if (file.name.endsWith("parsegraph.json")) {
+          setImportType("parsegraph");
+          break;
+        }
         setImportType("json");
         break;
       case "txt":
+        if (file.name.endsWith("parsegraph.txt")) {
+          setImportType("parsegraph");
+          break;
+        }
+        setImportType("lines");
+        break;
       case "ini":
         setImportType("lines");
         break;

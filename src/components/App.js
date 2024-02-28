@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import './App.css';
 
+import {createRoot} from 'react-dom/client';
+
 import { 
   Direction, deserializeParsegraph, serializeParsegraph,
 } from "parsegraph";
@@ -103,8 +105,27 @@ const loadInitialRoom = (openGraph) => {
   });
 }
 
-function App() {
+function Carousel({viewport}) {
+  return <>
+    <button className="dir" style={{position: 'absolute', right: '50%', top: '50%', transform: 'translate(50%, -50%)'}} onClick={()=>viewport.spawnMove(Direction.INWARD)}>
+      INWARD
+    </button>
+  <button className="dir" style={{position: 'absolute', right: '100%', top: '50%', transform: 'translate(0, -50%)'}} onClick={()=>viewport.spawnMove(Direction.BACKWARD)}>
+    BACKWARD
+  </button>
+  <button className="dir" style={{position: 'absolute', bottom: '100%', left: '50%', transform: 'translate(-50%, 0)'}} onClick={()=>viewport.spawnMove(Direction.UPWARD)}>
+    UPWARD
+  </button>
+  <button className="dir" style={{position: 'absolute', left: '50%', top: '100%', transform: 'translate(-50%, 0)'}} onClick={()=>viewport.spawnMove(Direction.DOWNWARD)}>
+    DOWNWARD
+  </button>
+  <button className="dir" style={{position: 'absolute', left: '100%', top: '50%', transform: 'translate(0, -50%)'}} onClick={()=>viewport.spawnMove(Direction.FORWARD)}>
+    FORWARD
+  </button>
+  </>;
+}
 
+function App() {
   const [viewport] = useState(new Viewport());
   const [graphs] = useState(new GraphStack());
 
@@ -161,6 +182,35 @@ function App() {
     setImportModalOpen(false);
     setExportModalOpen(old=>!old);
   }
+
+  const [carouselContainer, setCarouselContainer] = useState(null);
+
+  const [carouselRoot, setCarouselRoot] = useState(null);
+
+  useEffect(() => {
+    if (!carouselContainer) {
+      setCarouselRoot(null);
+      return;
+    }
+    setCarouselRoot(createRoot(carouselContainer));
+  }, [carouselContainer]);
+
+  useEffect(() => {
+    if (!viewport) {
+      return;
+    }
+    if (!carouselRoot) {
+      return;
+    }
+    carouselRoot.render(<Carousel viewport={viewport}/>)
+  }, [carouselRoot, viewport]);
+
+  useEffect(() => {
+    if (!viewport) {
+      return;
+    }
+    setCarouselContainer(viewport.carouselContainer());
+  }, [viewport]);
 
   useEffect(() => {
     if (!autopublish) {
@@ -270,21 +320,24 @@ function App() {
     </div>
   <div className="AppMenu">
       <div style={{flexGrow: '1', display: 'flex', gap: '5px'}}>
-      {hasWidget && <button tabIndex={0} onClick={openImportModal}>Open</button>}
+      {(hasWidget && !showNodeActions) && <button tabIndex={0} onClick={openImportModal}>Open</button>}
       {hasWidget && <div style={{flexGrow: '1', display: 'flex', flexDirection: 'column'}}>
         <div className="buttons" style={{paddingTop: '0'}}>
-          <button onClick={()=>viewport.showInCamera()}>Re-center</button>
-          {(!showNodeActions && hasWidget) && <button onClick={()=>viewport.toggleEditor()}>Edit</button>}
+          {(!showNodeActions && hasWidget) && <>
+            <button onClick={()=>viewport.showInCamera()}>Re-center</button>
+            <button onClick={()=>viewport.moveOutward()}>Outward</button>
+            <button onClick={()=>viewport.toggleEditor()}>Edit</button>
+          </>}
           {showNodeActions && <NodeActions viewport={viewport}/>}
-          {(!showNodeActions && hasWidget) && <DirectionActions viewport={viewport}/>}
-          <UndoRedoActions undo={undo} redo={redo}/>
+          {!showNodeActions && <button className="edit" style={{background: 'red', color: 'white'}} onClick={()=>viewport.removeNode()}>Remove</button>}
+          {!showNodeActions && <UndoRedoActions undo={undo} redo={redo}/>}
           {roomName && <button onClick={()=>{setAutopublish(orig=>{
             return !orig
           })}}>Auto-publish {autopublish ? "ON" : "OFF"}</button>}
         </div>
         <ParsegraphEditor viewport={viewport}/>
       </div>}
-      {hasWidget && <button onClick={openExportModal}>Save</button>}
+      {(hasWidget && !showNodeActions) && <button onClick={openExportModal}>Save</button>}
       {roomName && <button onClick={() => publish()}>Publish to {roomName}</button>}
       </div>
       <ParsegraphLog viewport={viewport}/>
@@ -347,7 +400,6 @@ function NodeActions({viewport}) {
     <button className="edit" onClick={()=>viewport.toggleNodeScale()}>Scale</button>
     <button className="edit" onClick={()=>viewport.toggleNodeFit()}>Fit</button>
     <button className="edit" onClick={()=>viewport.pullNode()}>Pull</button>
-    <button className="edit" onClick={()=>viewport.removeNode()}>Remove</button>
   </>;
 }
 
@@ -356,17 +408,6 @@ function UndoRedoActions({undo, redo}) {
     <button onClick={()=>undo()}>Undo</button>
     <button onClick={()=>redo()}>Redo</button>
   </>;
-}
-
-function DirectionActions({viewport}) {
-  return <>
-    <button className="dir" onClick={()=>viewport.spawnMove(Direction.INWARD)}>Inward</button>
-    <button className="dir" onClick={()=>viewport.spawnMove(Direction.DOWNWARD)}>Downward</button>
-    <button className="dir" onClick={()=>viewport.spawnMove(Direction.FORWARD)}>Forward</button>
-    <button className="dir" onClick={()=>viewport.spawnMove(Direction.BACKWARD)}>Backward</button>
-    <button className="dir" onClick={()=>viewport.spawnMove(Direction.UPWARD)}>Upward</button>
-    <button className="dir" onClick={()=>viewport.moveOutward()}>Outward</button>
-  </>
 }
 
 export default App;

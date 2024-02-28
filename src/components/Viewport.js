@@ -119,7 +119,9 @@ export default class Viewport {
     logMessage(...msgParts) {
         const msg = msgParts.join(" ");
         const elem = document.createElement('span');
+        elem.style.display = 'inline';
         elem.style.pointerEvents = 'none';
+        elem.style.userSelect = 'none';
         elem.innerText = msg;
         while(this._logContainer.childElementCount > 10) {
             this._logContainer.firstChild.remove();
@@ -131,17 +133,19 @@ export default class Viewport {
         }, 5000);
     }
 
-    createLog() {
-        this._logContainer = document.createElement("div");
-        this._logContainer.style.fontSize = '18px';
-        this._logContainer.style.color = 'grey';
-        this._logContainer.style.display = 'flex';
-        this._logContainer.style.flexDirection = 'column';
+    logContainer() {
+        if (!this._logContainer) {
+            this._logContainer = document.createElement("div");
+            this._logContainer.style.fontSize = '18px';
+            this._logContainer.style.color = 'grey';
+            this._logContainer.style.display = 'flex';
+            this._logContainer.style.flexDirection = 'column';
+        }
+        return this._logContainer;
     }
 
     mountLog(logContainer) {
-        this.createLog();
-        logContainer.appendChild(this._logContainer);
+        logContainer.appendChild(this.logContainer());
     }
 
     setSaveGraph(saveGraph) {
@@ -258,6 +262,9 @@ export default class Viewport {
             if (!this._widget) {
                 return;
             }
+            if (this.carouselContainer().contains(e.target)) {
+                return;
+            }
             isDown = null;
             [mouseX, mouseY] = [e.clientX, e.clientY];
             this.setMousePos(mouseX, mouseY);
@@ -334,6 +341,9 @@ export default class Viewport {
             if (!this._widget) {
                 return;
             }
+            if (this.carouselContainer().contains(e.target)) {
+                return;
+            }
             e.preventDefault();
             for (let i = 0; i < e.changedTouches.length; ++i) {
                 const touch = e.changedTouches[i];
@@ -355,6 +365,7 @@ export default class Viewport {
                     }
                     isDown = Date.now();
                 } else {
+                    this.hideEditor();
                     isDown = Date.now();
                 }
             }
@@ -406,16 +417,22 @@ export default class Viewport {
             if (!this._widget) {
                 return;
             }
-            let [mouseX, mouseY] = [0, 0]
+            let [mouseX, mouseY] = [NaN, NaN];
             const isGesture = numActiveTouches() === 1;
             for (let i = 0; i < e.changedTouches.length; ++i) {
                 const touch = e.changedTouches[i];
                 const touchData = ongoingTouches.get(touch.identifier);
+                if (!touchData) {
+                    continue;
+                }
                 mouseX = touchData.mouseX;
                 mouseY = touchData.mouseY;
                 this.setMousePos(mouseX, mouseY);
 
                 ongoingTouches.delete(touch.identifier);
+            }
+            if (isNaN(mouseX)) {
+                return;
             }
             if (touchingNode && isGesture) {
                 if (gesture(mouseX, mouseY)) {
@@ -437,10 +454,13 @@ export default class Viewport {
                 const [first, second] = [...ongoingTouches.values()];
                 const origDistance = distance(first.mouseX, first.mouseY, second.mouseX, second.mouseY);
                 for (let i = 0; i < e.changedTouches.length; ++i) {
-                const touch = e.changedTouches[i];
-                const touchData = ongoingTouches.get(touch.identifier);
-                touchData.mouseX = touch.clientX;
-                touchData.mouseY = touch.clientY;
+                    const touch = e.changedTouches[i];
+                    const touchData = ongoingTouches.get(touch.identifier);
+                    if (!touchData) {
+                        continue;
+                    }
+                    touchData.mouseX = touch.clientX;
+                    touchData.mouseY = touch.clientY;
                 }
                 const newDistance = distance(first.mouseX, first.mouseY, second.mouseX, second.mouseY);
                 cam.zoomToPoint(newDistance / origDistance, ...midPoint(first.mouseX, first.mouseY, second.mouseX, second.mouseY));
@@ -452,6 +472,9 @@ export default class Viewport {
             for (let i = 0; i < e.changedTouches.length; ++i) {
                 const touch = e.changedTouches[i];
                 const touchData = ongoingTouches.get(touch.identifier);
+                if (!touchData) {
+                    continue;
+                }
                 const dx = touch.clientX - touchData.mouseX;
                 const dy = touch.clientY - touchData.mouseY;
                 if (!touchingNode) {
@@ -604,6 +627,9 @@ export default class Viewport {
         canvas.appendChild(glProvider.container());
         this._glProvider = glProvider;
         canvas.appendChild(textCanvas);
+
+        canvas.appendChild(this.carouselContainer());
+
 
         canvas.addEventListener("focus", () => {
             if (this._showEditor) {
@@ -812,21 +838,41 @@ export default class Viewport {
         return editor;
     }
 
-    toggleEditor() {
+    hideEditor() {
+        if (!this._showEditor) {
+            return;
+        }
         if (this._toggleNodeActions) {
             this._toggleNodeActions();
         }
-        this._showEditor = !this._showEditor;
+        this._showEditor = false;
+        this._editorContainer.style.display = 'none';
+        this.refresh();
+    }
+
+    showEditor() {
         if (this._showEditor) {
-            this._editorContainer.style.display = 'block';
-            this._editor.focus();
-            if (nodeHasValue(this._userCaret.node())) {
+            return;
+        }
+        if (this._toggleNodeActions) {
+            this._toggleNodeActions();
+        }
+        this._showEditor = true;
+        this._editorContainer.style.display = 'block';
+        this._editor.focus();
+        if (nodeHasValue(this._userCaret.node())) {
             this._editor.value = this._userCaret.node().value();
-            } else {
-            this._editor.value = '';
-            }
         } else {
-            this._editorContainer.style.display = 'none';
+            this._editor.value = '';
+        }
+        this.refresh();
+    }
+
+    toggleEditor() {
+        if (this._showEditor) {
+            this.hideEditor();
+        } else {
+            this.showEditor();
         }
     }
 
@@ -1155,6 +1201,16 @@ export default class Viewport {
             //ctx.textAlign = 'left';
             //ctx.textBaseline = 'top';
             //ctx.fillText(this._userCaret.node()?.value(), 0, 0);
+    
+            if (this.showNodeActions()) {
+                this.carouselContainer().style.display = 'block';
+                this.carouselContainer().style.transform = `scale(${cam.scale()}) translate(${layout.absoluteX() + cam.x()}px, ${layout.absoluteY() + cam.y()}px) scale(${1/cam.scale()}) translate(-${cam.width()/2}px, -${cam.height()/2}px) translate(-50%, -50%)`;
+
+                this.carouselAnchor().style.width = `${bodySize[0] * layout.absoluteScale() * cam.scale()}px`;
+                this.carouselAnchor().style.height = `${bodySize[1] * layout.absoluteScale() * cam.scale()}px`;
+            } else {
+                this.carouselContainer().style.display = 'none';
+            }
         }
 
         if (needsPaint) {
@@ -1179,6 +1235,31 @@ export default class Viewport {
             )
         }
     };
+
+    showNodeActions() {
+        return this._showEditor;
+    }
+
+    carouselAnchor() {
+        if (!this._carouselAnchor) {
+            this._carouselAnchor = document.createElement('div');
+            this._carouselAnchor.style.position = 'relative';
+            this._carouselAnchor.style.pointerEvents = 'none';
+            this.carouselContainer().appendChild(this._carouselAnchor);
+        }
+        return this._carouselAnchor;
+    }
+
+    carouselContainer() {
+        if (!this._carouselContainer) {
+            this._carouselContainer = document.createElement("div");
+            this._carouselContainer.style.position = "absolute";
+            this._carouselContainer.style.left = "50%";
+            this._carouselContainer.style.top = "50%";
+            this._carouselContainer.style.transformOrigin = "center";
+        }
+        return this._carouselContainer;
+    }
 
     setMousePos(mouseX, mouseY) {
         this._mousePos[0] = mouseX;

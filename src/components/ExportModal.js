@@ -70,8 +70,8 @@ function ExportForm({graph, onExport, onClose}) {
   };
 
   return <><label style={{display: 'flex', gap:'5px'}}>Format: <select style={{flexGrow:'1'}} value={exportType} onChange={e=>setExportType(e.target.value)}>
-    <option value="words">Words</option>
     <option value="parsegraph">Parsegraph</option>
+    <option value="words">Words</option>
     <option value="lines">Lines</option>
     <option value="lisp">Lisp</option>
     <option value="json">JSON</option>

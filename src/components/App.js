@@ -329,6 +329,7 @@ function App() {
     </div>
   <div className="AppMenu">
       <div style={{flexGrow: '1', display: 'flex', gap: '5px'}}>
+        <button onClick={e=>window.location.href="/"}>&lt;&lt;</button>
       {(hasWidget && !showNodeActions) && <button tabIndex={0} onClick={openImportModal}>Open</button>}
       {hasWidget && <div style={{flexGrow: '1', display: 'flex', flexDirection: 'column'}}>
         <div className="buttons" style={{paddingTop: '0'}}>

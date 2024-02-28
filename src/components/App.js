@@ -303,24 +303,9 @@ function App() {
         <div className="buttons" style={{paddingTop: '0'}}>
           <button onClick={()=>viewport.showInCamera()}>Re-center</button>
           {(!showNodeActions && hasWidget) && <button onClick={()=>viewport.toggleEditor()}>Edit</button>}
-          {showNodeActions && <>
-            <button className="edit" onClick={()=>viewport.toggleAlignment()}>Align</button>
-            <button className="edit" onClick={()=>viewport.togglePreferredAxis()}>Preferred Axis</button>
-            <button className="edit" onClick={()=>viewport.toggleNodeScale()}>Scale</button>
-            <button className="edit" onClick={()=>viewport.toggleNodeFit()}>Fit</button>
-            <button className="edit" onClick={()=>viewport.pullNode()}>Pull</button>
-            <button className="edit" onClick={()=>viewport.removeNode()}>Remove</button>
-          </>}
-          {(!showNodeActions && hasWidget) && <>
-            <button className="dir" onClick={()=>viewport.spawnMove(Direction.INWARD)}>Inward</button>
-            <button className="dir" onClick={()=>viewport.spawnMove(Direction.DOWNWARD)}>Downward</button>
-            <button className="dir" onClick={()=>viewport.spawnMove(Direction.FORWARD)}>Forward</button>
-            <button className="dir" onClick={()=>viewport.spawnMove(Direction.BACKWARD)}>Backward</button>
-            <button className="dir" onClick={()=>viewport.spawnMove(Direction.UPWARD)}>Upward</button>
-            <button className="dir" onClick={()=>viewport.moveOutward()}>Outward</button>
-          </>}
-          <button onClick={()=>undo()}>Undo</button>
-          <button onClick={()=>redo()}>Redo</button>
+          {showNodeActions && <NodeActions viewport={viewport}/>}
+          {(!showNodeActions && hasWidget) && <DirectionActions viewport={viewport}/>}
+          <UndoRedoActions undo={undo} redo={redo}/>
           {roomName && <button onClick={()=>{setAutopublish(orig=>{
             return !orig
           })}}>Auto-publish {autopublish ? "ON" : "OFF"}</button>}
@@ -335,6 +320,35 @@ function App() {
     </div>
     </>
   );
+}
+
+function NodeActions({viewport}) {
+  return <>
+    <button className="edit" onClick={()=>viewport.toggleAlignment()}>Align</button>
+    <button className="edit" onClick={()=>viewport.togglePreferredAxis()}>Preferred Axis</button>
+    <button className="edit" onClick={()=>viewport.toggleNodeScale()}>Scale</button>
+    <button className="edit" onClick={()=>viewport.toggleNodeFit()}>Fit</button>
+    <button className="edit" onClick={()=>viewport.pullNode()}>Pull</button>
+    <button className="edit" onClick={()=>viewport.removeNode()}>Remove</button>
+  </>;
+}
+
+function UndoRedoActions({undo, redo}) {
+  return <>
+    <button onClick={()=>undo()}>Undo</button>
+    <button onClick={()=>redo()}>Redo</button>
+  </>;
+}
+
+function DirectionActions({viewport}) {
+  return <>
+    <button className="dir" onClick={()=>viewport.spawnMove(Direction.INWARD)}>Inward</button>
+    <button className="dir" onClick={()=>viewport.spawnMove(Direction.DOWNWARD)}>Downward</button>
+    <button className="dir" onClick={()=>viewport.spawnMove(Direction.FORWARD)}>Forward</button>
+    <button className="dir" onClick={()=>viewport.spawnMove(Direction.BACKWARD)}>Backward</button>
+    <button className="dir" onClick={()=>viewport.spawnMove(Direction.UPWARD)}>Upward</button>
+    <button className="dir" onClick={()=>viewport.moveOutward()}>Outward</button>
+  </>
 }
 
 export default App;

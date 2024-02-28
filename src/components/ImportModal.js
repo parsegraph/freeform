@@ -61,12 +61,37 @@ function ImportFromFile({openGraph, onClose}) {
   }, [onClose, importType, importData, openGraph]);
 
   const loadFiles = useCallback(e => {
-      console.log(importType);
     for (const file of e.target.files) {
       setImportName(file.name);
       setImportData(file);
+      switch (file.name.split('.').pop().toLowerCase()) {
+      case "png":
+        setImportType("png");
+        break;
+      case "jpg":
+      case "jpeg":
+        setImportType("jpeg");
+        break;
+      case "lisp":
+        setImportType("lisp");
+        break;
+      case "parsegraph":
+      case "graph":
+        setImportType("parsegraph");
+        break;
+      case "json":
+        setImportType("json");
+        break;
+      case "txt":
+      case "ini":
+        setImportType("lines");
+        break;
+      default:
+        setImportType("words");
+        break;
+      }
     }
-  }, [importType]);
+  }, []);
 
   return <form onSubmit={e => {
     e.preventDefault();

@@ -6,7 +6,7 @@ import * as importers from '../importers';
 
 import './modal.css';
 import { buildAlternatingColumns, buildGrid, buildPlanner, buildRandom, buildMarchMadness, buildFootballPlayoffs, buildTournament } from '../builders';
-import { PUBLIC_SERVERS } from '../settings';
+import { HIDE_PUBLIC_SERVERS_TAB, PUBLIC_SERVERS } from '../settings';
 
 function ImportFromFile({openGraph, onClose}) {
   const [importData, setImportData] = useState(null);
@@ -338,7 +338,7 @@ export default function ImportModal({onClose, openGraph, sampleName}) {
       <button className={activeTab === "import" ? "active" : null} onClick={()=>{
         setActiveTab("import");
       }}>Open</button>
-      {!PUBLIC_SERVERS && <button className={activeTab === "public" ? "active" : null} onClick={()=>{
+      {(PUBLIC_SERVERS || !HIDE_PUBLIC_SERVERS_TAB) && <button className={activeTab === "public" ? "active" : null} onClick={()=>{
         setActiveTab("public");
       }}>Public</button>}
     </div>

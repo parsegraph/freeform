@@ -72,7 +72,7 @@ function graphJson(data) {
       case "boolean":
         return new DirectionNode(JSON.stringify(data));
       default:
-        throw new Error("Unsupported type: " + typeof data)
+        return new DirectionNode(typeof data);
   }
 }
 

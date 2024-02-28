@@ -240,7 +240,6 @@ export default class Viewport {
             return;
         }
         this._container = container;
-        container.tabIndex = '0';
         const canvas = container;
         //container.addEventListener('dragover', e => e.preventDefault());
         //container.addEventListener('drop', drop)

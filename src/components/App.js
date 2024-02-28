@@ -337,7 +337,7 @@ function Parsegraph({viewport}) {
     viewport.mount(canvasRef.current);
   }, [canvasRef, viewport]);
 
-  return <div style={{position: 'fixed', inset: '0'}} ref={canvasRef}/>;
+  return <div style={{position: 'fixed', inset: '0'}} ref={canvasRef} tabIndex={0}/>;
 }
 
 function NodeActions({viewport}) {

@@ -38,7 +38,7 @@ const borderRoundedness = 5;
 const maxClickDelay = 1000;
 const initialScale = 4;
 const moveSpeed = fontSize;
-const minVisibleTextScale = 0.2;
+const minVisibleTextScale = 1;
 const budSize = .75;
 const inwardSeparation = lineThickness * 4;
 
@@ -1152,7 +1152,7 @@ export default class Viewport {
                     ctx.translate(0, lineHeight);
                 });
             this._worldLabels.draw(lines[0], node.layout().absoluteX(), node.layout().absoluteY(), 1.5*fontSize,
-                cam.scale()/node.layout().absoluteScale(), new Color(1, 1, 1, 1), new Color(0, 0, 0, 1));
+                node.layout().absoluteScale(), new Color(1, 1, 1, 1), new Color(0, 0, 0, 1));
             ctx.restore();
             });
             ctx.restore();

@@ -146,7 +146,7 @@ export class WorldLabels {
     this._labels = this._labels.sort((a, b) => b.size() - a.size());
     const occluder = new Occluder(-x + w / 2, -y + h / 2, w, h);
     const drawnLabels = this._labels.filter((label) => {
-      if (label.scale() <= scale / this._scaleMultiplier) {
+      if (label.scale() > this._scaleMultiplier / scale) {
         return false;
       }
       ctx.font = `${Math.round(

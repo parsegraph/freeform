@@ -260,10 +260,13 @@ function ImportFromTemplate({openGraph, onClose}) {
     <option value="march">Tournament</option>
   </select>
   </label> 
-  {importType === "march" && <div style={{display: "flex", flexDirection: "column", justifyContent: "space-between"}}><label>Rounds:&nbsp;
+  {importType === "march" && <div style={{display: "flex", flexDirection: "column", justifyContent: "space-between", gap: "8px", margin: '8px 0'}}><label style={{display: 'flex'}}>Rounds:&nbsp;
   <input value={numRounds} onChange={e=>setNumRounds(Number.parseInt(e.target.value))} type="range" min="1" max="10"></input><span style={{display: 'inline-block', minWidth: "2em"}}>{numRounds}</span>
   </label>
-  <label style={{display: 'flex', justifyContent: 'end'}}><input style={{minWidth: "2em"}} type="checkbox" checked={vertical} onChange={e=>setVertical(e.target.checked)}/>Vertical</label></div>}
+  <label style={{display: 'flex', justifyContent: 'space-between'}}>
+    Vertical?
+    <input style={{minWidth: "2em"}} type="checkbox" checked={vertical} onChange={e=>setVertical(e.target.checked)}/>
+    </label></div>}
   <div className="buttons">
     <input type="submit" style={{flexGrow:'1'}} onClick={createFromTemplate} value="Create"/>
     {onClose && <button style={{flexGrow:'1'}} onClick={onClose}>Cancel</button>}

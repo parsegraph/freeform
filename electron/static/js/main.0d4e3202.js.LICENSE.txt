@@ -1,0 +1,392 @@
+/*!
+ * The buffer module from node.js, for the browser.
+ *
+ * @author   Feross Aboukhadijeh <https://feross.org>
+ * @license  MIT
+ */
+
+/*! . */
+
+/*! .. */
+
+/*! ../.. */
+
+/*! ../../../Direction */
+
+/*! ../../Direction */
+
+/*! ../../DirectionNode/PaintGroups/findPaintGroup */
+
+/*! ../Direction */
+
+/*! ./Alignment */
+
+/*! ./AxisOverlap */
+
+/*! ./CommitLayout */
+
+/*! ./Direction */
+
+/*! ./DirectionCaret */
+
+/*! ./DirectionNode */
+
+/*! ./DirectionNode/DirectionNode */
+
+/*! ./DirectionNode/PaintGroups/findPaintGroup */
+
+/*! ./Extent */
+
+/*! ./ExtentCombiner */
+
+/*! ./ExtentSeparator */
+
+/*! ./Fit */
+
+/*! ./Layout */
+
+/*! ./LayoutPainter */
+
+/*! ./LayoutPhase */
+
+/*! ./Neighbor */
+
+/*! ./Neighbors */
+
+/*! ./Neighbors/Alignment */
+
+/*! ./Neighbors/Neighbors */
+
+/*! ./PaintGroup */
+
+/*! ./PaintGroups */
+
+/*! ./PaintGroups/findPaintGroup */
+
+/*! ./PreferredAxis */
+
+/*! ./Siblings */
+
+/*! ./addLineBounds */
+
+/*! ./checkExtentsEqual */
+
+/*! ./combineExtents */
+
+/*! ./comesBefore */
+
+/*! ./commitAxisBasedLayout */
+
+/*! ./commitInwardLayout */
+
+/*! ./commitRootlikeLayout */
+
+/*! ./connectNode */
+
+/*! ./constants */
+
+/*! ./disconnectNode */
+
+/*! ./findClosestPaintGroup */
+
+/*! ./findConsecutiveLength */
+
+/*! ./findDistance */
+
+/*! ./findPaintGroup */
+
+/*! ./findPaintGroupInsert */
+
+/*! ./functions */
+
+/*! ./fuzzyequals */
+
+/*! ./getAlignment */
+
+/*! ./getLastPaintGroup */
+
+/*! ./getSeparation */
+
+/*! ./layoutAxis */
+
+/*! ./layoutSingle */
+
+/*! ./makeLimit */
+
+/*! ./paintGroupBounds */
+
+/*! ./paintNodeBounds */
+
+/*! ./paintNodeLines */
+
+/*! ./pathToRoot */
+
+/*! ./positionChild */
+
+/*! ./serializeParsegraph */
+
+/*! ieee754. BSD-3-Clause License. Feross Aboukhadijeh <https://feross.org/opensource> */
+
+/*!**********************!*\
+        !*** ./src/index.ts ***!
+        \**********************/
+
+/*!*******************************!*\
+        !*** ./src/DirectionCaret.ts ***!
+        \*******************************/
+
+/*!*******************************!*\
+        !*** ./src/paintNodeLines.ts ***!
+        \*******************************/
+
+/*!********************************!*\
+        !*** ./src/Direction/index.ts ***!
+        \********************************/
+
+/*!********************************!*\
+        !*** ./src/paintNodeBounds.ts ***!
+        \********************************/
+
+/*!*********************************!*\
+        !*** ./src/paintGroupBounds.ts ***!
+        \*********************************/
+
+/*!**********************************!*\
+        !*** ./src/DirectionNode/Fit.ts ***!
+        \**********************************/
+
+/*!************************************!*\
+        !*** ./src/Direction/constants.ts ***!
+        \************************************/
+
+/*!************************************!*\
+        !*** ./src/Direction/functions.ts ***!
+        \************************************/
+
+/*!************************************!*\
+        !*** ./src/DirectionNode/index.ts ***!
+        \************************************/
+
+/*!************************************!*\
+        !*** ./src/serializeParsegraph.ts ***!
+        \************************************/
+
+/*!******************************************!*\
+        !*** ./src/DirectionNode/connectNode.ts ***!
+        \******************************************/
+
+/*!*******************************************!*\
+        !*** ./src/DirectionNode/Layout/index.ts ***!
+        \*******************************************/
+
+/*!********************************************!*\
+        !*** ./src/DirectionNode/DirectionNode.ts ***!
+        \********************************************/
+
+/*!********************************************!*\
+        !*** ./src/DirectionNode/Layout/Layout.ts ***!
+        \********************************************/
+
+/*!*********************************************!*\
+        !*** ./src/DirectionNode/Siblings/index.ts ***!
+        \*********************************************/
+
+/*!*********************************************!*\
+        !*** ./src/DirectionNode/disconnectNode.ts ***!
+        \*********************************************/
+
+/*!**********************************************!*\
+        !*** ./src/DirectionNode/Neighbors/index.ts ***!
+        \**********************************************/
+
+/*!************************************************!*\
+        !*** ./src/DirectionNode/PaintGroups/index.ts ***!
+        \************************************************/
+
+/*!************************************************!*\
+        !*** ./src/DirectionNode/Siblings/Siblings.ts ***!
+        \************************************************/
+
+/*!*************************************************!*\
+        !*** ./src/DirectionNode/Layout/LayoutPhase.ts ***!
+        \*************************************************/
+
+/*!*************************************************!*\
+        !*** ./src/DirectionNode/Neighbors/Neighbor.ts ***!
+        \*************************************************/
+
+/*!**************************************************!*\
+        !*** ./src/DirectionNode/Layout/Extent/index.ts ***!
+        \**************************************************/
+
+/*!**************************************************!*\
+        !*** ./src/DirectionNode/Neighbors/Alignment.ts ***!
+        \**************************************************/
+
+/*!**************************************************!*\
+        !*** ./src/DirectionNode/Neighbors/Neighbors.ts ***!
+        \**************************************************/
+
+/*!***************************************************!*\
+        !*** ./src/DirectionNode/Layout/Extent/Extent.ts ***!
+        \***************************************************/
+
+/*!****************************************************!*\
+        !*** ./src/DirectionNode/Neighbors/AxisOverlap.ts ***!
+        \****************************************************/
+
+/*!****************************************************!*\
+        !*** ./src/DirectionNode/PaintGroups/makeLimit.ts ***!
+        \****************************************************/
+
+/*!*****************************************************!*\
+        !*** ./src/DirectionNode/PaintGroups/PaintGroup.ts ***!
+        \*****************************************************/
+
+/*!*****************************************************!*\
+        !*** ./src/DirectionNode/PaintGroups/pathToRoot.ts ***!
+        \*****************************************************/
+
+/*!*****************************************************!*\
+        !*** ./src/DirectionNode/Siblings/PreferredAxis.ts ***!
+        \*****************************************************/
+
+/*!******************************************************!*\
+        !*** ./src/DirectionNode/PaintGroups/PaintGroups.ts ***!
+        \******************************************************/
+
+/*!******************************************************!*\
+        !*** ./src/DirectionNode/PaintGroups/comesBefore.ts ***!
+        \******************************************************/
+
+/*!*******************************************************!*\
+        !*** ./src/DirectionNode/PaintGroups/findDistance.ts ***!
+        \*******************************************************/
+
+/*!********************************************************!*\
+        !*** ./src/DirectionNode/Layout/CommitLayout/index.ts ***!
+        \********************************************************/
+
+/*!********************************************************!*\
+        !*** ./src/DirectionNode/Layout/Extent/fuzzyequals.ts ***!
+        \********************************************************/
+
+/*!*********************************************************!*\
+        !*** ./src/DirectionNode/PaintGroups/findPaintGroup.ts ***!
+        \*********************************************************/
+
+/*!***********************************************************!*\
+        !*** ./src/DirectionNode/Layout/Extent/ExtentCombiner.ts ***!
+        \***********************************************************/
+
+/*!************************************************************!*\
+        !*** ./src/DirectionNode/Layout/Extent/ExtentSeparator.ts ***!
+        \************************************************************/
+
+/*!************************************************************!*\
+        !*** ./src/DirectionNode/PaintGroups/getLastPaintGroup.ts ***!
+        \************************************************************/
+
+/*!*************************************************************!*\
+        !*** ./src/DirectionNode/Layout/CommitLayout/layoutAxis.ts ***!
+        \*************************************************************/
+
+/*!**************************************************************!*\
+        !*** ./src/DirectionNode/Layout/Extent/checkExtentsEqual.ts ***!
+        \**************************************************************/
+
+/*!***************************************************************!*\
+        !*** ./src/DirectionNode/Layout/CommitLayout/CommitLayout.ts ***!
+        \***************************************************************/
+
+/*!***************************************************************!*\
+        !*** ./src/DirectionNode/Layout/CommitLayout/getAlignment.ts ***!
+        \***************************************************************/
+
+/*!***************************************************************!*\
+        !*** ./src/DirectionNode/Layout/CommitLayout/layoutSingle.ts ***!
+        \***************************************************************/
+
+/*!***************************************************************!*\
+        !*** ./src/DirectionNode/PaintGroups/findPaintGroupInsert.ts ***!
+        \***************************************************************/
+
+/*!****************************************************************!*\
+        !*** ./src/DirectionNode/Layout/CommitLayout/LayoutPainter.ts ***!
+        \****************************************************************/
+
+/*!****************************************************************!*\
+        !*** ./src/DirectionNode/Layout/CommitLayout/addLineBounds.ts ***!
+        \****************************************************************/
+
+/*!****************************************************************!*\
+        !*** ./src/DirectionNode/Layout/CommitLayout/getSeparation.ts ***!
+        \****************************************************************/
+
+/*!****************************************************************!*\
+        !*** ./src/DirectionNode/Layout/CommitLayout/positionChild.ts ***!
+        \****************************************************************/
+
+/*!****************************************************************!*\
+        !*** ./src/DirectionNode/PaintGroups/findClosestPaintGroup.ts ***!
+        \****************************************************************/
+
+/*!*****************************************************************!*\
+        !*** ./src/DirectionNode/Layout/CommitLayout/combineExtents.ts ***!
+        \*****************************************************************/
+
+/*!*********************************************************************!*\
+        !*** ./src/DirectionNode/Layout/CommitLayout/commitInwardLayout.ts ***!
+        \*********************************************************************/
+
+/*!***********************************************************************!*\
+        !*** ./src/DirectionNode/Layout/CommitLayout/commitRootlikeLayout.ts ***!
+        \***********************************************************************/
+
+/*!************************************************************************!*\
+        !*** ./src/DirectionNode/Layout/CommitLayout/commitAxisBasedLayout.ts ***!
+        \************************************************************************/
+
+/*!************************************************************************!*\
+        !*** ./src/DirectionNode/Layout/CommitLayout/findConsecutiveLength.ts ***!
+        \************************************************************************/
+
+/**
+ * @license React
+ * react-dom.production.min.js
+ *
+ * Copyright (c) Facebook, Inc. and its affiliates.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
+
+/**
+ * @license React
+ * react-jsx-runtime.production.min.js
+ *
+ * Copyright (c) Facebook, Inc. and its affiliates.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
+
+/**
+ * @license React
+ * react.production.min.js
+ *
+ * Copyright (c) Facebook, Inc. and its affiliates.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
+
+/**
+ * @license React
+ * scheduler.production.min.js
+ *
+ * Copyright (c) Facebook, Inc. and its affiliates.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */

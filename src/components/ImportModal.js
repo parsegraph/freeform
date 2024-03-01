@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 
-import { DirectionNode, deserializeParsegraph } from 'parsegraph';
+import { DirectionCaret, DirectionNode, deserializeParsegraph } from 'parsegraph';
 
 import * as importers from '../importers';
 
 import './modal.css';
 import { buildAlternatingColumns, buildGrid, buildPlanner, buildRandom, buildMarchMadness, buildFootballPlayoffs, buildTournament } from '../builders';
 import { HIDE_PUBLIC_SERVERS_TAB, PUBLIC_SERVERS } from '../settings';
+import Color from 'parsegraph-color';
 
 function ImportFromFile({openGraph, onClose}) {
   const [importData, setImportData] = useState(null);
@@ -42,7 +43,7 @@ function ImportFromFile({openGraph, onClose}) {
           break;
         case "parsegraph":
           const data = JSON.parse(importData);
-          openGraph(deserializeParsegraph(data), data.selectedNode);
+          openGraph(deserializeParsegraph(data), data.selectedNode, null, data.viewport);
           break;
         case "lines":
           openGraph(importers.graphLines(importData));
@@ -129,7 +130,7 @@ function ImportFromFile({openGraph, onClose}) {
 
 const loadRoom = (openGraph, roomName) => {
   return fetch("/public/" + roomName).then(resp=>resp.json()).then(roomData =>{
-    openGraph(deserializeParsegraph(roomData), null, roomName);
+    openGraph(deserializeParsegraph(roomData), null, roomName, roomData.viewport);
   });
 }
 
@@ -170,6 +171,61 @@ const openSampleJson = (openGraph) => {
     .then(text=>{
       openGraph(importers.graphJson(JSON.parse(text)));
     });
+};
+
+const buildRandomRainbow = () => {
+  const car = new DirectionCaret();
+  const styles = {};
+
+  const size = 10;
+  for(let col = 0; col < size; ++col) {
+    car.spawnMove('d');
+    car.push();
+
+    const a = Color.random();
+    const b = Color.random();
+    for(let row = 0; row < size; ++row) {
+      styles[car.node().id()] = {
+        backgroundColor: a.interpolate(b, row/(size-1)).asHex(),
+        backgroundAlpha: 1
+      }
+      car.spawnMove('f');
+    }
+    car.pop();
+  }
+
+  return [car.root(), null, null, { styles, pageBackgroundColor: Color.random().asRGBA() }];
+};
+
+const buildRainbow = (vert) => {
+  const car = new DirectionCaret();
+  const styles = {};
+
+  const size = 10;
+  for(let l = 0; l < size; ++l) {
+    car.spawnMove(vert ? 'd' : 'f');
+    car.push();
+
+    const llerp = (l/(size-1));
+    for(let col = 0; col < size; ++col) {
+      car.spawnMove(vert ? 'f' : 'd');
+      car.push();
+      const collerp = col/(size-1);
+      const a = Color.fromLCH(100*0, 360*collerp, llerp*360);
+      const b = Color.fromLCH(100*1, 360*collerp, llerp*360);
+      for(let row = 0; row < size; ++row) {
+        styles[car.node().id()] = {
+          backgroundColor: a.interpolate(b, row/(size-1)).asHex(),
+          backgroundAlpha: 1
+        }
+        car.spawnMove(vert ? 'd' : 'f');
+      }
+      car.pop();
+    }
+    car.pop();
+  }
+
+  return [car.root(), null, null, { styles, pageBackgroundColor: new Color(56/255, 56/255, 56/255, 1).asRGBA()}];
 };
 
 function ImportFromTemplate({openGraph, onClose}) {
@@ -227,6 +283,15 @@ function ImportFromTemplate({openGraph, onClose}) {
       case "march":
         openGraph(buildTournament(vertical, ...createTournamentRounds(numRounds)));
         break;
+      case "rainbow":
+        openGraph(...buildRainbow());
+        break;
+      case "rainbow_vert":
+        openGraph(...buildRainbow(true));
+        break;
+      case "rainbow_random":
+        openGraph(...buildRandomRainbow());
+        break;
       default:
         openGraph(new DirectionNode("Unknown import type: " + importType));
         break;
@@ -254,10 +319,13 @@ function ImportFromTemplate({openGraph, onClose}) {
     <option value="alt_columns">Alternating columns</option>
     <option value="random">Random graph</option>
     <option value="march_madness">March Madness</option>
-    <option value="march_madness_vert">March Madness (Vertical)</option>
+    <option value="march_madness_vert">March Madness (vertical)</option>
     <option value="playoffs">Playoffs</option>
-    <option value="playoffs_vert">Playoffs (Vertical)</option>
+    <option value="playoffs_vert">Playoffs (vertical)</option>
     <option value="march">Tournament</option>
+    <option value="rainbow">Rainbow</option>
+    <option value="rainbow_vert">Rainbow (vertical)</option>
+    <option value="rainbow_random">Random Colors</option>
   </select>
   </label> 
   {importType === "march" && <div style={{display: "flex", flexDirection: "column", justifyContent: "space-between", gap: "8px", margin: '8px 0'}}><label style={{display: 'flex'}}>Rounds:&nbsp;

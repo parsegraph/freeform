@@ -10,11 +10,15 @@ input, textarea, select, button {
 }
 
 button {
-  background: #282c34;
+  background: #3b3b3b;
   padding: 5px;
   color: #f1f1f1;
   border: 0;
   border-radius: 3px;
+}
+
+button:hover {
+  background: #838383;
 }
 
 .AppMenu {
@@ -38,10 +42,11 @@ button {
 }
 
 button.dir {
-  background: rgb(78, 164, 124);
-  border-radius: 3px;
-  width: 36x;
-  height: 36x;
+  background: transparent;
+  border: 3px solid #eee;
+  border-radius: 12px;
+  width: 24px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -98,6 +103,7 @@ button.edit {
   transform: translate(-50%, -50%);
   background: lightblue;
   border-radius: 6px;
+  z-index: 99;
 }
 
 

@@ -10,6 +10,8 @@ import Viewport from './Viewport';
 import ImportModal from './ImportModal';
 import ExportModal from './ExportModal';
 import { PUBLIC_SERVERS, USE_LOCAL_STORAGE } from '../settings';
+import NodeStylingModal from './NodeStylingModal';
+import Color from 'parsegraph-color';
 
 const sessionId = crypto.randomUUID();
 
@@ -47,6 +49,13 @@ class GraphStack {
     return null;
   }
 
+  viewportData() {
+    if (this.hasWidget()) {
+      return this._actions[this._actionIndex].viewport;
+    }
+    return null;
+  }
+
   selectedNode() {
     if (this.hasWidget()) {
       return this._actions[this._actionIndex].selectedNode;
@@ -54,11 +63,13 @@ class GraphStack {
     return null;
   }
 
-  save(newGraph, selectedNode) {
+  save(newGraph, selectedNode, viewport) {
     const newGraphData = serializeParsegraph(newGraph);
     if (selectedNode) {
       newGraphData.selectedNode = typeof selectedNode === "object" ? selectedNode.id() : selectedNode;
     }
+    console.log(viewport);
+    newGraphData.viewport = viewport instanceof Viewport ? viewport.toJSON() : viewport;
     if (this.hasWidget() && JSON.stringify(this._actions[this._actionIndex]) === JSON.stringify(newGraphData)) {
       return;
     }
@@ -138,6 +149,7 @@ function App() {
 
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [nodeStylingModalOpen, setNodeStylingModalOpen] = useState(false);
 
   const urlParams = new URLSearchParams(window.location.search);
   const [roomName, setRoomName] = useState(urlParams.get("public"));
@@ -146,7 +158,7 @@ function App() {
   const refresh = useCallback((dontTouchCamera) => {
     setHasWidget(graphs.hasWidget());
     if (graphs.hasWidget()) {
-      viewport.show(graphs.widget());
+      viewport.show(graphs.widget(), graphs.viewportData());
       viewport.moveToId(graphs.selectedNode());
       if (!dontTouchCamera) {
         viewport.showInCamera();
@@ -198,6 +210,8 @@ function App() {
     setCarouselRoot(createRoot(carouselContainer));
   }, [carouselContainer]);
 
+  const [showNodeActions, setShowNodeActions] = useState(false);
+
   useEffect(() => {
     if (!viewport) {
       return;
@@ -205,8 +219,8 @@ function App() {
     if (!carouselRoot) {
       return;
     }
-    carouselRoot.render(<Carousel viewport={viewport}/>)
-  }, [carouselRoot, viewport]);
+    carouselRoot.render(<Carousel viewport={viewport} style={(showNodeActions || nodeStylingModalOpen) ? {display: 'none'} : null}/>);
+  }, [carouselRoot, viewport, showNodeActions, nodeStylingModalOpen]);
 
   useEffect(() => {
     if (!viewport) {
@@ -255,14 +269,12 @@ function App() {
     });
   }, [autopublish, graphs, refresh]);
 
-  const [showNodeActions, setShowNodeActions] = useState(false);
-
   const undo = useCallback(() => {
     graphs.undo();
     if (autopublish && PUBLIC_SERVERS) {
       publish();
     }
-    refresh();
+    refresh(true);
   }, [autopublish, publish, graphs, refresh]);
 
   const redo = useCallback(() => {
@@ -270,7 +282,7 @@ function App() {
     if (autopublish && PUBLIC_SERVERS) {
       publish();
     }
-    refresh();
+    refresh(true);
   }, [autopublish, publish, graphs, refresh]);
 
   useEffect(() => {
@@ -310,29 +322,115 @@ function App() {
     };
   }, [needsSave, autopublish]);
 
+  const [nodeStyling, setNodeStyling] = useState(null);
+
+  useEffect(() => {
+    if (!viewport) {
+      return;
+    }
+    viewport.setToggleNodeStyling((showingStyling) => {
+      if (showingStyling) {
+        setNodeStyling({
+          ...viewport.getNodeStyle(),
+          pageBackgroundColor: viewport.pageBackgroundColor().asHex()
+        });
+      }
+      setNodeStylingModalOpen(showingStyling);
+    });
+  }, [viewport, setNodeStylingModalOpen, setNodeStyling]);
+
+  const updateNodeStyling = (newStyling) => {
+    if (newStyling.pageBackgroundColor) {
+      viewport.setPageBackgroundColor(Color.fromHex(newStyling.pageBackgroundColor));
+      delete newStyling.pageBackgroundColor;
+    }
+    viewport.updateNodeStyle(newStyling);
+    graphs.save(graphs.widget(), viewport.node().id(), viewport);
+  }
+  
+  const modalRef = useRef();
+  useEffect(()=>{
+    if (!modalRef.current || !nodeStylingModalOpen) {
+        return;
+    }
+
+    const modal = modalRef.current;
+    const mouseUp = () => {
+        window.removeEventListener('mousemove', mouseMove, true);
+    }
+    window.addEventListener('mouseup', mouseUp, false);
+
+    const setPos = (x, y) => {
+      modal.style.left = x + "px";
+      modal.style.top = y + "px";
+    }
+
+    const mouseMove = (e) => {
+      setPos(e.clientX, e.clientY);
+    };
+    
+    modal.addEventListener('mousedown', (e) => {
+      if (e.target.tagName === "INPUT") {
+        return;
+      }
+      window.addEventListener('mousemove', mouseMove, true);
+    }, false);
+
+    const touchMove = (e) => {
+      for (let i = 0; i < e.changedTouches.length; ++i) {
+          const touch = e.changedTouches[i];
+          setPos(touch.clientX, touch.clientY);
+      }
+    };
+
+    const touchEnd = () => {
+        window.removeEventListener('touchmove', touchMove, true);
+    }
+    window.addEventListener('touchend', touchEnd, false);
+
+    modal.addEventListener('touchstart', (e) => {
+      if (e.target.tagName === "INPUT") {
+        return;
+      }
+      e.preventDefault();
+      window.addEventListener('touchmove', touchMove, true);
+    }, false);
+
+    return () => {
+      window.removeEventListener('mouseup', mouseUp);
+    }
+  }, [modalRef, nodeStylingModalOpen]);
+
+
   return (<>
   <div className="App">
       <Parsegraph viewport={viewport}/>
       {(!hasWidget || importModalOpen) && <div className="modal">
-        <ImportModal sampleName={sampleName} onClose={hasWidget ? () => setImportModalOpen(false) : null} openGraph={(graph, selectedNode, roomName)=>{
+        <ImportModal sampleName={sampleName} onClose={hasWidget ? () => setImportModalOpen(false) : null} openGraph={(graph, selectedNode, roomName, viewportData)=>{
           setSampleName(null);
           setRoomName(roomName);
-          graphs.save(graph, selectedNode);
-          refresh();
+          graphs.save(graph, selectedNode, viewportData);
+          refresh(!!viewportData?.cam);
         }}/>
       </div>}
       {(exportModalOpen && hasWidget) && <div className="modal">
-        <ExportModal onExport={() => {
+        <ExportModal viewport={viewport} onExport={() => {
           setNeedsSave(false);
         }} graph={graphs.widget()} onClose={() => setExportModalOpen(false)}/>
       </div>}
-    </div>
+      {(nodeStylingModalOpen && hasWidget) && <div className="modal" ref={modalRef}>
+        <NodeStylingModal viewport={viewport} style={nodeStyling} updateStyle={updateNodeStyling} onClose={() => {
+          setNodeStylingModalOpen(false);
+          viewport.toggleNodeStyling();
+        }}/>
+      </div>}
   <div className="AppMenu">
       <div style={{flexGrow: '1', display: 'flex', gap: '5px'}}>
         <button onClick={e=>window.location.href="/"}>&lt;&lt;</button>
       {(hasWidget && !showNodeActions) && <button tabIndex={0} onClick={openImportModal}>Open</button>}
       {hasWidget && <div style={{flexGrow: '1', display: 'flex', flexDirection: 'column'}}>
         <div className="buttons" style={{paddingTop: '0'}}>
+          {hasWidget && <button onClick={()=>viewport.toggleNodeStyling()}>Style</button>}
           {(!showNodeActions && hasWidget) && <>
             <button onClick={()=>viewport.showInCamera()}>Re-center</button>
             <button onClick={()=>viewport.moveOutward()}>Outward</button>
@@ -351,6 +449,7 @@ function App() {
       {PUBLIC_SERVERS && roomName && <button onClick={() => publish()}>Publish to {roomName}</button>}
       </div>
       <ParsegraphLog viewport={viewport}/>
+    </div>
     </div>
     </>
   );

@@ -37,9 +37,17 @@ const addExtension = (name, ext) => {
   return name + '.' + ext;
 };
 
-function ExportForm({graph, onExport, onClose}) {
+function ExportForm({viewport, graph, onExport, onClose}) {
   const [exportType, setExportType] = useState("parsegraph");
   const [name, setName] = useState(graph.value() ?? "graph");
+
+  const exportParsegraph = () => {
+    return {
+        ...serializeParsegraph(graph),
+        selectedNode: viewport.node().id(),
+        viewport: viewport.toJSON()
+    };
+  }
 
   const performExport = ()=> {
     try {
@@ -53,7 +61,7 @@ function ExportForm({graph, onExport, onClose}) {
         download(addExtension(name, ".json"), JSON.stringify(exporters.exportGraphToJson(graph)));
         break;
       case "parsegraph":
-        download(addExtension(name, ".parsegraph"), JSON.stringify(serializeParsegraph(graph)));
+        download(addExtension(name, ".parsegraph"), JSON.stringify(exportParsegraph()));
         break;
       case "words":
         download(addExtension(name, ".txt"), exporters.exportGraphToWords(graph));
@@ -66,7 +74,7 @@ function ExportForm({graph, onExport, onClose}) {
           throw new Error("Public servers not accessible");
         }
         fetch('/public/' + name, {
-          body: JSON.stringify(serializeParsegraph(graph)),
+          body: JSON.stringify(exportParsegraph()),
           headers: {
             "Content-Type": "application/json"
           },
@@ -112,11 +120,11 @@ function ExportForm({graph, onExport, onClose}) {
   </div></form>;
 }
 
-export default function ExportModal({onExport, onClose, graph}) {
+export default function ExportModal({onExport, onClose, graph, viewport}) {
   const [activeTab, setActiveTab] = useState("export");
 
   return <div style={{width: '100%', height: '100%', display: 'flex', justifyContent: 'stretch', flexDirection: 'column', alignItems: 'stretch', gap: '3px', padding: '12px', boxSizing: 'border-box'}}>
     <h3 style={{margin: '0', marginBottom: '.5em'}}>Save Parsegraph</h3>
-    {activeTab === "export" && <ExportForm graph={graph} onExport={onExport} onClose={onClose}/>}
+    {activeTab === "export" && <ExportForm viewport={viewport} graph={graph} onExport={onExport} onClose={onClose}/>}
   </div>
 };

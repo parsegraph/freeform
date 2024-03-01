@@ -27,7 +27,7 @@ import {
 } from 'parsegraph-matrix';
 import { showNodeInCamera } from "parsegraph-showincamera";
 import Rect from "parsegraph-rect";
-import { USE_LOCAL_STORAGE, POST_RENDER_TIMEOUT_MS } from "../settings";
+import { DEFAULT_NODE_STYLE, USE_LOCAL_STORAGE, TEXT_IS_VISIBLE_SCALE, LABEL_IS_VISIBLE_SCALE } from "../settings";
 import { WorldLabels } from "./WorldLabel";
 
 const fontSize = 10;
@@ -42,9 +42,6 @@ const minVisibleTextScale = 1;
 const budSize = .75;
 const inwardSeparation = lineThickness * 4;
 
-const pageBackgroundColor = new Color(
-    .2, .2, .9, 1
-)
 const caretColor = new Color(.95, .9, 0, 1);
 
 // Node colors
@@ -93,6 +90,10 @@ const nextAlignment = (alignment, childDir) => {
 };
 export default class Viewport {
     constructor() {
+        this._pageBackgroundColor = new Color(
+            .2, .2, .9, 1
+        )
+
         this._saveGraph = () => {};
         this._container = null;
         this._widget = null;
@@ -114,6 +115,24 @@ export default class Viewport {
             }
         }
         this._showEditor = false;
+
+        this._scheduledPostRender = null;
+
+        this._nodeStyles = new WeakMap();
+        this._defaultNodeStyle = {
+            backgroundColor: DEFAULT_NODE_STYLE.backgroundColor.asHex(),
+            borderColor: DEFAULT_NODE_STYLE.borderColor.asHex(),
+            lineColor: DEFAULT_NODE_STYLE.lineColor.asHex(),
+            textColor: DEFAULT_NODE_STYLE.textColor.asHex(),
+            backgroundAlpha: DEFAULT_NODE_STYLE.backgroundColor.a(),
+            borderAlpha: DEFAULT_NODE_STYLE.borderColor.a(),
+            lineAlpha: DEFAULT_NODE_STYLE.lineColor.a(),
+            textAlpha: DEFAULT_NODE_STYLE.textColor.a(),
+        };
+    }
+
+    pageBackgroundColor() {
+        return this._pageBackgroundColor;
     }
 
     logMessage(...msgParts) {
@@ -280,7 +299,6 @@ export default class Viewport {
                     this._userCaret.moveTo(selectedNode);
                     this.refresh();
                 }
-                this.logMessage("Mouse down on node");
                 touchingNode = true;
                 this.refresh();
             }
@@ -587,6 +605,9 @@ export default class Viewport {
             case '~':
                 this.toggleNodeScale();
                 break;
+            case 'c':
+                this.toggleNodeStyling();
+                break;
             case 'u':
                 this.undo();
                 break;
@@ -610,7 +631,7 @@ export default class Viewport {
         }).observe(canvas);
 
 
-        canvas.style.background = pageBackgroundColor.asRGBA();
+        canvas.style.background = this._pageBackgroundColor.asRGBA();
         //canvas.style.overflow = 'hidden';
 
         const textCanvas = document.createElement('canvas');
@@ -636,6 +657,73 @@ export default class Viewport {
                 this.toggleEditor();
             }
         });
+    }
+
+    toJSON() {
+        const styles = {};
+        this._userCaret.root().paintGroup().forEach(pg => {
+            pg.siblings().forEach(node => {
+                if (this._nodeStyles.has(node)) {
+                    styles[node.id()] = this._nodeStyles.get(node);
+                }
+            });
+        });
+        return {
+            styles,
+            defaultNodeStyle: this.defaultNodeStyle(),
+            pageBackgroundColor: this.pageBackgroundColor().asRGBA(),
+            cam: this.camera().toJSON()
+        };
+    }
+
+    camera() {
+        return this._cam;
+    }
+
+    load(viewportData) {
+        console.log("Loading", viewportData);
+        if (!viewportData) {
+            return;
+        }
+        if (viewportData.defaultNodeStyle) {
+            this.updateDefaultNodeStyle(viewportData.defaultNodeStyle);
+        }
+        if (viewportData.styles) {
+            this._userCaret.root().paintGroup().forEach(pg => {
+                pg.siblings().forEach(node => {
+                    if (viewportData.styles[node.id()]) {
+                        console.log(viewportData.styles[node.id()]);
+                        this.updateNodeStyle(node, viewportData.styles[node.id()]);
+                    }
+                });
+            });
+        }
+        if (viewportData.cam) {
+            this.camera().restore(viewportData.cam);
+            this._showInCamera = false;
+            this._checkScale = false;
+        }
+        if (viewportData.pageBackgroundColor) {
+            this.setPageBackgroundColor(Color.fromRGB(viewportData.pageBackgroundColor));
+        }
+        this.refresh();
+    }
+
+    toggleNodeStyling() {
+        this._showingStyling = !this._showingStyling;
+        if (this._showingStyling) {
+            this.carouselContainer().style.display = 'none';
+        } else {
+            this.carouselContainer().style.display = 'block';
+        }
+        if (this._toggleNodeStyling !== null) {
+            this._toggleNodeStyling(this._showingStyling);
+        }
+        this.refresh();
+    }
+
+    setToggleNodeStyling(toggleNodeStyling) {
+        this._toggleNodeStyling = toggleNodeStyling;
     }
 
     moveOutward() {
@@ -756,6 +844,7 @@ export default class Viewport {
     }
 
     refresh() {
+        this._worldLabels.clear();
         this.cancelPostRender();
         requestAnimationFrame(() => {
             this.paint();
@@ -766,7 +855,7 @@ export default class Viewport {
         if (this._scheduledPostRender === null) {
             return;
         }
-        cancelAnimationFrame(this._scheduledPostRender);
+        this._scheduledPostRender();
         this._scheduledPostRender = null;
     }
 
@@ -774,26 +863,39 @@ export default class Viewport {
         if (this._scheduledPostRender) {
             return;
         }
-        this.cancelPostRender();
-        this._scheduledPostRender = requestAnimationFrame(() => {
-            this._scheduledPostRender = null;
-            const needsRender = this.postRender();
-            if (needsRender) {
-                this.schedulePostRender();
+        const cam = this._cam;
+        const ctx = this._ctx;
+
+        this._scheduledPostRender = this._worldLabels.prepareRender(
+            ctx,
+            cam.x(),
+            cam.y(),
+            cam.width(),
+            cam.height(),
+            cam.scale(),
+            () => {
+                requestAnimationFrame(() => {
+                    this._scheduledPostRender = null;
+                    ctx.resetTransform();
+                    ctx.scale(cam.scale(), cam.scale());
+                    ctx.translate(cam.x(), cam.y());
+                    this._worldLabels.render(ctx);
+                });
             }
-        });
+        );
     };
 
-    show(widget) {
+    show(widget, viewport) {
         if (!widget) {
             throw new Error("Refusing to show falsy widget");
         }
-        if (this._widget === widget) {
-            this.repaint();
-            return;
+        if (this._widget !== widget) {
+            this._widget = widget;
+            this._userCaret = new DirectionCaret(widget);
         }
-        this._widget = widget;
-        this._userCaret = new DirectionCaret(widget);
+        if (viewport) {
+            this.load(viewport);
+        }
         this.repaint();
     }
 
@@ -899,6 +1001,70 @@ export default class Viewport {
         }
     }
 
+    updateDefaultNodeStyle(newRules) {
+        this._defaultNodeStyle = {
+            ...this.defaultNodeStyle,
+            ...newRules
+        };
+        this.invalidateAll();
+    }
+
+    invalidateAll() {
+        this._userCaret.root().paintGroup().forEach(pg => {
+            pg.siblings().forEach(node => node.invalidate());
+        });
+    }
+
+    defaultNodeStyle() {
+        return this._defaultNodeStyle;
+    }
+
+    getNodeStyle(node) {
+        node = node ??  this._userCaret.node();
+        let curStyle = this._nodeStyles.get(node);
+        if (curStyle === undefined) {
+            return this.defaultNodeStyle();
+        }
+        return {
+            ...this.defaultNodeStyle(),
+            ...curStyle
+        };
+    }
+
+    updateNodeStyle(...args) {
+        let node, newRules;
+        if (args.length < 1) {
+            throw new Error("Usage: updateNodeStyle([node], newRules)");
+        } else if (args.length === 1) {
+            node = this._userCaret.node();
+            newRules = args[0];
+        } else {
+            node = args[0];
+            newRules = args[1];
+        }
+
+        if (newRules.pageBackgroundColor) {
+            this.setPageBackgroundColor(Color.fromHex(newRules.pageBackgroundColor));
+            delete newRules.pageBackgroundColor;
+        }
+
+        if (Object.keys(newRules).length === 0) {
+            return;
+        }
+
+        this._nodeStyles.set(node, {
+            ...(this._nodeStyles.get(node) ?? {}),
+            ...newRules
+        });
+        node.invalidate();
+        this.refresh();
+    }
+
+    setPageBackgroundColor(color) {
+        this._pageBackgroundColor = color;
+        this.refresh();
+    }
+
     createLayout() {
         return new CommitLayout(this._widget, {
             size: (node, size) => {
@@ -973,14 +1139,15 @@ export default class Viewport {
             painter.initBuffer(numBlocks);
 
             pg.siblings().forEach(node => {
+                const style = this.getNodeStyle(node);
                 paintNodeLines(node, lineThickness/2, (x, y, w, h) => {
-                    painter.setBorderColor(new Color(0, 0, 0, 0));
-                    painter.setBackgroundColor(lineColor);
+                    painter.setBorderColor(Color.fromHex(style.lineColor).setA(style.lineAlpha));
+                    painter.setBackgroundColor(Color.fromHex(style.lineColor).setA(style.lineAlpha));
                     painter.drawBlock(x, y, w, h, 0, 0);
                 });
                 paintNodeBounds(node, (x, y, w, h) => {
-                    painter.setBackgroundColor(backgroundColor);
-                    painter.setBorderColor(borderColor);
+                    painter.setBackgroundColor(Color.fromHex(style.backgroundColor).setA(style.backgroundAlpha));
+                    painter.setBorderColor(Color.fromHex(style.borderColor).setA(style.borderAlpha));
                     const scale = node.layout().groupScale();
                     if (nodeHasValue(node) || node.neighbors().hasNode(Direction.INWARD)) {
                         painter.drawBlock(x, y, w, h, borderRoundedness * scale, borderThickness * scale);
@@ -1089,10 +1256,10 @@ export default class Viewport {
         glProvider.render();
         gl.viewport(0, 0, cam.width(), cam.height());
 
-        gl.clearColor(pageBackgroundColor.r(),
-            pageBackgroundColor.g(),
-            pageBackgroundColor.b(),
-            pageBackgroundColor.a()
+        gl.clearColor(this._pageBackgroundColor.r(),
+            this._pageBackgroundColor.g(),
+            this._pageBackgroundColor.b(),
+            this._pageBackgroundColor.a()
         );
         gl.enable(gl.BLEND);
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
@@ -1137,9 +1304,16 @@ export default class Viewport {
             if (!nodeHasValue(node)) {
                 return;
             }
+            const lines = node.value().toString().split('\n');
+            if(node.layout().absoluteScale() * cam.scale() < LABEL_IS_VISIBLE_SCALE) {
+                this._worldLabels.draw(lines[0], node.layout().absoluteX(), node.layout().absoluteY(), 1.5*fontSize,
+                    node.layout().absoluteScale(), new Color(1, 1, 1, 1), new Color(0, 0, 0, 1));
+            }
+            if(node.layout().absoluteScale() * cam.scale() < TEXT_IS_VISIBLE_SCALE) {
+                return;
+            }
             ctx.fillStyle = borderColor.asRGBA();
             ctx.save();
-            const lines = node.value().toString().split('\n');
             if (node.neighbors().hasNode(Direction.INWARD)) {
                 const nodeSize = [0, 0]
                 node.layout().size(nodeSize);
@@ -1168,14 +1342,13 @@ export default class Viewport {
                 }
             }
                 this._ctx.font = `${fontSize}px sans-serif`;
+                const style = this.getNodeStyle(node);
                 ctx.scale(node.layout().groupScale(), node.layout().groupScale());
-                ctx.fillStyle = textColor.asRGBA();
+                ctx.fillStyle = Color.fromHex(style.textColor).setA(style.textAlpha).asRGBA();
                 lines.forEach(line => {
                     ctx.fillText(line, 0, 0)
                     ctx.translate(0, lineHeight);
                 });
-            this._worldLabels.draw(lines[0], node.layout().absoluteX(), node.layout().absoluteY(), 1.5*fontSize,
-                node.layout().absoluteScale(), new Color(1, 1, 1, 1), new Color(0, 0, 0, 1));
             ctx.restore();
             });
             ctx.restore();
@@ -1198,26 +1371,37 @@ export default class Viewport {
             ctx.strokeStyle = caretColor.asRGBA();
             const bodySize = [0, 0];
             layout.size(bodySize);
-            if (nodeHasValue(userCaret.node()) || userCaret.node().neighbors().hasNode(Direction.INWARD)) {
-                ctx.beginPath();
-                ctx.roundRect(
-                    layout.absoluteX() - layout.absoluteScale() * bodySize[0]/2 + borderThickness/4 * layout.absoluteScale(),
-                    layout.absoluteY() - layout.absoluteScale() * bodySize[1]/2 + borderThickness/4 * layout.absoluteScale(),
-                    layout.absoluteScale() * bodySize[0] - borderThickness/2 * layout.absoluteScale(),
-                    layout.absoluteScale() * bodySize[1] - borderThickness/2 * layout.absoluteScale(),
-                    borderRoundedness * layout.absoluteScale() /2.13
-                );
-                ctx.stroke();
+            if (this.showingCaret()) {
+                if (nodeHasValue(userCaret.node()) || userCaret.node().neighbors().hasNode(Direction.INWARD)) {
+                    ctx.beginPath();
+                    ctx.roundRect(
+                        layout.absoluteX() - layout.absoluteScale() * bodySize[0]/2 + borderThickness/4 * layout.absoluteScale(),
+                        layout.absoluteY() - layout.absoluteScale() * bodySize[1]/2 + borderThickness/4 * layout.absoluteScale(),
+                        layout.absoluteScale() * bodySize[0] - borderThickness/2 * layout.absoluteScale(),
+                        layout.absoluteScale() * bodySize[1] - borderThickness/2 * layout.absoluteScale(),
+                        borderRoundedness * layout.absoluteScale() /2.13
+                    );
+                    ctx.stroke();
+                } else {
+                    ctx.beginPath();
+                    ctx.arc(
+                        layout.absoluteX(),
+                        layout.absoluteY(),
+                        bodySize[0]/2 * layout.absoluteScale() - borderThickness/4 * layout.absoluteScale(),
+                        0,
+                        Math.PI * 2
+                    )
+                    ctx.stroke();
+                }
             } else {
-                ctx.beginPath();
-                ctx.arc(
-                    layout.absoluteX(),
-                    layout.absoluteY(),
-                    bodySize[0]/2 * layout.absoluteScale() - borderThickness/4 * layout.absoluteScale(),
-                    0,
-                    Math.PI * 2
-                )
-                ctx.stroke();
+                ctx.lineWidth = .1;
+                ctx.lineJoin = "round";
+                ctx.strokeRect(
+                    layout.absoluteX() - layout.absoluteScale() * bodySize[0]/2,
+                    layout.absoluteY() - layout.absoluteScale() * bodySize[1]/2,
+                    layout.absoluteScale() * bodySize[0],
+                    layout.absoluteScale() * bodySize[1]
+                );
             }
 
             ctx.resetTransform();
@@ -1225,7 +1409,7 @@ export default class Viewport {
             //ctx.textBaseline = 'top';
             //ctx.fillText(this._userCaret.node()?.value(), 0, 0);
     
-            if (this.showNodeActions()) {
+            if (this.showNodeActions() && this.showingCaret()) {
                 this.carouselContainer().style.display = 'block';
                 this.carouselContainer().style.transform = `scale(${cam.scale()}) translate(${layout.absoluteX() + cam.x()}px, ${layout.absoluteY() + cam.y()}px) scale(${1/cam.scale()}) translate(-${cam.width()/2}px, -${cam.height()/2}px) translate(-50%, -50%)`;
 
@@ -1246,40 +1430,13 @@ export default class Viewport {
             this.refresh();
         } else {
             attempts = 0;
-            this._worldLabelRendering = null;
+            this.cancelPostRender();
             this.schedulePostRender();
         }
     };
 
-    postRender() {
-        const cam = this._cam;
-        const ctx = this._ctx;
-
-        if (!this._worldLabelRendering) {
-            this._worldLabelRendering = this._worldLabels.render(
-                ctx, 
-                cam.x(),
-                cam.y(),
-                cam.width(),
-                cam.height(),
-                cam.scale()
-            );
-        }
-
-        const start = Date.now();
-        while (Date.now() - start < POST_RENDER_TIMEOUT_MS) {
-            ctx.resetTransform();
-            ctx.scale(cam.scale(), cam.scale());
-            ctx.translate(cam.x(), cam.y());
-            if (!this._worldLabelRendering.crank()) {
-                // Done rendering
-                this._worldLabelRendering = null;
-                return false;
-            }
-        }
-
-        // Timed out.
-        return true;
+    showingCaret() {
+        return !this._showingStyling;
     }
 
     showNodeActions() {

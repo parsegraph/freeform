@@ -1,13 +1,10 @@
 import Occluder from './Occluder';
 
-const canvas = document.createElement("canvas");
-const ctx = canvas.getContext("2d");
-
 onmessage = (e) => {
     postMessage(runOcclusion(...e.data));
 };
 
-function runOcclusion(worldX, worldY, worldWidth, worldHeight, worldScale, allLabels, scaleMultiplier, font)
+function runOcclusion(worldX, worldY, worldWidth, worldHeight, worldScale, allLabels)
 {
     const x = worldX;
     const y = worldY;
@@ -15,20 +12,19 @@ function runOcclusion(worldX, worldY, worldWidth, worldHeight, worldScale, allLa
     const w = worldWidth / scale;
     const h = worldHeight / scale;
 
-    const occluder = new Occluder(-x + w / 1, -y + h / 2, w, h);
+    const occluder = new Occluder(-x + w / 2, -y + h / 2, w, h);
 
-    return allLabels.filter(label => {
-        if (label.scale() > scaleMultiplier / scale) {
-            return false;
+    const drawnLabels = [];
+
+    let markTime = Date.now();
+    allLabels.forEach((label, index) => {
+        if (occluder.occlude(label.x, label.y, label.width, label.height)) {
+            drawnLabels.push(index);
         }
-        if (label.knownSize()) {
-            return occluder.occlude(label.x(), label.y(), label.measuredWidth()/scale, label.measuredHeight()/scale);
+        if (Date.now() - markTime > 1000) {
+            postMessage(index / allLabels.length);
+            markTime = Date.now();
         }
-        ctx.font = `${Math.round(label.fontSize() / scale)}px ${font}`;
-        const metrics = ctx.measureText(label.text());
-        const height = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
-        const width = metrics.width;
-        label.setMeasuredSize(width * scale, height * scale);
-        return occluder.occlude(label.x(), label.y(), width, height);
     });
+    return drawnLabels;
 };

@@ -7083,6 +7083,11 @@ parsegraph-checkglerror@^1.5.8:
   resolved "https://registry.yarnpkg.com/parsegraph-checkglerror/-/parsegraph-checkglerror-1.5.8.tgz#2aedbd57d8b84b127a07781036263dfeb954ca36"
   integrity sha512-UMQXzOLqz5zvqhiPtc7VTm82ly83+s0PO2r3CDnGDbou4PnItyL3px/YdOqRfR9VRkXDfJhHQvKux+c74YEn8A==
 
+parsegraph-color@1.5.1:
+  version "1.5.1"
+  resolved "https://registry.yarnpkg.com/parsegraph-color/-/parsegraph-color-1.5.1.tgz#6fc5ba4908f8861c55b988aa8d84d45caa0216f4"
+  integrity sha512-TzJnb1rx7pzz8SokYiBGDSdDFZ9CjQfWdsBUC/LLII0SzOQlziN/X6V0zxeOcSj68VFKLx82dQHwZW8DIkaoDA==
+
 parsegraph-color@^1.4.13:
   version "1.4.13"
   resolved "https://registry.yarnpkg.com/parsegraph-color/-/parsegraph-color-1.4.13.tgz#fa94a783c42616ddb5405eb5e6b0d529fc212d35"

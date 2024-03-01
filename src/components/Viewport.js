@@ -27,7 +27,7 @@ import {
 } from 'parsegraph-matrix';
 import { showNodeInCamera } from "parsegraph-showincamera";
 import Rect from "parsegraph-rect";
-import { USE_LOCAL_STORAGE } from "../settings";
+import { USE_LOCAL_STORAGE, POST_RENDER_TIMEOUT_MS } from "../settings";
 import { WorldLabels } from "./WorldLabel";
 
 const fontSize = 10;
@@ -756,8 +756,31 @@ export default class Viewport {
     }
 
     refresh() {
+        this.cancelPostRender();
         requestAnimationFrame(() => {
             this.paint();
+        });
+    };
+
+    cancelPostRender() {
+        if (this._scheduledPostRender === null) {
+            return;
+        }
+        cancelAnimationFrame(this._scheduledPostRender);
+        this._scheduledPostRender = null;
+    }
+
+    schedulePostRender() {
+        if (this._scheduledPostRender) {
+            return;
+        }
+        this.cancelPostRender();
+        this._scheduledPostRender = requestAnimationFrame(() => {
+            this._scheduledPostRender = null;
+            const needsRender = this.postRender();
+            if (needsRender) {
+                this.schedulePostRender();
+            }
         });
     };
 
@@ -1223,18 +1246,41 @@ export default class Viewport {
             this.refresh();
         } else {
             attempts = 0;
-            ctx.scale(cam.scale(), cam.scale());
-            ctx.translate(cam.x(), cam.y());
-            this._worldLabels.render(
+            this._worldLabelRendering = null;
+            this.schedulePostRender();
+        }
+    };
+
+    postRender() {
+        const cam = this._cam;
+        const ctx = this._ctx;
+
+        if (!this._worldLabelRendering) {
+            this._worldLabelRendering = this._worldLabels.render(
                 ctx, 
                 cam.x(),
                 cam.y(),
                 cam.width(),
                 cam.height(),
                 cam.scale()
-            )
+            );
         }
-    };
+
+        const start = Date.now();
+        while (Date.now() - start < POST_RENDER_TIMEOUT_MS) {
+            ctx.resetTransform();
+            ctx.scale(cam.scale(), cam.scale());
+            ctx.translate(cam.x(), cam.y());
+            if (!this._worldLabelRendering.crank()) {
+                // Done rendering
+                this._worldLabelRendering = null;
+                return false;
+            }
+        }
+
+        // Timed out.
+        return true;
+    }
 
     showNodeActions() {
         return this._showEditor;

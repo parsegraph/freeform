@@ -52,7 +52,7 @@ export class WorldLabel {
     text,
     x,
     y,
-    size,
+    fontSize,
     scale,
     color,
     strokeColor
@@ -60,10 +60,27 @@ export class WorldLabel {
     this._text = text;
     this._x = x;
     this._y = y;
-    this._size = size;
+    this._fontSize = fontSize;
     this._scale = scale;
     this._color = color;
     this._strokeColor = strokeColor;
+  }
+
+  knownSize() {
+    return !isNaN(this._measuredWidth) && !isNaN(this._measuredHeight);
+  }
+
+  setMeasuredSize(w, h) {
+    this._measuredWidth = w;
+    this._measuredHeight = h;
+  }
+
+  measuredWidth() {
+    return this._measuredWidth;
+  }
+
+  measuredHeight() {
+    return this._measuredHeight;
   }
 
   x() {
@@ -78,8 +95,8 @@ export class WorldLabel {
     return this._y;
   }
 
-  size() {
-    return this._size;
+  fontSize() {
+    return this._fontSize;
   }
 
   color() {
@@ -91,12 +108,109 @@ export class WorldLabel {
   }
 }
 
+class WorldLabelRendering {
+  constructor(worldLabels, ctx, worldX, worldY, worldWidth, worldHeight, worldScale) {
+    this._worldLabels = worldLabels;
+    this._ctx = ctx;
+    this._worldX = worldX;
+    this._worldY = worldY;
+    this._worldWidth = worldWidth;
+    this._worldHeight = worldHeight;
+    this._worldScale = worldScale;
+    this._drawnLabels = [];
+    this._labelsIndex = 0;
+  }
+
+  worldLabels() {
+    return this._worldLabels;
+  }
+
+  crank() {
+    const needRender = this.runOcclusion();
+    return this.renderLabels() || needRender;
+  }
+
+  runOcclusion() {
+    const ctx = this._ctx;
+    const x = this._worldX;
+    const y = this._worldY;
+    const scale = this._worldScale;
+    const w = this._worldWidth / scale;
+    const h = this._worldHeight / scale;
+    if (!this._occluder) {
+      this._occluder = new Occluder(-x + w / 2, -y + h / 2, w, h);
+    }
+    const occluder = this._occluder;
+
+    const allLabels = this.worldLabels().labels();
+    if (this._labelsIndex >= allLabels.length) {
+      console.log("Done with labels");
+      return false;
+    }
+    const label = allLabels[this._labelsIndex++];
+
+    if (label.scale() > this.worldLabels().scaleMultiplier() / scale) {
+      return true;
+    }
+
+    ctx.font = `${Math.round(
+      label.fontSize() / scale
+    )}px ${this.worldLabels().font()}`;
+
+    const shouldDraw = () => {
+      if (label.knownSize()) {
+        return occluder.occlude(label.x(), label.y(), label.measuredWidth()/scale, label.measuredHeight()/scale);
+      }
+      const metrics = ctx.measureText(label.text());
+      const height =
+        metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
+      const width = metrics.width;
+      label.setMeasuredSize(width * scale, height * scale);
+      return occluder.occlude(label.x(), label.y(), width, height);
+    }
+
+    if (shouldDraw()) {
+      this._drawnLabels.push(label);
+    } else {
+    }
+
+    return true;
+  }
+
+  renderLabels() {
+    const ctx = this._ctx;
+    const scale = this._worldScale;
+    this._drawnLabels.forEach((label) => {
+      const overlay = ctx;
+      overlay.font = `${Math.round(label.fontSize() / scale)}px ${this.worldLabels().font()}`;
+      overlay.strokeStyle = label.strokeColor()
+        ? label.strokeColor().asRGB()
+        : label.color().luminance() < 0.1
+        ? "white"
+        : "black";
+      overlay.miterLimit = this.worldLabels().lineWidth();
+      overlay.lineWidth = this.worldLabels().lineWidth() / scale;
+      overlay.lineCap = "round";
+      overlay.textAlign = "center";
+      overlay.textBaseline = "middle";
+      ctx.strokeText(label.text(), label.x(), label.y());
+      ctx.fillStyle = label.color().asRGB();
+      ctx.fillText(label.text(), label.x(), label.y());
+    });
+    return false;
+  }
+}
+
 export class WorldLabels {
   constructor(scaleMultiplier) {
     this.clear();
     this._lineWidth = 2;
     this._scaleMultiplier = scaleMultiplier;
     this._font = "sans-serif";
+  }
+
+  scaleMultiplier() {
+    return this._scaleMultiplier;
   }
 
   draw(
@@ -108,9 +222,7 @@ export class WorldLabels {
     color = null,
     strokeColor = null
   ) {
-    this._labels.push(
-      new WorldLabel(text, x, y, size, scale, color, strokeColor)
-    );
+    this._labels.push(new WorldLabel(text, x, y, size, scale, color, strokeColor));
   }
 
   clear() {
@@ -137,43 +249,11 @@ export class WorldLabels {
     this._scaleMultiplier = multiplier;
   }
 
+  labels() {
+    return this._labels;
+  }
+
   render(ctx, worldX, worldY, worldWidth, worldHeight, worldScale) {
-    const x = worldX;
-    const y = worldY;
-    const scale = worldScale;
-    const w = worldWidth / scale;
-    const h = worldHeight / scale;
-    this._labels = this._labels.sort((a, b) => b.size() - a.size());
-    const occluder = new Occluder(-x + w / 2, -y + h / 2, w, h);
-    const drawnLabels = this._labels.filter((label) => {
-      if (label.scale() > this._scaleMultiplier / scale) {
-        return false;
-      }
-      ctx.font = `${Math.round(
-        label.size() / scale
-      )}px ${this.font()}`;
-      const metrics = ctx.measureText(label.text());
-      const height =
-        metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
-      const width = metrics.width;
-      return occluder.occlude(label.x(), label.y(), width, height);
-    });
-    drawnLabels.forEach((label) => {
-      const overlay = ctx;
-      overlay.font = `${Math.round(label.size() / scale)}px ${this.font()}`;
-      overlay.strokeStyle = label.strokeColor()
-        ? label.strokeColor().asRGB()
-        : label.color().luminance() < 0.1
-        ? "white"
-        : "black";
-      overlay.miterLimit = this.lineWidth();
-      overlay.lineWidth = this.lineWidth() / scale;
-      overlay.lineCap = "round";
-      overlay.textAlign = "center";
-      overlay.textBaseline = "middle";
-      ctx.strokeText(label.text(), label.x(), label.y());
-      ctx.fillStyle = label.color().asRGB();
-      ctx.fillText(label.text(), label.x(), label.y());
-    });
+    return new WorldLabelRendering(this, ctx, worldX, worldY, worldWidth, worldHeight, worldScale);
   }
 }

@@ -400,14 +400,26 @@ function App() {
     }
   }, [modalRef, nodeStylingModalOpen]);
 
+  const canvasRef = useRef();
+
+  useEffect(() => {
+    if (!canvasRef.current) {
+      // No canvas yet.
+      return;
+    }
+    viewport.mount(canvasRef.current);
+  }, [canvasRef, viewport]);
 
   return (<>
   <div className="App">
-      <Parsegraph viewport={viewport}/>
+      <div style={{position: 'fixed', inset: '0'}} ref={canvasRef} tabIndex={0}/>;
       {(!hasWidget || importModalOpen) && <div className="modal">
         <ImportModal sampleName={sampleName} onClose={hasWidget ? () => setImportModalOpen(false) : null} openGraph={(graph, selectedNode, roomName, viewportData)=>{
           setSampleName(null);
           setRoomName(roomName);
+          if (canvasRef.current) {
+            canvasRef.current.focus();
+          }
           graphs.save(graph, selectedNode, viewportData);
           refresh(!!viewportData?.cam);
         }}/>
@@ -485,20 +497,6 @@ function ParsegraphEditor({viewport}) {
 
   return <div ref={editorContainerRef}>
         </div>;
-}
-
-function Parsegraph({viewport}) {
-  const canvasRef = useRef();
-
-  useEffect(() => {
-    if (!canvasRef.current) {
-      // No canvas yet.
-      return;
-    }
-    viewport.mount(canvasRef.current);
-  }, [canvasRef, viewport]);
-
-  return <div style={{position: 'fixed', inset: '0'}} ref={canvasRef} tabIndex={0}/>;
 }
 
 function NodeActions({viewport}) {

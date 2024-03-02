@@ -337,7 +337,7 @@ function ImportFromTemplate({openGraph, onClose}) {
     <input style={{minWidth: "2em"}} type="checkbox" checked={vertical} onChange={e=>setVertical(e.target.checked)}/>
     </label></div>}
   <div className="buttons">
-    <input type="submit" style={{flexGrow:'1'}} onClick={createFromTemplate} value="Create"/>
+    <input type="submit" style={{flexGrow:'1'}} onClick={createFromTemplate} value="Create" autoFocus/>
     {onClose && <button style={{flexGrow:'1'}} onClick={onClose}>Cancel</button>}
   </div></form>;
 }

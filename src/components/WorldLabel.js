@@ -73,8 +73,20 @@ export class WorldLabels {
     this._lineWidth = 2;
     this._scaleMultiplier = scaleMultiplier;
     this._font = "sans-serif";
-  }
 
+    this._worker = new Worker("occluder.js");
+    this._worker.onmessage = (e) => {
+      if (typeof e.data === "number") {
+        return;
+      }
+      if (e.data.key !== this._workerKey) {
+        return;
+      }
+      if (this._workerCallback) {
+        this._workerCallback(e.data.labels);
+      }
+    };
+  }
 
   scaleMultiplier() {
     return this._scaleMultiplier;
@@ -94,6 +106,8 @@ export class WorldLabels {
 
   clear() {
     this._labels = [];
+    this._workerKey = null;
+    this._workerCallback = null;
   }
 
   lineWidth() {
@@ -141,7 +155,12 @@ export class WorldLabels {
         return true;
     });
 
-    this._worker = new Worker("/occluder.js");
+    this._workerKey = Math.random() + "-" + Date.now();
+    this._workerCallback = (data) => {
+      this._drawnLabels = data.map(index => filteredLabels[index]);
+      onFinish();
+    };
+
     this._worker.postMessage([
       worldX,
       worldY,
@@ -159,20 +178,15 @@ export class WorldLabels {
           height: label.measuredHeight()
         };
       }),
-    ])
-    this._worker.onmessage = (e) => {
-      if (typeof e.data === "number") {
-        return;
-      }
-      this._drawnLabels = e.data.map(index => filteredLabels[index]);
-      onFinish();
-    };
+      this._workerKey
+    ]);
+
     return () => {
-      this._worker.terminate();
+
     };
   }
 
-  render(ctx) {
+  render(ctx, bg) {
     if (this._drawnLabels == null) {
       return;
     }
@@ -180,18 +194,16 @@ export class WorldLabels {
     this._drawnLabels.forEach((label) => {
       const overlay = ctx;
       overlay.font = `${Math.round(label.fontSize() / scale)}px ${this.font()}`;
-      overlay.strokeStyle = label.strokeColor()
-        ? label.strokeColor().asRGB()
-        : label.color().luminance() < 0.1
-        ? "white"
-        : "black";
+
+      const lumLimit = 0.2
+      overlay.strokeStyle = bg.luminance() > lumLimit ? "white" : "black";
       overlay.miterLimit = this.lineWidth();
       overlay.lineWidth = this.lineWidth() / scale;
       overlay.lineCap = "round";
       overlay.textAlign = "center";
       overlay.textBaseline = "middle";
       ctx.strokeText(label.text(), label.x(), label.y());
-      ctx.fillStyle = label.color().asRGB();
+      ctx.fillStyle = bg.luminance() > lumLimit ? "black" : "white";
       ctx.fillText(label.text(), label.x(), label.y());
     });
   }

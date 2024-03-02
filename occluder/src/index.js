@@ -1,7 +1,10 @@
 import Occluder from './Occluder';
 
 onmessage = (e) => {
-    postMessage(runOcclusion(...e.data));
+    postMessage({
+        key: e.data[e.data.length - 1],
+        labels: runOcclusion(...e.data)
+    });
 };
 
 function runOcclusion(worldX, worldY, worldWidth, worldHeight, worldScale, allLabels)

@@ -177,7 +177,7 @@ const buildRandomRainbow = () => {
   const car = new DirectionCaret();
   const styles = {};
 
-  const size = 10;
+  const size = 25;
   for(let col = 0; col < size; ++col) {
     car.spawnMove('d');
     car.push();
@@ -205,6 +205,7 @@ const buildRainbow = (vert) => {
   for(let l = 0; l < size; ++l) {
     car.spawnMove(vert ? 'd' : 'f');
     car.push();
+    car.crease();
 
     const llerp = (l/(size-1));
     for(let col = 0; col < size; ++col) {
@@ -266,7 +267,7 @@ function ImportFromTemplate({openGraph, onClose}) {
         openGraph(buildRandom(250));
         break;
       case "alt_columns":
-        openGraph(buildAlternatingColumns());
+        openGraph(...buildAlternatingColumns());
         break;
       case "march_madness":
         openGraph(buildMarchMadness(false));

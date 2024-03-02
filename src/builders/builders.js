@@ -1,4 +1,5 @@
 import { Alignment, Direction, DirectionCaret, DirectionNode, PreferredAxis, reverseDirection, turnPositive } from 'parsegraph';
+import Color from 'parsegraph-color';
 
 const SIZE = 10;
 
@@ -84,16 +85,23 @@ const buildGrid = (sizeStr) => {
 };
 
 const buildAlternatingColumns = () => {
+  const styles = {};
   const car = new DirectionCaret();
-  for(let col = 0; col < SIZE; ++col) {
+  for(let col = 0; col < 10 * SIZE; ++col) {
     car.spawnMove('f');
     car.push();
+    car.crease();
+    const c = Color.random();
     for(let row = 0; row < SIZE; ++row) {
       car.spawnMove(col % 2 !== 0 ? 'u' : 'd', row);
+      styles[car.node().id()] = {
+        backgroundColor: c.asHex(),
+        backgroundAlpha: 1
+      }
     }
     car.pop();
   }
-  return car.root();
+  return [car.root(), null, null, { styles }];
 }
 
 const buildPlanner = (inc = 15) => {

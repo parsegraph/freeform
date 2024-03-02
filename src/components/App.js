@@ -68,7 +68,6 @@ class GraphStack {
     if (selectedNode) {
       newGraphData.selectedNode = typeof selectedNode === "object" ? selectedNode.id() : selectedNode;
     }
-    console.log(viewport);
     newGraphData.viewport = viewport instanceof Viewport ? viewport.toJSON() : viewport;
     if (this.hasWidget() && JSON.stringify(this._actions[this._actionIndex]) === JSON.stringify(newGraphData)) {
       return;
@@ -290,7 +289,7 @@ function App() {
       return;
     }
     viewport.setSaveGraph((graph, selectedNode)=>{
-      graphs.save(graph, selectedNode);
+      graphs.save(graph, selectedNode, viewport.toJSON());
       if (autopublish && PUBLIC_SERVERS) {
         publish();
       } else {
@@ -305,7 +304,7 @@ function App() {
     if (graphs._actionIndex < 0) {
       return;
     }
-    viewport.show(graphs.widget());
+    viewport.show(graphs.widget(), graphs.viewportData());
   }, [graphs, viewport, refresh, autopublish, publish, undo, redo])
   
   useEffect(() => {
@@ -370,7 +369,7 @@ function App() {
     };
     
     modal.addEventListener('mousedown', (e) => {
-      if (e.target.tagName === "INPUT") {
+      if (e.target.tagName === "INPUT" || e.target.tagName === "BUTTON") {
         return;
       }
       window.addEventListener('mousemove', mouseMove, true);
@@ -389,7 +388,7 @@ function App() {
     window.addEventListener('touchend', touchEnd, false);
 
     modal.addEventListener('touchstart', (e) => {
-      if (e.target.tagName === "INPUT") {
+      if (e.target.tagName === "INPUT" || e.target.tagName === "BUTTON") {
         return;
       }
       e.preventDefault();

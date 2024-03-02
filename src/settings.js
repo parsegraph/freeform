@@ -6,7 +6,7 @@ const PUBLIC_SERVERS = false;
 const HIDE_PUBLIC_SERVERS_TAB = true;
 const POST_RENDER_TIMEOUT_MS = 15;
 const LABEL_IS_VISIBLE_SCALE = 0.8;
-const TEXT_IS_VISIBLE_SCALE = 0.8;
+const TEXT_IS_VISIBLE_SCALE = 0.2;
 const DEFAULT_NODE_STYLE = {
     backgroundColor: new Color(0.5, 1, 0.5, 0.1),
     borderColor: new Color(0, 0, 0, 0.5),

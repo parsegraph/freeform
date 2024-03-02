@@ -18,7 +18,7 @@ import {
 import Color from 'parsegraph-color';
 import { BasicGLProvider } from 'parsegraph-compileprogram';
 import { WebGLBlockPainter } from 'parsegraph-blockpainter';
-import Camera from 'parsegraph-camera';
+import Camera, { containsAny } from 'parsegraph-camera';
 import {
   makeTranslation3x3,
   matrixMultiply3x3,
@@ -100,7 +100,7 @@ export default class Viewport {
         this._painters = new WeakMap();
         this._mousePos = [NaN, NaN];
 
-        this._worldLabels = new WorldLabels(minVisibleTextScale);
+        this._worldLabels = null;
 
         this._showInCamera = true;
 
@@ -142,10 +142,11 @@ export default class Viewport {
         elem.style.pointerEvents = 'none';
         elem.style.userSelect = 'none';
         elem.innerText = msg;
-        while(this._logContainer.childElementCount > 10) {
-            this._logContainer.firstChild.remove();
+        const logContainer = this.logContainer();
+        while(logContainer.childElementCount > 10) {
+            logContainer.firstChild.remove();
         }
-        this._logContainer.appendChild(elem);
+        logContainer.appendChild(elem);
 
         setTimeout(()=>{
             elem.remove();
@@ -681,7 +682,6 @@ export default class Viewport {
     }
 
     load(viewportData) {
-        console.log("Loading", viewportData);
         if (!viewportData) {
             return;
         }
@@ -692,7 +692,6 @@ export default class Viewport {
             this._userCaret.root().paintGroup().forEach(pg => {
                 pg.siblings().forEach(node => {
                     if (viewportData.styles[node.id()]) {
-                        console.log(viewportData.styles[node.id()]);
                         this.updateNodeStyle(node, viewportData.styles[node.id()]);
                     }
                 });
@@ -764,7 +763,9 @@ export default class Viewport {
     repaint() {
         requestAnimationFrame(() => {
             this._layout = this.createLayout();
-            this._worldLabels = new WorldLabels(minVisibleTextScale);
+            if (this._worldLabels) {
+                this._worldLabels.clear();
+            }
             this._ensureVisible = true;
             this.paint();
         });
@@ -844,7 +845,9 @@ export default class Viewport {
     }
 
     refresh() {
-        this._worldLabels.clear();
+        if (this._worldLabels) {
+            this._worldLabels.clear();
+        }
         this.cancelPostRender();
         requestAnimationFrame(() => {
             this.paint();
@@ -860,7 +863,7 @@ export default class Viewport {
     }
 
     schedulePostRender() {
-        if (this._scheduledPostRender) {
+        if (this._scheduledPostRender || !this._worldLabels) {
             return;
         }
         const cam = this._cam;
@@ -879,7 +882,7 @@ export default class Viewport {
                     ctx.resetTransform();
                     ctx.scale(cam.scale(), cam.scale());
                     ctx.translate(cam.x(), cam.y());
-                    this._worldLabels.render(ctx);
+                    this._worldLabels.render(ctx, this.pageBackgroundColor());
                 });
             }
         );
@@ -1126,6 +1129,10 @@ export default class Viewport {
                 painter.clear();
             }
 
+            if (this._bounds && this._bounds.has(pg)) {
+                this._bounds.delete(pg);
+            }
+
             let numBlocks = 0;
             pg.siblings().forEach(node => {
                 paintNodeLines(node, borderThickness, () => {
@@ -1275,12 +1282,28 @@ export default class Viewport {
 
         let pg = this._widget;
         let needsPaint = false;
+        let i = 0;
+        let j = 0;
+        let k = 0;
+        let allGroups = 0;
         do {
+            ++allGroups;
             const painter = this._painters.get(pg);
             if (!painter) {
                 needsPaint = true;
                 continue;
             }
+
+            const b = this.bounds(pg).clone();
+            b.scale(pg.scale());
+            b.translate(pg.layout().absoluteX(), pg.layout().absoluteY());
+
+            const cam = this.camera();
+            if (!cam.containsAny(b)) {
+                pg = pg.paintGroup().next();
+                continue;
+            }
+            ++i;
 
             painter.render(matrixMultiply3x3(
             makeScale3x3(
@@ -1306,12 +1329,17 @@ export default class Viewport {
             }
             const lines = node.value().toString().split('\n');
             if(node.layout().absoluteScale() * cam.scale() < LABEL_IS_VISIBLE_SCALE) {
+                if (!this._worldLabels) {
+                    this._worldLabels = new WorldLabels(minVisibleTextScale);
+                }
+                ++k;
                 this._worldLabels.draw(lines[0], node.layout().absoluteX(), node.layout().absoluteY(), 1.5*fontSize,
                     node.layout().absoluteScale(), new Color(1, 1, 1, 1), new Color(0, 0, 0, 1));
             }
             if(node.layout().absoluteScale() * cam.scale() < TEXT_IS_VISIBLE_SCALE) {
                 return;
             }
+            ++j;
             ctx.fillStyle = borderColor.asRGBA();
             ctx.save();
             if (node.neighbors().hasNode(Direction.INWARD)) {
@@ -1420,13 +1448,21 @@ export default class Viewport {
             }
         }
 
+        /*ctx.resetTransform();
+        ctx.font = "18px sans-serif";
+        ctx.textBaseline = "bottom";
+        ctx.textAlign = "left";
+        ctx.fillStyle = "white";
+        ctx.fillText(`groups=${i}/${allGroups}, text=${j}, labels=${k}`, 0, this._cam.height());
+        ctx.textAlign = "right";
+        ctx.fillText(cam.toString(), cam.width(), cam.height());*/
+
         if (needsPaint) {
             if (attempts > 1000) {
                 console.log("Failed to fully render after ", attempts, "attempts");
                 return;
             }
             attempts++;
-            //console.log("Needs paint");
             this.refresh();
         } else {
             attempts = 0;
@@ -1434,6 +1470,31 @@ export default class Viewport {
             this.schedulePostRender();
         }
     };
+
+    bounds(pg) {
+        if (!this._bounds) {
+            this._bounds = new WeakMap();
+        }
+        if (this._bounds.get(pg)) {
+            return this._bounds.get(pg);
+        }
+        const b = new Rect();
+        pg.siblings().forEach((node) => {
+            if (node.layout().needsAbsolutePos() || node.layout().needsCommit()) {
+                return;
+            }
+            const layout = node.layout();
+            const size = [0, 0];
+            layout.groupSize(size);
+            b.include(
+                layout.groupX(),
+                layout.groupY(),
+                ...size
+            );
+        });
+        this._bounds.set(pg, b);
+        return b;
+    }
 
     showingCaret() {
         return !this._showingStyling;

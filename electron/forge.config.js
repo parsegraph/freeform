@@ -5,8 +5,8 @@ module.exports = {
   packagerConfig: {
     asar: true,
     extraResource: [
-      "./electron/index.html",
-      "./electron/static"
+      "./index.html",
+      "./static"
     ]
   },
   rebuildConfig: {},
@@ -17,7 +17,7 @@ module.exports = {
         exe: "parsegraph.exe",
         title: "Parsegraph",
         name: "parsegraph-freeform",
-        setupIcon: "./public/favicon.ico"
+        setupIcon: "../public/favicon.ico"
       },
     },
     {

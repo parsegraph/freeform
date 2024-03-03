@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 
-import { DirectionCaret, DirectionNode, deserializeParsegraph } from 'parsegraph';
+import { Direction, DirectionCaret, DirectionNode, deserializeParsegraph, forEachCardinalDirection, turnLeft, turnNegative, turnRight } from 'parsegraph';
 
 import * as importers from '../importers';
 
 import './modal.css';
 import { buildAlternatingColumns, buildGrid, buildPlanner, buildRandom, buildMarchMadness, buildFootballPlayoffs, buildTournament } from '../builders';
-import { HIDE_PUBLIC_SERVERS_TAB, PUBLIC_SERVERS } from '../settings';
+import { CREASE_ROUNDS, HIDE_PUBLIC_SERVERS_TAB, PUBLIC_SERVERS } from '../settings';
 import Color from 'parsegraph-color';
 
 function ImportFromFile({openGraph, onClose}) {
@@ -229,6 +229,38 @@ const buildRainbow = (vert) => {
   return [car.root(), null, null, { styles, pageBackgroundColor: new Color(56/255, 56/255, 56/255, 1).asRGBA()}];
 };
 
+const buildCross = (numRounds) => {
+  const car = new DirectionCaret();
+
+  const cross = (car, dir, numRounds) => {
+    car.push();
+    if (numRounds % CREASE_ROUNDS === 0) {
+      car.crease();
+    }
+    car.spawnMove(dir)
+    car.shrink();
+    car.push();
+    car.spawnMove(turnLeft(dir));
+    if (numRounds >= 0) {
+      cross(car, turnLeft(dir), numRounds - 1);
+    }
+    car.pop();
+    car.push();
+    car.spawnMove(turnRight(dir));
+    if (numRounds >= 0) {
+      cross(car, turnRight(dir), numRounds - 1);
+    }
+    car.pop();
+    car.pop();
+  };
+
+  forEachCardinalDirection(dir => {
+    cross(car, dir, numRounds);
+  });
+
+  return car.root();
+};
+
 function ImportFromTemplate({openGraph, onClose}) {
   const [importType, setImportType] = useState("blank");
   const [numRounds, setNumRounds] = useState(5);
@@ -293,6 +325,9 @@ function ImportFromTemplate({openGraph, onClose}) {
       case "rainbow_random":
         openGraph(...buildRandomRainbow());
         break;
+      case "cross":
+        openGraph(buildCross(numRounds));
+        break;
       default:
         openGraph(new DirectionNode("Unknown import type: " + importType));
         break;
@@ -327,17 +362,18 @@ function ImportFromTemplate({openGraph, onClose}) {
     <option value="rainbow">Rainbow</option>
     <option value="rainbow_vert">Rainbow (vertical)</option>
     <option value="rainbow_random">Random Colors</option>
+    <option value="cross">Recursive cross</option>
   </select>
   </label> 
-  {importType === "march" && <div style={{display: "flex", flexDirection: "column", justifyContent: "space-between", gap: "8px", margin: '8px 0'}}><label style={{display: 'flex'}}>Rounds:&nbsp;
+  {(importType === "march" || importType === "cross") && <div style={{display: "flex", flexDirection: "column", justifyContent: "space-between", gap: "8px", margin: '8px 0'}}><label style={{display: 'flex'}}>Rounds:&nbsp;
   <input value={numRounds} onChange={e=>setNumRounds(Number.parseInt(e.target.value))} type="range" min="1" max="10"></input><span style={{display: 'inline-block', minWidth: "2em"}}>{numRounds}</span>
   </label>
-  <label style={{display: 'flex', justifyContent: 'space-between'}}>
+  {importType === "march" && <label style={{display: 'flex', justifyContent: 'space-between'}}>
     Vertical?
     <input style={{minWidth: "2em"}} type="checkbox" checked={vertical} onChange={e=>setVertical(e.target.checked)}/>
-    </label></div>}
+    </label>}</div>}
   <div className="buttons">
-    <input type="submit" style={{flexGrow:'1'}} onClick={createFromTemplate} value="Create" autoFocus/>
+    <input type="submit" style={{flexGrow:'1'}} value="Create" autoFocus/>
     {onClose && <button style={{flexGrow:'1'}} onClick={onClose}>Cancel</button>}
   </div></form>;
 }

@@ -1,8 +1,8 @@
 import { Alignment, Direction, DirectionCaret, DirectionNode, PreferredAxis, reverseDirection, turnPositive } from 'parsegraph';
 import Color from 'parsegraph-color';
-import { CREASE_ROUNDS } from '../settings';
+import { CREASE_ROUNDS, MAX_ROUNDS } from '../settings';
 
-const SIZE = 10;
+const SIZE = MAX_ROUNDS;
 
 const buildRandom = (steps) => {
   const car = new DirectionCaret();

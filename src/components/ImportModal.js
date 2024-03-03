@@ -6,7 +6,7 @@ import * as importers from '../importers';
 
 import './modal.css';
 import { buildAlternatingColumns, buildGrid, buildPlanner, buildRandom, buildMarchMadness, buildFootballPlayoffs, buildTournament } from '../builders';
-import { CREASE_ROUNDS, HIDE_PUBLIC_SERVERS_TAB, PUBLIC_SERVERS } from '../settings';
+import { CREASE_ROUNDS, HIDE_PUBLIC_SERVERS_TAB, MAX_ROUNDS, PUBLIC_SERVERS } from '../settings';
 import Color from 'parsegraph-color';
 
 function ImportFromFile({openGraph, onClose}) {
@@ -366,7 +366,7 @@ function ImportFromTemplate({openGraph, onClose}) {
   </select>
   </label> 
   {(importType === "march" || importType === "cross") && <div style={{display: "flex", flexDirection: "column", justifyContent: "space-between", gap: "8px", margin: '8px 0'}}><label style={{display: 'flex'}}>Rounds:&nbsp;
-  <input value={numRounds} onChange={e=>setNumRounds(Number.parseInt(e.target.value))} type="range" min="1" max="10"></input><span style={{display: 'inline-block', minWidth: "2em"}}>{numRounds}</span>
+  <input value={numRounds} onChange={e=>setNumRounds(Number.parseInt(e.target.value))} type="range" min="1" max={MAX_ROUNDS}></input><span style={{display: 'inline-block', minWidth: "2em"}}>{numRounds}</span>
   </label>
   {importType === "march" && <label style={{display: 'flex', justifyContent: 'space-between'}}>
     Vertical?

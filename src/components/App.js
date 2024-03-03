@@ -6,7 +6,7 @@ import {createRoot} from 'react-dom/client';
 import { 
   Direction, deserializeParsegraph, serializeParsegraph,
 } from "parsegraph";
-import Viewport from './Viewport';
+import Viewport from './Viewport/Viewport';
 import ImportModal from './ImportModal';
 import ExportModal from './ExportModal';
 import { PUBLIC_SERVERS, USE_LOCAL_STORAGE } from '../settings';
@@ -115,25 +115,6 @@ const loadInitialRoom = (openGraph) => {
   });
 }
 
-function Carousel({viewport}) {
-  return <>
-    <button className="dir" style={{position: 'absolute', right: '50%', top: '50%', transform: 'translate(50%, -50%)'}} onClick={()=>viewport.spawnMove(Direction.INWARD)}>
-    +
-    </button>
-  <button className="dir" style={{position: 'absolute', right: '100%', top: '50%', transform: 'translate(0, -50%)'}} onClick={()=>viewport.spawnMove(Direction.BACKWARD)}>
-    +
-  </button>
-  <button className="dir" style={{position: 'absolute', bottom: '100%', left: '50%', transform: 'translate(-50%, 0)'}} onClick={()=>viewport.spawnMove(Direction.UPWARD)}>
-    +
-  </button>
-  <button className="dir" style={{position: 'absolute', left: '50%', top: '100%', transform: 'translate(-50%, 0)'}} onClick={()=>viewport.spawnMove(Direction.DOWNWARD)}>
-    +
-  </button>
-  <button className="dir" style={{position: 'absolute', left: '100%', top: '50%', transform: 'translate(0, -50%)'}} onClick={()=>viewport.spawnMove(Direction.FORWARD)}>
-    +
-  </button>
-  </>;
-}
 
 function App() {
   const [viewport] = useState(new Viewport());
@@ -172,6 +153,7 @@ function App() {
     if (!roomName) {
       return;
     }
+    // TODO this won't serialize colors
     fetch('/public/' + roomName + "?sid=" + sessionId, {
       body: JSON.stringify(serializeParsegraph(graphs.widget())),
       headers: {
@@ -197,36 +179,7 @@ function App() {
     setExportModalOpen(old=>!old);
   }
 
-  const [carouselContainer, setCarouselContainer] = useState(null);
-
-  const [carouselRoot, setCarouselRoot] = useState(null);
-
-  useEffect(() => {
-    if (!carouselContainer) {
-      setCarouselRoot(null);
-      return;
-    }
-    setCarouselRoot(createRoot(carouselContainer));
-  }, [carouselContainer]);
-
   const [showNodeActions, setShowNodeActions] = useState(false);
-
-  useEffect(() => {
-    if (!viewport) {
-      return;
-    }
-    if (!carouselRoot) {
-      return;
-    }
-    carouselRoot.render(<Carousel viewport={viewport} style={(showNodeActions || nodeStylingModalOpen) ? {display: 'none'} : null}/>);
-  }, [carouselRoot, viewport, showNodeActions, nodeStylingModalOpen]);
-
-  useEffect(() => {
-    if (!viewport) {
-      return;
-    }
-    setCarouselContainer(viewport.carouselContainer());
-  }, [viewport]);
 
   useEffect(() => {
     if (!viewport) {

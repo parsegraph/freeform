@@ -13,7 +13,7 @@ const DEFAULT_NODE_STYLE = {
     textColor: new Color(0, 0, 0, 1),
     lineColor: new Color(.9, .9, .9, .8)
 };
-const SHOW_KEY_STROKES = true;
+const SHOW_KEY_STROKES = false;
 const PAGE_BACKGROUND_COLOR = new Color(
     .2, .2, .9, 1
 );

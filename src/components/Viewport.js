@@ -27,7 +27,7 @@ import {
 } from 'parsegraph-matrix';
 import { showNodeInCamera } from "parsegraph-showincamera";
 import Rect from "parsegraph-rect";
-import { DEFAULT_NODE_STYLE, USE_LOCAL_STORAGE, TEXT_IS_VISIBLE_SCALE, LABEL_IS_VISIBLE_SCALE, PAGE_BACKGROUND_COLOR } from "../settings";
+import { DEFAULT_NODE_STYLE, USE_LOCAL_STORAGE, TEXT_IS_VISIBLE_SCALE, LABEL_IS_VISIBLE_SCALE, SHOW_KEY_STROKES, PAGE_BACKGROUND_COLOR } from "../settings";
 import { WorldLabels } from "./WorldLabel";
 
 const fontSize = 10;
@@ -99,6 +99,19 @@ export default class Viewport {
         this._mousePos = [NaN, NaN];
 
         this._worldLabels = null;
+
+        this._keyStrokeElem = null;
+        this._keyStrokeTime = NaN;
+        if (SHOW_KEY_STROKES) {
+            setInterval(() => {
+                if (this._keyStrokeElem) {
+                    if (Date.now() - this._keyStrokeTime > 1000) {
+                        this._keyStrokeElem.style.innerText = '';
+                        this._keyStrokeElem.style.display = 'none';
+                    }
+                }
+            }, 1000);
+        }
 
         this._showInCamera = true;
 
@@ -528,6 +541,16 @@ export default class Viewport {
             return;
         };
 
+        if (SHOW_KEY_STROKES) {
+            if (this._keyStrokeElem.innerText === "") {
+                this._keyStrokeElem.innerText += e.key;
+            } else {
+                this._keyStrokeElem.innerText += " " + e.key;
+            }
+            this._keyStrokeTime = Date.now();
+            this._keyStrokeElem.style.display = 'block';
+        }
+
         switch (e.key) {
             case '-':
                 if (!isNaN(mouseX)) {
@@ -650,6 +673,19 @@ export default class Viewport {
 
         canvas.appendChild(this.carouselContainer());
 
+        if (SHOW_KEY_STROKES) {
+            this._keyStrokeElem  = document.createElement("div");
+            this._keyStrokeElem.style.position = 'fixed';
+            this._keyStrokeElem.style.left = '50%';
+            this._keyStrokeElem.style.bottom = '5px';
+            this._keyStrokeElem.style.fontFamily = 'serif';
+            this._keyStrokeElem.style.fontSize = '36px';
+            this._keyStrokeElem.style.background = 'white';
+            this._keyStrokeElem.style.color = 'black';
+            this._keyStrokeElem.style.padding = '5px';
+            this._keyStrokeElem.style.display = 'none';
+            canvas.appendChild(this._keyStrokeElem);
+        }
 
         canvas.addEventListener("focus", () => {
             if (this._showEditor) {

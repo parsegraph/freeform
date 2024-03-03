@@ -48,6 +48,10 @@ export default class ViewportInput {
         return this.viewport().carouselContainer();
     }
 
+    attachedContainer() {
+        return this._attached;
+    }
+
     constructor(viewport) {
         this._viewport = viewport;
         this._mousePos = [NaN, NaN];
@@ -55,11 +59,7 @@ export default class ViewportInput {
         if (!canvas) {
             throw new Error("ViewportInput requires the Viewport to have a container when it is constructed");
         }
-        const car = viewport.caret();
-        const cam = viewport.camera();
-        const widget = car.root();
-
-        canvas.appendChild(this.carouselContainer());
+        this._attached = this.viewport().container();
 
         // Input event callbacks
         //container.addEventListener('dragover', e => e.preventDefault());
@@ -80,8 +80,12 @@ export default class ViewportInput {
         let clickedOnSelected = false;
         canvas.addEventListener('mousedown', e => {
             if (this.carouselContainer().contains(e.target)) {
+                console.log("Carousel contains e.target");
                 return;
             }
+            const car = viewport.caret();
+            const cam = viewport.camera();
+            const widget = car.root();
             isDown = null;
             [mouseX, mouseY] = [e.clientX, e.clientY];
             this.setMousePos(mouseX, mouseY);
@@ -94,9 +98,11 @@ export default class ViewportInput {
             const boundsRect = absoluteSizeRect(selectedNode);
             if (selectedNode && (clickedOnSelected || cam.containsAll(boundsRect) || selectedNode.neighbors().hasAncestor(car.node()))) {
                 if (!clickedOnSelected && cam.containsAll(boundsRect)) {
+                    viewport.logMessage("moving to node");
                     car.moveTo(selectedNode);
                     viewport.refresh();
                 }
+                viewport.logMessage("touched node");
                 touchingNode = true;
                 viewport.refresh();
             }
@@ -109,6 +115,9 @@ export default class ViewportInput {
                     viewport.repaint();
                 }
             }
+
+            const car = viewport.caret();
+            const cam = viewport.camera();
 
             if (!isNaN(isDown) && Date.now() - isDown < MAX_CLICK_DELAY_MS) {
                 const [worldX, worldY] = cam.transform(mouseX, mouseY);
@@ -127,6 +136,8 @@ export default class ViewportInput {
         });
 
         canvas.addEventListener('mousemove', e => {
+            const car = viewport.caret();
+            const cam = viewport.camera();
             const dx = e.clientX - mouseX;
             const dy = e.clientY - mouseY;
             if (isDown && !touchingNode) {
@@ -148,6 +159,8 @@ export default class ViewportInput {
 
         let touchingNode = false;
         canvas.addEventListener('touchstart', e => {
+            const car = viewport.caret();
+            const cam = viewport.camera();
             if (!car.root()) {
                 return;
             }
@@ -182,6 +195,8 @@ export default class ViewportInput {
         });
 
         const gesture = (mouseX, mouseY) => {
+            const car = viewport.caret();
+            const cam = viewport.camera();
             const layout = car.node().layout();
             const [worldX, worldY] = cam.transform(mouseX, mouseY);
             const dist = distance(
@@ -224,6 +239,8 @@ export default class ViewportInput {
         };
 
         canvas.addEventListener('touchend', e => {
+            const car = viewport.caret();
+            const cam = viewport.camera();
             if (!car.root()) {
                 return;
             }
@@ -258,6 +275,8 @@ export default class ViewportInput {
         });
 
         canvas.addEventListener('touchmove', e => {
+            const car = viewport.caret();
+            const cam = viewport.camera();
             e.preventDefault();
 
             if (numActiveTouches() > 1) {
@@ -275,7 +294,6 @@ export default class ViewportInput {
                 const newDistance = distance(first.mouseX, first.mouseY, second.mouseX, second.mouseY);
                 cam.zoomToPoint(newDistance / origDistance, ...midPoint(first.mouseX, first.mouseY, second.mouseX, second.mouseY));
                 viewport.checkScale();
-                viewport.refresh();
                 return;
             }
 
@@ -297,10 +315,10 @@ export default class ViewportInput {
         });
 
         canvas.addEventListener('wheel', e => {
+            const cam = viewport.camera();
             if (!isNaN(mouseX)) {
                 cam.zoomToPoint(Math.pow(1.1, e.deltaY > 0 ? -1 : 1), mouseX, mouseY);
                 viewport.checkScale();
-                viewport.refresh();
             }
         });
 
@@ -319,7 +337,7 @@ export default class ViewportInput {
         });
 
         new ResizeObserver(() => {
-            cam.setSize(canvas.offsetWidth, canvas.offsetHeight);
+            viewport.camera().setSize(canvas.offsetWidth, canvas.offsetHeight);
             viewport.refresh();
         }).observe(canvas);
 

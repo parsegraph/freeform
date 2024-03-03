@@ -57,6 +57,23 @@ const nextAlignment = (alignment, childDir) => {
 };
 
 export default class Viewport {
+
+    clearShowingInCamera() {
+        this._showInCamera = false;
+    }
+
+    showingInCamera() {
+        return this._showInCamera;
+    }
+
+    clearCheckScale() {
+        this._checkScale = false;
+    }
+
+    checkingScale() {
+        return this._checkScale;
+    }
+
     constructor() {
         this._saveGraph = () => {};
         this._container = null;
@@ -65,6 +82,8 @@ export default class Viewport {
         this._keyStrokeTime = NaN;
 
         this._showInCamera = true;
+        this._ensureVisible = true;
+        this._checkScale = true;
 
         // Create and restore the camera if possible
         this._cam = new Camera();
@@ -134,7 +153,7 @@ export default class Viewport {
         if (!this._logContainer) {
             this._logContainer = document.createElement("div");
             this._logContainer.style.fontSize = '18px';
-            this._logContainer.style.color = 'grey';
+            this._logContainer.style.color = 'white';
             this._logContainer.style.display = 'flex';
             this._logContainer.style.flexDirection = 'column';
         }
@@ -142,7 +161,11 @@ export default class Viewport {
     }
 
     mountLog(logContainer) {
+        if (this.logContainer().parentElement === logContainer) {
+            return;
+        }
         logContainer.appendChild(this.logContainer());
+        this.logMessage("Messages will show here.")
     }
 
     setSaveGraph(saveGraph) {
@@ -187,26 +210,13 @@ export default class Viewport {
         if (!ENABLE_EXTENT_VIEWING) {
             return;
         }
+        console.log("changing extents")
         const order = ["none", "vertical", "horizontal"];
-        let idx = order.indexOf(this._extentMode);
+        let idx = order.indexOf(this.rendering().extentMode());
         if (idx < 0) {
             idx = 0;
         }
-        this._extentMode = order[(idx + 1) % order.length];
-        switch(this._extentMode) {
-            case "vertical":
-                this.logMessage("Showing vertical extents");
-                break;
-            case "horizontal":
-                this.logMessage("Showing horizontal extents");
-                break;
-            case "none":
-                this.logMessage("Hiding all extents");
-                break;
-            default:
-                break;
-        }
-        this.refresh();
+        this.rendering().setExtentMode(order[(idx + 1) % order.length]);
     }
 
     toggleAlignment() {
@@ -236,6 +246,7 @@ export default class Viewport {
             this.repaint();
         } else {
             this.caret().spawnMove(dir);
+            this.showInCamera();
             this.repaint();
             this.save();
         }
@@ -252,12 +263,7 @@ export default class Viewport {
         this._container = container;
 
         this._rendering = new ViewportRendering(this);
-
-        if (this.hasWidget()) {
-            this._container.appendChild(this.carouselContainer());
-            this.carouselRoot().render(<Carousel viewport={this}/>);
-            this.attachInput();
-        }
+        this.attachInput();
     }
 
     carouselRoot() {
@@ -280,10 +286,15 @@ export default class Viewport {
     }
 
     attachInput() {
+        if (this._input && this._input.attachedContainer() === this.container()) {
+            return;
+        }
         if (this._input) {
             this._input = null;
         }
 
+        this._container.appendChild(this.carouselContainer());
+        this.carouselRoot().render(<Carousel viewport={this}/>);
         this._input = new ViewportInput(this);
     }
 
@@ -408,7 +419,6 @@ export default class Viewport {
         const loop = () => {
             this._scheduledRender = null;
 
-            console.log(attempts);
             if (this.paint()) {
                 if (attempts++ > 1000) {
                     throw new Error("Failed to render after " + attempts + " attempts")
@@ -437,12 +447,10 @@ export default class Viewport {
 
     paint() {
         if (!this.canPaint()) {
-            console.log("Painting");
             return false;
         }
         const start = Date.now();
         while (this.rendering().crank()) {
-            console.log("crank");
             if (Date.now() - start > MAX_PAINT_TIME_MS) {
                 this.refresh();
                 return true;
@@ -569,9 +577,8 @@ export default class Viewport {
 
         const save = () => {
             this.node().setValue(editor.value === '' ? undefined : editor.value);
+            this.applyEditorValue();
             this.toggleEditor();
-            this.repaint();
-            this.save();
         };
         saveBtn.addEventListener('click', save);
         saveBtn.addEventListener('touchend', save);
@@ -591,6 +598,14 @@ export default class Viewport {
         this._toggleNodeActions = cb;
     }
 
+    applyEditorValue() {
+        this.node().setValue(this._editor.value === '' ? undefined : this._editor.value);
+        this.showInCamera();
+        this.checkScale();
+        this.repaint();
+        this.save();
+    }
+
     createEditorComp() {
         const editor = document.createElement('textarea');
         editor.style.width = '100%';
@@ -598,16 +613,12 @@ export default class Viewport {
         editor.addEventListener('keypress', e => {
         if (e.key === 'Escape') {
             this.toggleEditor();
-            this._container.focus();
         } else if (e.key === 'Enter') {
             if (e.shiftKey) {
                 return;
             }
-            this.node().setValue(editor.value === '' ? undefined : editor.value);
+            this.applyEditorValue();
             this.toggleEditor();
-            this._container.focus();
-            this.repaint();
-            this.save();
         }
         })
         return editor;
@@ -622,6 +633,7 @@ export default class Viewport {
         }
         this._showEditor = false;
         this._editorContainer.style.display = 'none';
+        this.container().focus();
         this.refresh();
     }
 
@@ -722,9 +734,18 @@ export default class Viewport {
 
     checkScale() {
         this._checkScale = true;
+        this.refresh();
     }
 
     showingEditor() {
         return this._showEditor;
+    }
+
+    ensuringVisible() {
+        return this._ensureVisible;
+    }
+
+    clearEnsuringVisible() {
+        this._ensureVisible = false;
     }
 };

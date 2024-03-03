@@ -88,29 +88,37 @@ export default class ViewportRendering {
         return this.viewport().layout();
     }
 
+    showingInCamera() {
+        return this.viewport().showingInCamera();
+    }
+
+    clearShowingInCamera() {
+        return this.viewport().clearShowingInCamera();
+    }
+
     focusCamera() {
         if (!this.camera().canProject()) {
             return true;
         }
         const viewport = this.viewport();
         const cam = this.camera();
-        if (this._showInCamera) {
-            viewport.logMessage("showing in camera");
+        if (this.viewport().showingInCamera()) {
             const scale = initialScale/this.layout().absoluteScale();
             if (!isNaN(scale) && isFinite(scale)) {
+                viewport.logMessage("showing in camera (scale=" + scale + ")");
                 cam.setScale(initialScale/this.layout().absoluteScale());
                 showNodeInCamera(this.viewport().node(), cam);
-                this._showInCamera = false;
+                this.viewport().clearShowingInCamera();
             }
             return true;
         }
 
         const graphSize = [NaN, NaN];
-        const layout = this.layout();
-        this.layout().extentSize(graphSize);
+        const layout = this.widget().layout();
+        this.widget().layout().extentSize(graphSize);
         if (graphSize[0] > 0 && graphSize[1] > 0) {
             const scaleFactor = 4;
-            if (this._checkScale && (Math.max(...graphSize) * cam.scale() < Math.min(cam.height(), cam.width())/(scaleFactor))) {
+            if (this.viewport().checkingScale() && (Math.max(...graphSize) * cam.scale() < Math.min(cam.height(), cam.width())/(scaleFactor))) {
                 viewport.logMessage("checking scale");
                 const scale = (Math.min(cam.height(), cam.width())/scaleFactor) / (cam.scale() * Math.max(...graphSize));
                 if (!isNaN(scale)) {
@@ -119,7 +127,7 @@ export default class ViewportRendering {
                         cam.width()/2,
                         cam.height()/2
                     );
-                    this._checkScale = false;
+                    viewport.clearCheckScale();
                 }
                 return true;
             }
@@ -127,15 +135,18 @@ export default class ViewportRendering {
 
         const bodySize = [NaN, NaN];
         layout.absoluteSize(bodySize);
-        if (bodySize[0] > 0 && bodySize[1] > 0 && this._ensureVisible && !cam.containsAny(new Rect(
-            layout.absoluteX(),
-            layout.absoluteY(),
-            bodySize[0],
-            bodySize[1]
-        ))) {
+        if (bodySize[0] > 0 && bodySize[1] > 0 &&
+            this.viewport().ensuringVisible() &&
+            !cam.containsAny(new Rect(
+                layout.absoluteX(),
+                layout.absoluteY(),
+                bodySize[0],
+                bodySize[1]
+            ))
+        ) {
             viewport.logMessage("ensuring visible");
-            showNodeInCamera(this._userCaret.node(), cam);
-            this._ensureVisible = false;
+            showNodeInCamera(this.node(), cam);
+            this.viewport().clearEnsuringVisible();
             return true;
         }
         return false;
@@ -196,19 +207,25 @@ export default class ViewportRendering {
         if (this._worldLabels) {
             this._worldLabels.clear();
         }
+        if (this._extentPainter) {
+            this._extentPainter.clear();
+        }
     }
 
     crank() {
         if (!this.phase()) {
+            if (this.clearBackground()) {
+                return true;
+            }
             this.nextPhase();
         }
 
         let steps = [
             null,
-            () => this.clearBackground(),
-            () => this.focusCamera(),
             () => this.paint(),
+            () => this.focusCamera(),
             () => this.render(),
+            () => this.renderExtents(this.camera().project()),
             () => {
                 this.cancelPostRender();
                 this.schedulePostRender();
@@ -401,7 +418,6 @@ export default class ViewportRendering {
         ctx.translate(cam.x(), cam.y());
 
         this.renderCaret();
-        this.renderExtents(worldMatrix);
 
         if (PRINT_PAINT_STATS) {
             const {i, j, k, dirtyGroups, offscreenGroups, allGroups } = renderData;
@@ -411,7 +427,6 @@ export default class ViewportRendering {
             ctx.textAlign = "left";
             ctx.fillStyle = "white";
             ctx.fillText(`groups=${i}/${allGroups} (dirty=${dirtyGroups}, offscreen=${offscreenGroups}), text=${j}, labels=${k}`, 0, cam.height());
-            console.log(`groups=${i}/${allGroups} (dirty=${dirtyGroups}, offscreen=${offscreenGroups}), text=${j}, labels=${k}`, 0, cam.height());
             ctx.textAlign = "right";
             ctx.fillText(cam.toString(), cam.width(), cam.height());
         }
@@ -471,7 +486,6 @@ export default class ViewportRendering {
             if (this.viewport().showNodeActions() && this.viewport().showingCaret()) {
                 this.carouselContainer().style.display = 'block';
                 this.carouselContainer().style.transform = `scale(${cam.scale()}) translate(${layout.absoluteX() + cam.x()}px, ${layout.absoluteY() + cam.y()}px) scale(${1/cam.scale()}) translate(-${cam.width()/2}px, -${cam.height()/2}px) translate(-50%, -50%)`;
-                console.log(this.carouselContainer(), `scale(${cam.scale()}) translate(${layout.absoluteX() + cam.x()}px, ${layout.absoluteY() + cam.y()}px) scale(${1/cam.scale()}) translate(-${cam.width()/2}px, -${cam.height()/2}px) translate(-50%, -50%)`);
 
                 this.carouselAnchor().style.width = `${bodySize[0] * layout.absoluteScale() * cam.scale()}px`;
                 this.carouselAnchor().style.height = `${bodySize[1] * layout.absoluteScale() * cam.scale()}px`;
@@ -524,9 +538,10 @@ export default class ViewportRendering {
     };
 
     renderExtents(worldMatrix) {
-        if (!this.node() || !this._extentPainter) {
-            return;
+        if (!this.node()) {
+            return false;
         }
+        this.paintExtents();
         const layout = this.layout();
         this._extentPainter.render(matrixMultiply3x3(
             makeScale3x3(
@@ -537,22 +552,48 @@ export default class ViewportRendering {
             ),
             worldMatrix
         ));
+        return false;
+    }
+
+    extentMode() {
+        return this._extentMode;
+    }
+
+    setExtentMode(extentMode) {
+        if (this._extentMode === extentMode) {
+            return;
+        }
+        this._extentMode = extentMode;
+        switch(this._extentMode) {
+            case "vertical":
+                this.viewport().logMessage("Showing vertical extents");
+                break;
+            case "horizontal":
+                this.viewport().logMessage("Showing horizontal extents");
+                break;
+            case "none":
+                this.viewport().logMessage("Hiding all extents");
+                break;
+            default:
+                break;
+        }
+        this.viewport().refresh();
     }
 
     paintExtents() {
         if (!ENABLE_EXTENT_VIEWING) {
-            return;
+            return false;
         }
 
         if (!this._extentPainter) {
-            this._extentPainter = new WebGLBlockPainter(this._glProvider);
+            this._extentPainter = new WebGLBlockPainter(this.glProvider());
         } else {
             this._extentPainter.clear();
         }
         this._extentPainter.setBackgroundColor(new Color(1, 0, 0, 0.2));
         this._extentPainter.setBorderColor(new Color(1, 0, 0, 0.5));
 
-        const layout = this._userCaret.node().layout();
+        const layout = this.node().layout();
         const extentSize = [NaN, NaN];
         layout.extentSize(extentSize);
 
@@ -617,7 +658,7 @@ export default class ViewportRendering {
             showExtents(getPositiveDirection(axis));
         };
 
-        switch (this._extentMode) {
+        switch (this.extentMode()) {
             case "vertical":
                 showAxisExtents(Axis.VERTICAL, [
                     new Color(.2, .2, 0.5, .5), // blue=upward
@@ -634,6 +675,8 @@ export default class ViewportRendering {
             default:
                 break;
         }
+        
+        return false;
     }
 
     bounds(pg) {

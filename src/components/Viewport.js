@@ -27,7 +27,7 @@ import {
 } from 'parsegraph-matrix';
 import { showNodeInCamera } from "parsegraph-showincamera";
 import Rect from "parsegraph-rect";
-import { DEFAULT_NODE_STYLE, USE_LOCAL_STORAGE, TEXT_IS_VISIBLE_SCALE, LABEL_IS_VISIBLE_SCALE } from "../settings";
+import { DEFAULT_NODE_STYLE, USE_LOCAL_STORAGE, TEXT_IS_VISIBLE_SCALE, LABEL_IS_VISIBLE_SCALE, PAGE_BACKGROUND_COLOR } from "../settings";
 import { WorldLabels } from "./WorldLabel";
 
 const fontSize = 10;
@@ -90,9 +90,7 @@ const nextAlignment = (alignment, childDir) => {
 };
 export default class Viewport {
     constructor() {
-        this._pageBackgroundColor = new Color(
-            .2, .2, .9, 1
-        )
+        this._pageBackgroundColor = PAGE_BACKGROUND_COLOR;
 
         this._saveGraph = () => {};
         this._container = null;

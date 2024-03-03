@@ -18,7 +18,9 @@ const PAGE_BACKGROUND_COLOR = new Color(
     .2, .2, .9, 1
 );
 
+const CREASE_ROUNDS = 4;
 export {
+    CREASE_ROUNDS,
     PAGE_BACKGROUND_COLOR,
     SHOW_KEY_STROKES,
     DEFAULT_NODE_STYLE,

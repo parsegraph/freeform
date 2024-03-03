@@ -1,5 +1,6 @@
 import { Alignment, Direction, DirectionCaret, DirectionNode, PreferredAxis, reverseDirection, turnPositive } from 'parsegraph';
 import Color from 'parsegraph-color';
+import { CREASE_ROUNDS } from '../settings';
 
 const SIZE = 10;
 
@@ -90,7 +91,9 @@ const buildAlternatingColumns = () => {
   for(let col = 0; col < 10 * SIZE; ++col) {
     car.spawnMove('f');
     car.push();
-    car.crease();
+    if (col % CREASE_ROUNDS === 0) {
+      car.crease();
+    }
     const c = Color.random();
     for(let row = 0; row < SIZE; ++row) {
       car.spawnMove(col % 2 !== 0 ? 'u' : 'd', row);
@@ -139,7 +142,7 @@ const marchSpawn = (car, dir, labels) =>
     car.node().setValue(labels[0]);
 
     labels = [...labels];
-    if (labels.length % 4 === 0) {
+    if (labels.length % CREASE_ROUNDS === 0) {
       car.crease();
     }
     labels.shift();

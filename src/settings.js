@@ -17,9 +17,14 @@ const SHOW_KEY_STROKES = false;
 const PAGE_BACKGROUND_COLOR = new Color(
     .2, .2, .9, 1
 );
+const PRINT_PAINT_STATS = false;
+const ENABLE_EXTENT_VIEWING = false;
 
 const CREASE_ROUNDS = 4;
+
 export {
+    ENABLE_EXTENT_VIEWING,
+    PRINT_PAINT_STATS,
     CREASE_ROUNDS,
     PAGE_BACKGROUND_COLOR,
     SHOW_KEY_STROKES,

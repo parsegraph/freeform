@@ -14,6 +14,10 @@ import {
   namePreferredAxis,
   nameDirection,
   nameAlignment,
+  directionSign,
+  getNegativeDirection,
+  getPositiveDirection,
+  forEachCardinalDirection,
 } from "parsegraph";
 import Color from 'parsegraph-color';
 import { BasicGLProvider } from 'parsegraph-compileprogram';
@@ -27,7 +31,7 @@ import {
 } from 'parsegraph-matrix';
 import { showNodeInCamera } from "parsegraph-showincamera";
 import Rect from "parsegraph-rect";
-import { DEFAULT_NODE_STYLE, USE_LOCAL_STORAGE, TEXT_IS_VISIBLE_SCALE, LABEL_IS_VISIBLE_SCALE, SHOW_KEY_STROKES, PAGE_BACKGROUND_COLOR } from "../settings";
+import { DEFAULT_NODE_STYLE, USE_LOCAL_STORAGE, TEXT_IS_VISIBLE_SCALE, LABEL_IS_VISIBLE_SCALE, SHOW_KEY_STROKES, PAGE_BACKGROUND_COLOR, PRINT_PAINT_STATS, ENABLE_EXTENT_VIEWING } from "../settings";
 import { WorldLabels } from "./WorldLabel";
 
 const fontSize = 10;
@@ -216,6 +220,32 @@ export default class Viewport {
         node.disconnect();
         this.save();
         this.repaint();
+    }
+
+    toggleExtents() {
+        if (!ENABLE_EXTENT_VIEWING) {
+            return;
+        }
+        const order = ["none", "vertical", "horizontal"];
+        let idx = order.indexOf(this._extentMode);
+        if (idx < 0) {
+            idx = 0;
+        }
+        this._extentMode = order[(idx + 1) % order.length];
+        switch(this._extentMode) {
+            case "vertical":
+                this.logMessage("Showing vertical extents");
+                break;
+            case "horizontal":
+                this.logMessage("Showing horizontal extents");
+                break;
+            case "none":
+                this.logMessage("Hiding all extents");
+                break;
+            default:
+                break;
+        }
+        this.refresh();
     }
 
     toggleAlignment() {
@@ -630,6 +660,9 @@ export default class Viewport {
                 break;
             case 'R':
                 this.redo()
+                break;
+            case 'e':
+                this.toggleExtents();
                 break;
             case 'Enter':
                 this.toggleEditor();
@@ -1322,6 +1355,7 @@ export default class Viewport {
             const painter = this._painters.get(pg);
             if (!painter) {
                 needsPaint = true;
+                ++dirtyGroups;
                 continue;
             }
 
@@ -1332,6 +1366,7 @@ export default class Viewport {
             const cam = this.camera();
             if (!cam.containsAny(b)) {
                 pg = pg.paintGroup().next();
+                ++offscreenGroups;
                 continue;
             }
             ++i;
@@ -1416,15 +1451,7 @@ export default class Viewport {
         } while (pg !== this._widget);
 
         if (userCaret.node()) {
-            const layout = userCaret.node().layout();
-            /*ctx.fillStyle = 'none';
-            ctx.strokeStyle = 'yellow';
-            const extentSize = [0, 0];
-            layout.extentSize(extentSize);
-            ctx.strokeRect(
-            layout.absoluteX() - layout.extentOffsetAt(Direction.DOWNWARD),
-            layout.absoluteY() - layout.extentOffsetAt(Direction.FORWARD), extentSize[0], extentSize[1]
-            );*/
+            this.renderExtents();
             ctx.lineWidth = borderThickness/2 * layout.absoluteScale();
             ctx.lineJoin = "round";
             ctx.strokeStyle = caretColor.asRGBA();
@@ -1479,14 +1506,29 @@ export default class Viewport {
             }
         }
 
-        /*ctx.resetTransform();
-        ctx.font = "18px sans-serif";
-        ctx.textBaseline = "bottom";
-        ctx.textAlign = "left";
-        ctx.fillStyle = "white";
-        ctx.fillText(`groups=${i}/${allGroups}, text=${j}, labels=${k}`, 0, this._cam.height());
-        ctx.textAlign = "right";
-        ctx.fillText(cam.toString(), cam.width(), cam.height());*/
+        if (this._userCaret.node() && this._extentPainter) {
+            const layout = this._userCaret.node().layout();
+            this._extentPainter.render(matrixMultiply3x3(
+                makeScale3x3(
+                    layout.absoluteScale()
+                ),
+                makeTranslation3x3(
+                    layout.absoluteX(), layout.absoluteY()
+                ),
+                worldMatrix
+            ));
+        }
+
+        if (PRINT_PAINT_STATS) {
+            ctx.resetTransform();
+            ctx.font = "18px sans-serif";
+            ctx.textBaseline = "bottom";
+            ctx.textAlign = "left";
+            ctx.fillStyle = "white";
+            ctx.fillText(`groups=${i}/${allGroups} (dirty=${dirtyGroups}, offscreen=${offscreenGroups}), text=${j}, labels=${k}`, 0, this._cam.height());
+            ctx.textAlign = "right";
+            ctx.fillText(cam.toString(), cam.width(), cam.height());
+        }
 
         if (needsPaint) {
             if (attempts > 1000) {
@@ -1502,13 +1544,104 @@ export default class Viewport {
         }
     };
 
+    renderExtents() {
+        if (!ENABLE_EXTENT_VIEWING) {
+            return;
+        }
+
+        if (!this._extentPainter) {
+            this._extentPainter = new WebGLBlockPainter(this._glProvider);
+        } else {
+            this._extentPainter.clear();
+        }
+        this._extentPainter.setBackgroundColor(new Color(1, 0, 0, 0.2));
+        this._extentPainter.setBorderColor(new Color(1, 0, 0, 0.5));
+
+        const layout = this._userCaret.node().layout();
+        const extentSize = [NaN, NaN];
+        layout.extentSize(extentSize);
+
+        const showExtents = (dir) => {
+            let offset = 0;
+            const dirSign = directionSign(dir);
+
+            layout.extentsAt(dir).forEach((length, size) => {
+                if (getDirectionAxis(dir) === Axis.VERTICAL) {
+                    if (dir === Direction.UPWARD) {
+                        this._extentPainter.drawBlock(
+                            dirSign*layout.extentOffsetAt(dir) - dirSign * offset - dirSign*length/2,
+                            dirSign*size/2,
+                            length,
+                            size,
+                            0, 0
+                        );
+                    } else {
+                        this._extentPainter.drawBlock(
+                            -dirSign*layout.extentOffsetAt(dir) + dirSign * offset + dirSign*length/2,
+                            dirSign*size/2,
+                            length,
+                            size,
+                            0, 0
+                        );
+                    }
+                } else {
+                    // Axis.HORIZONTAL
+                    if (dir === Direction.BACKWARD) {
+                        this._extentPainter.drawBlock(
+                            dirSign*size/2,
+                            dirSign*layout.extentOffsetAt(dir) - dirSign * offset - dirSign*length/2,
+                            size,
+                            length,
+                            0, 0
+                        );
+                    } else {
+                        this._extentPainter.drawBlock(
+                            dirSign*size/2,
+                            -dirSign*layout.extentOffsetAt(dir) + dirSign * offset + dirSign*length/2,
+                            size,
+                            length,
+                            0, 0
+                        );
+                    }
+                }
+                offset += length;
+            });
+        };
+
+        const showAxisExtents = (axis, colors) => {
+            this._extentPainter.initBuffer(
+                layout.extentsAt(getNegativeDirection(axis)).numBounds() +layout.extentsAt(getPositiveDirection(axis)).numBounds()
+            );
+            if (colors[0]) {
+                this._extentPainter.setBackgroundColor(colors[0]);
+            }
+            showExtents(getNegativeDirection(axis));
+            if (colors[1]) {
+                this._extentPainter.setBackgroundColor(colors[1]);
+            }
+            showExtents(getPositiveDirection(axis));
+        };
+
+        switch (this._extentMode) {
+            case "vertical":
+                showAxisExtents(Axis.VERTICAL, [
+                    new Color(.2, .2, 0.5, .5), // blue=upward
+                    new Color(1, 1, 0, .5), // yellow=downward
+                ]);
+                break;
+            case "horizontal":
+                showAxisExtents(Axis.HORIZONTAL, [
+                    new Color(1, 0, 0, .5), // red=backward
+                    new Color(0, 1, 0, .5), // green=forward
+                ]);
+                break;
+            case "none":
+            default:
+                break;
+        }
+    }
+
     bounds(pg) {
-        if (!this._bounds) {
-            this._bounds = new WeakMap();
-        }
-        if (this._bounds.get(pg)) {
-            return this._bounds.get(pg);
-        }
         const b = new Rect();
         pg.siblings().forEach((node) => {
             if (node.layout().needsAbsolutePos() || node.layout().needsCommit()) {

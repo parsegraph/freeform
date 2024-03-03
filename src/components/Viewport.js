@@ -221,13 +221,7 @@ export default class Viewport {
     toggleAlignment() {
         const node = this._userCaret.node();
         if (node.neighbors().isRoot()) {
-            node.siblings().setLayoutPreference(
-                node.siblings().getLayoutPreference() === PreferredAxis.HORIZONTAL ?
-                PreferredAxis.VERTICAL : PreferredAxis.HORIZONTAL
-            );
-            this.logMessage("Preferred axis is now " + namePreferredAxis(node.siblings().getLayoutPreference()));
-            this.save();
-            this.repaint();
+            this.togglePreferredAxis();
             return;
         }
         const childDir = reverseDirection(node.neighbors().parentDirection())

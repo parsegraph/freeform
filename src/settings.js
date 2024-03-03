@@ -13,8 +13,14 @@ const DEFAULT_NODE_STYLE = {
     textColor: new Color(0, 0, 0, 1),
     lineColor: new Color(.9, .9, .9, .8)
 };
+const SHOW_KEY_STROKES = true;
+const PAGE_BACKGROUND_COLOR = new Color(
+    .2, .2, .9, 1
+);
 
 export {
+    PAGE_BACKGROUND_COLOR,
+    SHOW_KEY_STROKES,
     DEFAULT_NODE_STYLE,
     USE_LOCAL_STORAGE,
     PUBLIC_SERVERS,

@@ -102,16 +102,6 @@ export default class Viewport {
 
         this._keyStrokeElem = null;
         this._keyStrokeTime = NaN;
-        if (SHOW_KEY_STROKES) {
-            setInterval(() => {
-                if (this._keyStrokeElem) {
-                    if (Date.now() - this._keyStrokeTime > 1000) {
-                        this._keyStrokeElem.style.innerText = '';
-                        this._keyStrokeElem.style.display = 'none';
-                    }
-                }
-            }, 1000);
-        }
 
         this._showInCamera = true;
 
@@ -140,6 +130,17 @@ export default class Viewport {
             lineAlpha: DEFAULT_NODE_STYLE.lineColor.a(),
             textAlpha: DEFAULT_NODE_STYLE.textColor.a(),
         };
+    }
+
+    refreshKeystrokes() {
+        if (!SHOW_KEY_STROKES || !this._keyStrokeElem) {
+            return;
+        }
+        if (Date.now() - this._keyStrokeTime > 1000) {
+            this._keyStrokeElem.style.display = 'none';
+
+            this._keyStrokeElem.innerText = '';
+        }
     }
 
     pageBackgroundColor() {
@@ -676,9 +677,10 @@ export default class Viewport {
         if (SHOW_KEY_STROKES) {
             this._keyStrokeElem  = document.createElement("div");
             this._keyStrokeElem.style.position = 'fixed';
+            this._keyStrokeElem.style.transform = 'translate(-50%, -50%)';
             this._keyStrokeElem.style.left = '50%';
             this._keyStrokeElem.style.bottom = '5px';
-            this._keyStrokeElem.style.fontFamily = 'serif';
+            this._keyStrokeElem.style.fontFamily = '"Consolas", "Inconsolata", monospace';
             this._keyStrokeElem.style.fontSize = '36px';
             this._keyStrokeElem.style.background = 'white';
             this._keyStrokeElem.style.color = 'black';

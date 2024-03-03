@@ -229,6 +229,18 @@ function App() {
   }, [viewport]);
 
   useEffect(() => {
+    if (!viewport) {
+      return;
+    }
+    const id = setInterval(() => {
+      viewport.refreshKeystrokes();
+    }, 1000);
+    return () => {
+      clearInterval(id);
+    };
+  }, [viewport]);
+
+  useEffect(() => {
     if (!autopublish) {
       return;
     }

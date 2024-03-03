@@ -866,6 +866,7 @@ export default class Viewport {
         this.node().siblings().setLayoutPreference(nextAxis(
             this.node().siblings().getLayoutPreference()
         ));
+        this.node().invalidate();
         this.logMessage("Preferred axis is now " + 
             namePreferredAxis(this.node().siblings().getLayoutPreference())
         );

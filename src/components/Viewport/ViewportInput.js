@@ -338,7 +338,8 @@ export default class ViewportInput {
 
         new ResizeObserver(() => {
             viewport.camera().setSize(canvas.offsetWidth, canvas.offsetHeight);
-            viewport.refresh();
+            viewport.checkScale();
+            viewport.repaint();
         }).observe(canvas);
 
         if (SHOW_KEY_STROKES) {

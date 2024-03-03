@@ -14,7 +14,7 @@ import {
 import Color from 'parsegraph-color';
 import Camera from 'parsegraph-camera';
 import Rect from "parsegraph-rect";
-import { DEFAULT_NODE_STYLE, USE_LOCAL_STORAGE, SHOW_KEY_STROKES, ENABLE_EXTENT_VIEWING, nodeHasValue, MAX_PAINT_TIME_MS } from "../../settings";
+import { MAX_RENDER_ATTEMPTS, CRANK_SPEED_MS, DEFAULT_NODE_STYLE, USE_LOCAL_STORAGE, SHOW_KEY_STROKES, ENABLE_EXTENT_VIEWING, nodeHasValue, MAX_PAINT_TIME_MS, SLOW_RENDER } from "../../settings";
 import ViewportRendering from "./ViewportRendering";
 import ViewportInput from "./ViewportInput";
 import Carousel from "../Carousel";
@@ -129,6 +129,106 @@ export default class Viewport {
 
             this._keyStrokeElem.innerText = '';
         }
+    }
+
+    mountStatus(statusContainer) {
+        if (this.statusElem().parentElement === statusContainer) {
+            return;
+        }
+        statusContainer.appendChild(this.statusElem());
+        this.setStatus(null);
+    }
+
+    progressElemText() {
+        if (!this._progressElemText) {
+            this._progressElemText = document.createElement('span');
+            this._progressElemText.style.position = 'absolute';
+            this._progressElemText.style.left = '50%';
+            this._progressElemText.style.top = '50%';
+            this._progressElemText.style.transform = 'translate(-50%, -50%)';
+            this.progressElem().appendChild(this._progressElemText);
+        }
+        return this._progressElemText;
+    }
+
+
+    progressElem() {
+        if (!this._progressElem) {
+            this._progressElem = document.createElement("div");
+            this._progressElem.style.background = 'grey';
+            this._progressElem.style.width = '25vw';
+            this._progressElem.style.height = '2em';
+            this._progressElem.style.border = '1px solid #1d1d1d';
+            this._progressElem.style.alignItems = 'start';
+            this._progressElem.style.position = 'relative';
+            this._progressElem.style.display = 'none';
+            this._progressIndicator = document.createElement('div');
+            this._progressIndicator.style.position = 'absolute';
+            this._progressIndicator.style.left = '0px';
+            this._progressIndicator.style.width = '0%';
+            this._progressIndicator.style.height = '100%';
+            this._progressIndicator.style.background = 'lightgreen';
+            this._progressElem.appendChild(this._progressIndicator);
+            this.statusElem().appendChild(this._progressElem);
+        }
+        return this._progressElem;
+    }
+    
+    /**
+     * Updates progress bar, showing cranks/est. total cranks
+     */
+    updateRenderProgress() {
+        const progress = this.rendering().progress();
+        if (isNaN(progress) || progress >= 1 || progress <= 0) {
+            this.progressElem().style.display = 'none';
+            return;
+        }
+        this.progressElem().style.display = 'flex';
+        this.progressElem().style.alignItems = 'center';
+        this.progressElem().style.justifyContent = 'center';
+        this.progressElem().style.overflow = 'hidden';
+        this.progressElem().style.whiteSpace = 'nowrap';
+        this._progressIndicator.style.width = (100 * progress) + "%";
+        this._progressIndicator.style.opacity = 0.8;
+        if (this.rendering().cranksComplete() < this.rendering().totalEstimatedCranks()) {
+            this.progressElemText().innerText = `${this.rendering().cranksComplete()}/${this.rendering().totalEstimatedCranks()}`
+        } else {
+            this.progressElemText().innerText = `${this.rendering().cranksComplete()}`;
+        }
+    }
+
+    statusElem() {
+        if (!this._statusElem) {
+            this._statusElem = document.createElement("div");
+            this._statusElem.style.position = "fixed";
+            this._statusElem.style.display = "flex";
+            this._statusElem.style.flexDirection = 'column';
+            this._statusElem.style.gap = '5px';
+            this._statusElem.style.left = "50%";
+            this._statusElem.style.top = "25%";
+            this._statusElem.style.transform = 'translate(-50%, -50%)';
+        }
+        return this._statusElem;
+    }
+
+    statusTextElem() {
+        if (!this._statusTextElem) {
+            this._statusTextElem = document.createElement('div');
+            this._statusTextElem.style.fontSize = "24px";
+            this._statusTextElem.style.color = "white";
+            this._statusTextElem.style.display = 'none';
+            this.statusElem().appendChild(this._statusTextElem);
+        }
+        return this._statusTextElem;
+    }
+
+    setStatus(msg) {
+        if (msg === null) {
+            this.statusTextElem().style.display = 'none'
+            return;
+        }
+        this.statusTextElem().style.display = 'block'
+        this.statusTextElem().innerText = msg;
     }
 
     logMessage(...msgParts) {
@@ -276,6 +376,7 @@ export default class Viewport {
     carouselContainer() {
         if (!this._carouselContainer) {
             this._carouselContainer = document.createElement("div");
+            this._carouselContainer.style.display = 'none';
             this._carouselContainer.style.position = "absolute";
             this._carouselContainer.style.left = "50%";
             this._carouselContainer.style.top = "50%";
@@ -415,19 +516,83 @@ export default class Viewport {
         if (this._scheduledRender) {
             return;
         }
+        if (SLOW_RENDER) {
+            this.scheduleSlowRender();
+        } else {
+            this.scheduleImmediateRender();
+        }
+    }
+
+    updateStatus() {
+        this.setStatus(`${this.rendering().phaseName()}`);
+        this.updateRenderProgress();
+    }
+
+    clearStatus() {
+        this.setStatus(null);
+        this.progressElem().style.display = 'none';
+    }
+
+    scheduleImmediateRender() {
         let attempts = 0;
         const loop = () => {
             this._scheduledRender = null;
 
             if (this.paint()) {
-                if (attempts++ > 1000) {
+                this.updateStatus();
+                if (attempts++ > MAX_RENDER_ATTEMPTS) {
                     throw new Error("Failed to render after " + attempts + " attempts")
                 }
                 schedule();
+            } else {
+                this.clearStatus();
             }
         };
         const schedule = () => {
-            this._scheduledRender = requestAnimationFrame(loop);
+            let id = requestAnimationFrame(loop);
+            this._scheduledRender = () => {
+                this._scheduledRender = null;
+                cancelAnimationFrame(id);
+                id = null;
+            };
+        };
+        schedule();
+    }
+
+    scheduleSlowRender() {
+        let attempts = 0;
+        const loop = () => {
+            this._scheduledRender = null;
+
+            if (!this.canPaint()) {
+                return false;
+            }
+            if (this.rendering().crank()) {
+                this.updateStatus();
+                if (attempts++ > MAX_RENDER_ATTEMPTS) {
+                    throw new Error("Failed to render after " + attempts + " attempts")
+                }
+                schedule();
+            } else {
+                this.clearStatus();
+            }
+        };
+        const schedule = () => {
+            let animId = null;
+            let timerId = setTimeout(() => {
+                animId = requestAnimationFrame(loop);
+            }, CRANK_SPEED_MS);
+            this._scheduledRender = () => {
+                this._scheduledRender = null;
+                if (animId) {
+                    cancelAnimationFrame(animId);
+                    animId = null;
+                }
+                if (timerId) {
+                    clearTimeout(timerId);
+                    timerId = null;
+                }
+            };
         };
         schedule();
     }
@@ -436,8 +601,7 @@ export default class Viewport {
         if (!this._scheduledRender) {
             return;
         }
-        cancelAnimationFrame(this._scheduledRender);
-        this._scheduledRender = null;
+        this._scheduledRender();
     }
 
     repaint() {

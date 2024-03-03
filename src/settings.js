@@ -24,6 +24,8 @@ const CREASE_ROUNDS = 4;
 
 const MAX_ROUNDS = 14;
 
+const MAX_RENDER_ATTEMPTS = 1000;
+
 const nodeHasValue = (node) => typeof node.value() === "string" || typeof node.value() === "number";
 
 const FONT_SIZE = 10;
@@ -37,7 +39,13 @@ const BUD_SIZE = .75;
 const INWARD_SEPARATION = LINE_THICKNESS * 4;
 const MAX_PAINT_TIME_MS = 1000/60;
 
+const CRANK_SPEED_MS = 1000;
+const SLOW_RENDER = true;
+
 export {
+    SLOW_RENDER,
+    MAX_RENDER_ATTEMPTS,
+    CRANK_SPEED_MS,
     MAX_PAINT_TIME_MS,
     FONT_SIZE,
     LINE_HEIGHT,

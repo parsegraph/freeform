@@ -33,6 +33,28 @@ const borderColor = new Color(0, 0, 0, 0.5);
 
 export default class ViewportRendering {
     constructor(viewport) {
+        this._steps = [
+            [
+                "Clearing background",
+                null,
+                () => 1
+            ],
+            [
+                "Painting graph",
+                () => this.paint(),
+                () => this.allNodeCount()
+            ],
+            ["Focusing camera", () => this.focusCamera(), () => 3],
+            ["Rendering graph", () => this.render(), () => this.allPaintGroupCount()],
+            ["Rendering extents", () => this.renderExtents(this.camera().project()), () => 1],
+            ["Post-rendering", () => {
+                this.cancelPostRender();
+                this.schedulePostRender();
+                return false;
+            }, () => 1],
+            ["Persisting graph", () => this.persist(), () => 1],
+        ];
+
         this._phase = 0;
         this._scheduledPostRender = null;
 
@@ -66,6 +88,50 @@ export default class ViewportRendering {
         this._painters = new WeakMap();
         this._worldLabels = null;
         this._bounds = new WeakMap();
+    }
+
+    isDone() {
+        return this.phase() >= this._steps.length;
+    }
+
+    runCount() {
+        this._nodeCount = 0;
+        this._paintGroupCount = 0;
+        this.viewport().widget().paintGroup().forEach(pg => {
+            this._paintGroupCount++;
+            pg.siblings().forEach(() => {
+                ++this._nodeCount;
+            });
+        });
+    }
+
+    allPaintGroupCount() {
+        if (isNaN(this._paintGroupCount)) {
+            this.runCount();
+        }
+        return this._paintGroupCount;
+    }
+
+    allNodeCount() {
+        if (isNaN(this._nodeCount)) {
+            this.runCount();
+        }
+        return this._nodeCount;
+    }
+
+    totalEstimatedCranks() {
+        return this._steps.reduce((total, step) => {
+            const complexityFunc = step[2];
+            return total + complexityFunc();
+        }, 0);
+    }
+
+    cranksComplete() {
+        return this._cranks;
+    }
+
+    progress() {
+        return Math.min(1, this.cranksComplete()/this.totalEstimatedCranks());
     }
 
     node() {
@@ -161,6 +227,9 @@ export default class ViewportRendering {
     }
 
     clearBackground() {
+        if (!this.glProvider().canProject()) {
+            return false;
+        }
         this.viewport().container().style.background = this._pageBackgroundColor.asRGBA();
 
         const glProvider = this.glProvider();
@@ -203,6 +272,8 @@ export default class ViewportRendering {
 
     reset() {
         this._phase = 0;
+        this._count = NaN;
+        this._cranks = 0;
         this._layout = null;
         if (this._worldLabels) {
             this._worldLabels.clear();
@@ -213,6 +284,7 @@ export default class ViewportRendering {
     }
 
     crank() {
+        this._cranks++;
         if (!this.phase()) {
             if (this.clearBackground()) {
                 return true;
@@ -220,27 +292,27 @@ export default class ViewportRendering {
             this.nextPhase();
         }
 
-        let steps = [
-            null,
-            () => this.paint(),
-            () => this.focusCamera(),
-            () => this.render(),
-            () => this.renderExtents(this.camera().project()),
-            () => {
-                this.cancelPostRender();
-                this.schedulePostRender();
-                return false;
-            },
-            () => this.persist(),
-        ];
-        if (!steps[this.phase()]) {
+        const step = this._steps[this.phase()];
+        if (!step) {
             return false;
         }
 
-        if (!steps[this.phase()]()) {
+        if (!step[1]()) {
             this.nextPhase();
+            if (step) {
+            } else {
+                return false;
+            }
         }
         return true;
+    }
+
+    phaseName() {
+        if (this.isDone()) {
+            return "Finished";
+        }
+        const step = this._steps[this.phase()];
+        return step ?  step[0] : null;
     }
 
     persist() {
@@ -385,7 +457,7 @@ export default class ViewportRendering {
     render() {
         const cam = this.camera();
         if (!this.glProvider().canProject() || !cam.canProject()) {
-            return true;
+            return false;
         }
 
         const worldMatrix = cam.project();
@@ -527,6 +599,7 @@ export default class ViewportRendering {
             cam.scale(),
             () => {
                 requestAnimationFrame(() => {
+                    console.log("post-render");
                     this._scheduledPostRender = null;
                     ctx.resetTransform();
                     ctx.scale(cam.scale(), cam.scale());

@@ -425,6 +425,7 @@ function App() {
       {PUBLIC_SERVERS && roomName && <button onClick={() => publish()}>Publish to {roomName}</button>}
       </div>
       <ParsegraphLog viewport={viewport}/>
+      <ParsegraphStatus viewport={viewport}/>
     </div>
     </div>
     </>
@@ -462,6 +463,22 @@ function ParsegraphEditor({viewport}) {
 
   return <div ref={editorContainerRef}>
         </div>;
+}
+
+function ParsegraphStatus({viewport}) {
+  const ref = useRef();
+
+  useEffect(() => {
+    if (!viewport) {
+      return;
+    }
+    if (!ref.current) {
+      return;
+    }
+    viewport.mountStatus(ref.current);
+  }, [viewport, ref]);
+
+  return <div ref={ref}></div>;
 }
 
 function NodeActions({viewport}) {

@@ -296,7 +296,7 @@ function App() {
       if (showingStyling) {
         setNodeStyling({
           ...viewport.getNodeStyle(),
-          pageBackgroundColor: viewport.pageBackgroundColor().asHex()
+          pageBackgroundColor: viewport.rendering().pageBackgroundColor().asHex()
         });
       }
       setNodeStylingModalOpen(showingStyling);
@@ -305,8 +305,9 @@ function App() {
 
   const updateNodeStyling = (newStyling) => {
     if (newStyling.pageBackgroundColor) {
-      viewport.setPageBackgroundColor(Color.fromHex(newStyling.pageBackgroundColor));
+      viewport.rendering().setPageBackgroundColor(Color.fromHex(newStyling.pageBackgroundColor));
       delete newStyling.pageBackgroundColor;
+      viewport.refresh();
     }
     viewport.updateNodeStyle(newStyling);
     graphs.save(graphs.widget(), viewport.node().id(), viewport);

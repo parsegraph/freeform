@@ -238,15 +238,15 @@ const buildCross = (numRounds) => {
       car.crease();
     }
     car.spawnMove(dir)
-    car.shrink();
+    if (numRounds % 2 === 0) {
+      car.shrink();
+    }
     car.push();
-    car.spawnMove(turnLeft(dir));
     if (numRounds >= 0) {
       cross(car, turnLeft(dir), numRounds - 1);
     }
     car.pop();
     car.push();
-    car.spawnMove(turnRight(dir));
     if (numRounds >= 0) {
       cross(car, turnRight(dir), numRounds - 1);
     }
@@ -366,7 +366,7 @@ function ImportFromTemplate({openGraph, onClose}) {
   </select>
   </label> 
   {(importType === "march" || importType === "cross") && <div style={{display: "flex", flexDirection: "column", justifyContent: "space-between", gap: "8px", margin: '8px 0'}}><label style={{display: 'flex'}}>Rounds:&nbsp;
-  <input value={numRounds} onChange={e=>setNumRounds(Number.parseInt(e.target.value))} type="range" min="1" max={MAX_ROUNDS}></input><span style={{display: 'inline-block', minWidth: "2em"}}>{numRounds}</span>
+  <input value={numRounds} onChange={e=>setNumRounds(Number.parseInt(e.target.value))} type="range" min="1" max={importType === "cross" ? MAX_ROUNDS-5 : MAX_ROUNDS}></input><span style={{display: 'inline-block', minWidth: "2em"}}>{numRounds}</span>
   </label>
   {importType === "march" && <label style={{display: 'flex', justifyContent: 'space-between'}}>
     Vertical?

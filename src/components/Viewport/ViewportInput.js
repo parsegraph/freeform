@@ -80,7 +80,6 @@ export default class ViewportInput {
         let clickedOnSelected = false;
         canvas.addEventListener('mousedown', e => {
             if (this.carouselContainer().contains(e.target)) {
-                console.log("Carousel contains e.target");
                 return;
             }
             const car = viewport.caret();
@@ -98,15 +97,14 @@ export default class ViewportInput {
             const boundsRect = absoluteSizeRect(selectedNode);
             if (selectedNode && (clickedOnSelected || cam.containsAll(boundsRect) || selectedNode.neighbors().hasAncestor(car.node()))) {
                 if (!clickedOnSelected && cam.containsAll(boundsRect)) {
-                    viewport.logMessage("moving to node");
                     car.moveTo(selectedNode);
                     viewport.refresh();
                 }
-                viewport.logMessage("touched node");
-                touchingNode = true;
+                touchingNode = clickedOnSelected;
                 viewport.refresh();
             }
         });
+
         canvas.addEventListener('mouseup', e => {
             let hadGesture = false;
             if (touchingNode) {
@@ -331,7 +329,7 @@ export default class ViewportInput {
                 this.keystrokes().key(e.key);
             }
 
-            if (handleKeyDown(viewport, e.key, mouseX, mouseY)) {
+            if (!e.ctrlKey && handleKeyDown(viewport, e.key, mouseX, mouseY)) {
                 e.preventDefault();
             }
         });
@@ -339,7 +337,6 @@ export default class ViewportInput {
         new ResizeObserver(() => {
             viewport.camera().setSize(canvas.offsetWidth, canvas.offsetHeight);
             viewport.checkScale();
-            viewport.repaint();
         }).observe(canvas);
 
         if (SHOW_KEY_STROKES) {

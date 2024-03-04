@@ -72,6 +72,9 @@ const handleKeyDown = (viewport, key, mouseX, mouseY) => {
         case 'l':
         viewport.spawnMove(Direction.FORWARD);
         break;
+        case 'r':
+            viewport.showInCamera()
+            break;
         case 'h':
         viewport.spawnMove(Direction.BACKWARD);
         break;
@@ -112,6 +115,7 @@ const handleKeyDown = (viewport, key, mouseX, mouseY) => {
             viewport.refresh();
             break;
         default:
+            console.log("Unhandled '" + key + "'");
             return false;
     }
     return true;

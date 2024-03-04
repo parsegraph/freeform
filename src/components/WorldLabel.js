@@ -136,6 +136,7 @@ export class WorldLabels {
 
   prepareRender(ctx, worldX, worldY, worldWidth, worldHeight, worldScale, onFinish) {
     let curFontSize = NaN;
+    this._worldScale = worldScale;
 
     const filteredLabels = this.labels().filter(label => {
         if (label.scale() > this.scaleMultiplier() / worldScale) {
@@ -186,11 +187,18 @@ export class WorldLabels {
     };
   }
 
-  render(ctx, bg) {
+  clone() {
+    const clone = new WorldLabels(this.scaleMultiplier());
+    clone._worldScale = this._worldScale;
+    clone._drawnLabels = this._drawnLabels;
+    return clone;
+  }
+
+  render(ctx, bg, worldScale) {
     if (this._drawnLabels == null) {
       return;
     }
-    const scale = this._worldScale;
+    const scale = worldScale ?? this._worldScale ?? 1;
     this._drawnLabels.forEach((label) => {
       const overlay = ctx;
       overlay.font = `${Math.round(label.fontSize() / scale)}px ${this.font()}`;

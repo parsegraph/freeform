@@ -156,8 +156,8 @@ export default class Viewport {
         if (!this._progressElem) {
             this._progressElem = document.createElement("div");
             this._progressElem.style.background = 'grey';
-            this._progressElem.style.width = '25vw';
-            this._progressElem.style.height = '2em';
+            this._progressElem.style.width = '10vw';
+            this._progressElem.style.height = '24px';
             this._progressElem.style.border = '1px solid #1d1d1d';
             this._progressElem.style.alignItems = 'start';
             this._progressElem.style.position = 'relative';
@@ -166,6 +166,7 @@ export default class Viewport {
             this._progressIndicator.style.position = 'absolute';
             this._progressIndicator.style.left = '0px';
             this._progressIndicator.style.width = '0%';
+            this._progressIndicator.style.fontSize = '18px';
             this._progressIndicator.style.height = '100%';
             this._progressIndicator.style.background = 'lightgreen';
             this._progressElem.appendChild(this._progressIndicator);
@@ -179,7 +180,7 @@ export default class Viewport {
      */
     updateRenderProgress() {
         const progress = this.rendering().progress();
-        if (isNaN(progress) || progress >= 1 || progress <= 0) {
+        if (isNaN(progress) || progress <= 0) {
             this.progressElem().style.display = 'none';
             return;
         }
@@ -203,10 +204,10 @@ export default class Viewport {
             this._statusElem.style.position = "fixed";
             this._statusElem.style.display = "flex";
             this._statusElem.style.flexDirection = 'column';
-            this._statusElem.style.gap = '5px';
-            this._statusElem.style.left = "50%";
-            this._statusElem.style.top = "25%";
-            this._statusElem.style.transform = 'translate(-50%, -50%)';
+            this._statusElem.style.alignItems = 'end';
+            this._statusElem.style.gap = '2px';
+            this._statusElem.style.right = '5px';
+            this._statusElem.style.bottom = "1.2em";
         }
         return this._statusElem;
     }
@@ -214,7 +215,7 @@ export default class Viewport {
     statusTextElem() {
         if (!this._statusTextElem) {
             this._statusTextElem = document.createElement('div');
-            this._statusTextElem.style.fontSize = "24px";
+            this._statusTextElem.style.fontSize = "18px";
             this._statusTextElem.style.color = "white";
             this._statusTextElem.style.display = 'none';
             this.statusElem().appendChild(this._statusTextElem);
@@ -265,7 +266,6 @@ export default class Viewport {
             return;
         }
         logContainer.appendChild(this.logContainer());
-        this.logMessage("Messages will show here.")
     }
 
     setSaveGraph(saveGraph) {
@@ -310,7 +310,6 @@ export default class Viewport {
         if (!ENABLE_EXTENT_VIEWING) {
             return;
         }
-        console.log("changing extents")
         const order = ["none", "vertical", "horizontal"];
         let idx = order.indexOf(this.rendering().extentMode());
         if (idx < 0) {
@@ -471,9 +470,11 @@ export default class Viewport {
     moveOutward() {
             if (this._userCaret.has(Direction.OUTWARD)) {
                 this._userCaret.move(Direction.OUTWARD);
+                this.showInCamera();
                 this.refresh();
             } else if (!this._userCaret.node().neighbors().isRoot()) {
                 this._userCaret.move(this._userCaret.node().neighbors().parentDirection());
+                this.showInCamera();
                 this.refresh();
             }
         }
@@ -616,7 +617,6 @@ export default class Viewport {
         const start = Date.now();
         while (this.rendering().crank()) {
             if (Date.now() - start > MAX_PAINT_TIME_MS) {
-                this.refresh();
                 return true;
             }
         }
@@ -656,6 +656,7 @@ export default class Viewport {
             this.node().setNodeFit(Fit.EXACT);
             this.logMessage("Fit is now EXACT")
         }
+        this.node().invalidate();
         this.save();
         this.repaint();
     }

@@ -35,23 +35,19 @@ export default class ViewportRendering {
     constructor(viewport) {
         this._steps = [
             [
-                "Clearing background",
-                null,
-                () => 1
-            ],
-            [
                 "Painting graph",
                 () => this.paint(),
                 () => this.allNodeCount()
             ],
             ["Focusing camera", () => this.focusCamera(), () => 3],
+            [
+                "Clearing background",
+                () => this.clearBackground(),
+                () => 1
+            ],
             ["Rendering graph", () => this.render(), () => this.allPaintGroupCount()],
             ["Rendering extents", () => this.renderExtents(this.camera().project()), () => 1],
-            ["Post-rendering", () => {
-                this.cancelPostRender();
-                this.schedulePostRender();
-                return false;
-            }, () => 1],
+            ["Post-rendering", () => this.postRender(), () => 1],
             ["Persisting graph", () => this.persist(), () => 1],
         ];
 
@@ -73,6 +69,13 @@ export default class ViewportRendering {
 
         this._ctx = textCanvas.getContext("2d");
 
+        const labelsCanvas = document.createElement('canvas');
+        labelsCanvas.className = 'viewport-labels-canvas';
+        labelsCanvas.style.position = 'fixed';
+        labelsCanvas.style.inset = 0;
+        this._labelsCanvas = labelsCanvas;
+
+        this._ctx = textCanvas.getContext("2d");
         const glProvider = new BasicGLProvider();
         glProvider.container();
         glProvider.container().className = "viewport-webgl-container";
@@ -83,6 +86,8 @@ export default class ViewportRendering {
         this._glProvider = glProvider;
         container.appendChild(textCanvas);
 
+        container.appendChild(labelsCanvas);
+
         this._viewport = viewport;
 
         this._painters = new WeakMap();
@@ -92,6 +97,12 @@ export default class ViewportRendering {
 
     isDone() {
         return this.phase() >= this._steps.length;
+    }
+
+    resetCounts() {
+        this._nodeCount = NaN;
+        this._paintGroupCount = NaN;
+        this._cranks = 0;
     }
 
     runCount() {
@@ -171,7 +182,7 @@ export default class ViewportRendering {
         if (this.viewport().showingInCamera()) {
             const scale = initialScale/this.layout().absoluteScale();
             if (!isNaN(scale) && isFinite(scale)) {
-                viewport.logMessage("showing in camera (scale=" + scale + ")");
+                this.viewport().logMessage("Explicitly showing node in camera");
                 cam.setScale(initialScale/this.layout().absoluteScale());
                 showNodeInCamera(this.viewport().node(), cam);
                 this.viewport().clearShowingInCamera();
@@ -185,9 +196,9 @@ export default class ViewportRendering {
         if (graphSize[0] > 0 && graphSize[1] > 0) {
             const scaleFactor = 4;
             if (this.viewport().checkingScale() && (Math.max(...graphSize) * cam.scale() < Math.min(cam.height(), cam.width())/(scaleFactor))) {
-                viewport.logMessage("checking scale");
                 const scale = (Math.min(cam.height(), cam.width())/scaleFactor) / (cam.scale() * Math.max(...graphSize));
                 if (!isNaN(scale)) {
+                    this.viewport().logMessage("Zooming camera to keep node within scale");
                     cam.zoomToPoint(
                         scale,
                         cam.width()/2,
@@ -202,16 +213,17 @@ export default class ViewportRendering {
         const bodySize = [NaN, NaN];
         layout.absoluteSize(bodySize);
         if (bodySize[0] > 0 && bodySize[1] > 0 &&
-            this.viewport().ensuringVisible() &&
-            !cam.containsAny(new Rect(
+            this.viewport().ensuringVisible())
+        {
+            if (!cam.containsAny(new Rect(
                 layout.absoluteX(),
                 layout.absoluteY(),
                 bodySize[0],
                 bodySize[1]
-            ))
-        ) {
-            viewport.logMessage("ensuring visible");
-            showNodeInCamera(this.node(), cam);
+            ))) {
+                this.viewport().logMessage("Showing node in camera to keep it within camera viewport");
+                showNodeInCamera(this.node(), cam);
+            }
             this.viewport().clearEnsuringVisible();
             return true;
         }
@@ -228,7 +240,7 @@ export default class ViewportRendering {
 
     clearBackground() {
         if (!this.glProvider().canProject()) {
-            return false;
+            throw new Error("Cannot project");
         }
         this.viewport().container().style.background = this._pageBackgroundColor.asRGBA();
 
@@ -252,6 +264,13 @@ export default class ViewportRendering {
         this._textCanvas.height = cam.height();
         ctx.resetTransform();
         ctx.clearRect(0, 0, this._textCanvas.width, this._textCanvas.height);
+
+        if (this._labelsCanvas.width !== cam.width()) {
+            this._labelsCanvas.width = cam.width();
+        }
+        if (this._labelsCanvas.height !== cam.height()) {
+            this._labelsCanvas.height = cam.height();
+        }
     }
 
     camera() {
@@ -272,8 +291,8 @@ export default class ViewportRendering {
 
     reset() {
         this._phase = 0;
-        this._count = NaN;
-        this._cranks = 0;
+        this.resetCounts();
+
         this._layout = null;
         if (this._worldLabels) {
             this._worldLabels.clear();
@@ -285,18 +304,13 @@ export default class ViewportRendering {
 
     crank() {
         this._cranks++;
-        if (!this.phase()) {
-            if (this.clearBackground()) {
-                return true;
-            }
-            this.nextPhase();
-        }
 
         const step = this._steps[this.phase()];
         if (!step) {
             return false;
         }
 
+        //console.log(this.phaseName());
         if (!step[1]()) {
             this.nextPhase();
             if (step) {
@@ -342,7 +356,11 @@ export default class ViewportRendering {
         const ctx = this.ctx();
 
         const painter = this._painters.get(pg);
-        if (!painter || pg.layout().needsCommit() || pg.layout().needsAbsolutePos()) {
+        if (pg.layout().needsCommit() || pg.layout().needsAbsolutePos()) {
+            renderData.dirtyGroups++;
+            return true;
+        }
+        if (!painter) {
             renderData.dirtyGroups++;
             return true;
         }
@@ -583,12 +601,40 @@ export default class ViewportRendering {
         this._scheduledPostRender = null;
     }
 
+    labelsCtx() {
+        return this._labelsCanvas.getContext("2d");
+    }
+
+    clearLabelsCtx() {
+        const ctx = this.labelsCtx();
+        ctx.save();
+        ctx.resetTransform();
+        ctx.clearRect(0, 0, this._labelsCanvas.width, this._labelsCanvas.height);
+        ctx.restore();
+    }
+
+    postRender() {
+        this.cancelPostRender();
+        this.schedulePostRender();
+
+        if (this._renderedWorldLabels) {
+            const cam = this.camera();
+            const ctx = this.labelsCtx();
+            ctx.resetTransform();
+            ctx.scale(cam.scale(), cam.scale());
+            ctx.translate(cam.x(), cam.y());
+            this.clearLabelsCtx();
+            this._renderedWorldLabels.render(ctx, this.pageBackgroundColor(), cam.scale());
+        }
+        return false;
+    }
+
     schedulePostRender() {
         if (this._scheduledPostRender || !this._worldLabels) {
             return;
         }
         const cam = this.camera();
-        const ctx = this.ctx();
+        const ctx = this.labelsCtx();
 
         this._scheduledPostRender = this._worldLabels.prepareRender(
             ctx,
@@ -599,12 +645,13 @@ export default class ViewportRendering {
             cam.scale(),
             () => {
                 requestAnimationFrame(() => {
-                    console.log("post-render");
                     this._scheduledPostRender = null;
+                    this.clearLabelsCtx();
                     ctx.resetTransform();
                     ctx.scale(cam.scale(), cam.scale());
                     ctx.translate(cam.x(), cam.y());
                     this._worldLabels.render(ctx, this.pageBackgroundColor());
+                    this._renderedWorldLabels = this._worldLabels.clone();
                 });
             }
         );
@@ -612,6 +659,9 @@ export default class ViewportRendering {
 
     renderExtents(worldMatrix) {
         if (!this.node()) {
+            return false;
+        }
+        if (this.node().layout().needsCommit()) {
             return false;
         }
         this.paintExtents();

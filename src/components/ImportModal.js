@@ -444,7 +444,13 @@ export default function ImportModal({onClose, openGraph, sampleName}) {
     }
   }, [sampleName, openGraph]);
 
-  return <div style={{width: '100%', height: '100%', display: 'flex', justifyContent: 'stretch', flexDirection: 'column', alignItems: 'stretch', gap: '3px', padding: '12px', boxSizing: 'border-box'}}>
+  if (sampleName) {
+    return <div style={{width: '100%', height: '100%', display: 'flex', justifyContent: 'stretch', flexDirection: 'column', alignItems: 'stretch', gap: '3px', padding: '12px', boxSizing: 'border-box'}}>
+      <h3 style={{margin: '0', marginBottom: '.5em'}}>Loading Parsegraph...</h3>
+    </div>
+  }
+
+  return <div style={{width: '100%', height: '100%', display: sampleName ? 'none' : 'flex', justifyContent: 'stretch', flexDirection: 'column', alignItems: 'stretch', gap: '3px', padding: '12px', boxSizing: 'border-box'}}>
     <h3 style={{margin: '0', marginBottom: '.5em'}}>{activeTab === "template" ? "New": (activeTab === "public" ? "Load" : "Open")} Parsegraph</h3>
     <div className="tabs" style={{display: 'flex', gap:'5px'}}>
       <button className={activeTab === "template" ? "active" : null} onClick={()=>{

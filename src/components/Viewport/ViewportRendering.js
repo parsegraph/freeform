@@ -24,7 +24,7 @@ import { WorldLabels } from "../WorldLabel";
 import { createLayoutPainter } from "./createLayoutPainter";
 
 const minVisibleTextScale = 1;
-const initialScale = 4;
+const initialScale = 8;
 
 const caretColor = new Color(.95, .9, 0, 1);
 

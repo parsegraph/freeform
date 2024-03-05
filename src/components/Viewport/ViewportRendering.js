@@ -19,7 +19,7 @@ import {
 } from 'parsegraph-matrix';
 import { showNodeInCamera } from "parsegraph-showincamera";
 import Rect from "parsegraph-rect";
-import { USE_LOCAL_STORAGE, TEXT_IS_VISIBLE_SCALE, LABEL_IS_VISIBLE_SCALE, PAGE_BACKGROUND_COLOR, PRINT_PAINT_STATS, ENABLE_EXTENT_VIEWING, nodeHasValue, BORDER_ROUNDEDNESS, BORDER_THICKNESS, LINE_HEIGHT, FONT_SIZE } from "../../settings";
+import { USE_LOCAL_STORAGE, TEXT_IS_VISIBLE_SCALE, LABEL_IS_VISIBLE_SCALE, PAGE_BACKGROUND_COLOR, PRINT_PAINT_STATS, ENABLE_EXTENT_VIEWING, nodeHasValue, BORDER_ROUNDEDNESS, BORDER_THICKNESS, LINE_HEIGHT, FONT_SIZE, SHOW_WORLD_LABELS } from "../../settings";
 import { WorldLabels } from "../WorldLabel";
 import { createLayoutPainter } from "./createLayoutPainter";
 
@@ -93,6 +93,8 @@ export default class ViewportRendering {
         this._painters = new WeakMap();
         this._worldLabels = null;
         this._bounds = new WeakMap();
+
+        this._showWorldLabels = SHOW_WORLD_LABELS;
     }
 
     resetSettings() {
@@ -272,6 +274,10 @@ export default class ViewportRendering {
             return true;
         }
         return false;
+    }
+
+    toggleWorldLabels() {
+        this._showWorldLabels = !this._showWorldLabels;
     }
 
     glProvider() {
@@ -668,7 +674,9 @@ export default class ViewportRendering {
             ctx.scale(cam.scale(), cam.scale());
             ctx.translate(cam.x(), cam.y());
             this.clearLabelsCtx();
-            this._renderedWorldLabels.render(ctx, this.pageBackgroundColor(), cam.scale());
+            if (this._showWorldLabels) {
+                this._renderedWorldLabels.render(ctx, this.pageBackgroundColor(), cam.scale());
+            }
         }
         return false;
     }
@@ -694,7 +702,9 @@ export default class ViewportRendering {
                     ctx.resetTransform();
                     ctx.scale(cam.scale(), cam.scale());
                     ctx.translate(cam.x(), cam.y());
-                    this._worldLabels.render(ctx, this.pageBackgroundColor());
+                    if (this._showWorldLabels) {
+                        this._worldLabels.render(ctx, this.pageBackgroundColor());
+                    }
                     this._renderedWorldLabels = this._worldLabels.clone();
                 });
             }

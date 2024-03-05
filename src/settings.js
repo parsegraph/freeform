@@ -44,7 +44,10 @@ const MAX_PAINT_TIME_MS = 1000/60;
 const CRANK_SPEED_MS = 500;
 const SLOW_RENDER = false;
 
+const SHOW_WORLD_LABELS = true;
+
 export {
+    SHOW_WORLD_LABELS,
     SLOW_RENDER,
     SINGLE_TAP_GESTURES,
     MAX_RENDER_ATTEMPTS,

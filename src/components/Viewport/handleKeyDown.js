@@ -60,6 +60,10 @@ const handleKeyDown = (viewport, key, mouseX, mouseY) => {
         case 'H':
         pull(Direction.BACKWARD);
         break;
+        case 'w':
+            viewport.rendering().toggleWorldLabels();
+            viewport.refresh();
+            break;
         case 'v':
         viewport.toggleAlignment();
         break;

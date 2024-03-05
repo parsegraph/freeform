@@ -26,6 +26,7 @@ import { createLayoutPainter } from "./createLayoutPainter";
 
 const minVisibleTextScale = 1;
 const initialScale = 8;
+const MIN_VISIBLE_GRAPH_SCREEN = 4;
 
 const caretColor = new Color(.95, .9, 0, 1);
 
@@ -210,7 +211,7 @@ export default class ViewportRendering {
 
         const checkScale = () => {
             let adjusted = false;
-            let scaleFactor = initialScale/2;
+            let scaleFactor = initialScale;
 
             const graphSize = [NaN, NaN];
             this.node().layout().absoluteSize(graphSize);
@@ -239,7 +240,7 @@ export default class ViewportRendering {
                 }
             }
             if (!adjusted) {
-                let scaleFactor = initialScale;
+                let scaleFactor = MIN_VISIBLE_GRAPH_SCREEN;
                 this.widget().layout().extentSize(graphSize);
                 if (Math.max(...graphSize) * cam.scale() < Math.min(cam.height(), cam.width())/(scaleFactor)) {
                     const scale = (Math.min(cam.height(), cam.width())/scaleFactor) / (cam.scale() * Math.max(...graphSize));

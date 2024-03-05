@@ -11,7 +11,7 @@
     "buffer": "^6.0.3",
     "exif-parser": "^0.1.12",
     "exif-reader": "^2.0.1",
-    "parsegraph": "^6.1.4",
+    "parsegraph": "^6.1.6",
     "parsegraph-anthonylisp": "^2.1.5",
     "parsegraph-blockpainter": "^1.8.0",
     "parsegraph-camera": "^1.4.24",

@@ -168,6 +168,8 @@ const handleKeyDown = (viewport, key, mouseX, mouseY, modifiers) => {
             viewport.toggleEditor();
             viewport.refresh();
             break;
+        case 'Shift':
+            return false;
         default:
             console.log("Unhandled '" + key + "'");
             return false;

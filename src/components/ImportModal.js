@@ -177,8 +177,8 @@ const buildRandomRainbow = () => {
   const car = new DirectionCaret();
   const styles = {};
 
-  const size = 25;
-  for(let col = 0; col < size; ++col) {
+  const size = 50;
+  for(let col = 0; col < 2*size; ++col) {
     car.spawnMove('d');
     car.push();
 
@@ -201,7 +201,7 @@ const buildRainbow = (vert) => {
   const car = new DirectionCaret();
   const styles = {};
 
-  const size = 10;
+  const size = 20;
   for(let l = 0; l < size; ++l) {
     car.spawnMove(vert ? 'd' : 'f');
     car.push();
@@ -366,7 +366,7 @@ function ImportFromTemplate({openGraph, onClose}) {
   </select>
   </label> 
   {(importType === "march" || importType === "cross") && <div style={{display: "flex", flexDirection: "column", justifyContent: "space-between", gap: "8px", margin: '8px 0'}}><label style={{display: 'flex'}}>Rounds:&nbsp;
-  <input value={numRounds} onChange={e=>setNumRounds(Number.parseInt(e.target.value))} type="range" min="1" max={importType === "cross" ? MAX_ROUNDS-5 : MAX_ROUNDS}></input><span style={{display: 'inline-block', minWidth: "2em"}}>{numRounds}</span>
+  <input value={numRounds} onChange={e=>setNumRounds(Number.parseInt(e.target.value))} type="range" min="1" max={importType === "cross" ? MAX_ROUNDS-3 : MAX_ROUNDS}></input><span style={{display: 'inline-block', minWidth: "2em"}}>{numRounds}</span>
   </label>
   {importType === "march" && <label style={{display: 'flex', justifyContent: 'space-between'}}>
     Vertical?

@@ -95,7 +95,7 @@ const buildAlternatingColumns = () => {
       car.crease();
     }
     const c = Color.random();
-    for(let row = 0; row < SIZE; ++row) {
+    for(let row = 0; row < 10 * SIZE; ++row) {
       car.spawnMove(col % 2 !== 0 ? 'u' : 'd', row);
       styles[car.node().id()] = {
         backgroundColor: c.asHex(),

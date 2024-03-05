@@ -8,6 +8,7 @@ import {
   directionSign,
   getNegativeDirection,
   getPositiveDirection,
+  paintNodeLines,
 } from "parsegraph";
 import Color from 'parsegraph-color';
 import { BasicGLProvider } from 'parsegraph-compileprogram';
@@ -19,7 +20,7 @@ import {
 } from 'parsegraph-matrix';
 import { showNodeInCamera } from "parsegraph-showincamera";
 import Rect from "parsegraph-rect";
-import { USE_LOCAL_STORAGE, TEXT_IS_VISIBLE_SCALE, LABEL_IS_VISIBLE_SCALE, PAGE_BACKGROUND_COLOR, PRINT_PAINT_STATS, ENABLE_EXTENT_VIEWING, nodeHasValue, BORDER_ROUNDEDNESS, BORDER_THICKNESS, LINE_HEIGHT, FONT_SIZE, SHOW_WORLD_LABELS } from "../../settings";
+import { USE_LOCAL_STORAGE, TEXT_IS_VISIBLE_SCALE, LABEL_IS_VISIBLE_SCALE, PAGE_BACKGROUND_COLOR, PRINT_PAINT_STATS, ENABLE_EXTENT_VIEWING, nodeHasValue, BORDER_ROUNDEDNESS, BORDER_THICKNESS, LINE_HEIGHT, FONT_SIZE, SHOW_WORLD_LABELS, LINE_THICKNESS } from "../../settings";
 import { WorldLabels } from "../WorldLabel";
 import { createLayoutPainter } from "./createLayoutPainter";
 
@@ -900,6 +901,9 @@ export default class ViewportRendering {
                 layout.groupY(),
                 ...size
             );
+            paintNodeLines(node, LINE_THICKNESS/2, (x, y, w, h) => {
+                b.include(x, y, w, h);
+            });
         });
         return b;
     }

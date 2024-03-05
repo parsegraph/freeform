@@ -337,17 +337,24 @@ export default class Viewport {
         this.repaint();
     };
 
-    spawnMove(dir, pullIfOccupied) {
+    spawnMove(dir, pullIfOccupied, dontTouchCamera) {
         if (this.node().neighbors().hasNode(dir)) {
             if (pullIfOccupied && !this.node().neighbors().isRoot()) {
                 this.pullNode();
             } else {
                 this.caret().move(dir);
+                if (!dontTouchCamera) {
+                    this.showInCamera();
+                } else {
+
+                }
             }
             this.repaint();
         } else {
             this.caret().spawnMove(dir);
-            this.showInCamera();
+            if (!dontTouchCamera) {
+                this.showInCamera();
+            }
             this.repaint();
             this.save();
         }

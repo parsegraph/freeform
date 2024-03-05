@@ -26,6 +26,8 @@ const MAX_ROUNDS = 14;
 
 const MAX_RENDER_ATTEMPTS = 10000;
 
+const SINGLE_TAP_GESTURES = false;
+
 const nodeHasValue = (node) => typeof node.value() === "string" || typeof node.value() === "number";
 
 const FONT_SIZE = 10;
@@ -44,6 +46,7 @@ const SLOW_RENDER = false;
 
 export {
     SLOW_RENDER,
+    SINGLE_TAP_GESTURES,
     MAX_RENDER_ATTEMPTS,
     CRANK_SPEED_MS,
     MAX_PAINT_TIME_MS,

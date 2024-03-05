@@ -183,48 +183,88 @@ export default class ViewportRendering {
         }
         const viewport = this.viewport();
         const cam = this.camera();
-        if (this.viewport().showingInCamera()) {
-            const scale = initialScale/this.layout().absoluteScale();
-            if (!isNaN(scale) && isFinite(scale)) {
-                this.viewport().logMessage("Explicitly showing node in camera");
-                cam.setScale(initialScale/this.layout().absoluteScale());
-                showNodeInCamera(this.viewport().node(), cam);
-                this.viewport().clearShowingInCamera();
-            }
+
+        const showInCamera = () => {
+            this.viewport().logMessage("Explicitly showing node in camera");
+            showNodeInCamera(this.viewport().node(), cam);
+            this.viewport().clearShowingInCamera();
+            this.viewport()._checkScale = true;
             return true;
         }
 
-        const graphSize = [NaN, NaN];
-        const layout = this.widget().layout();
-        this.widget().layout().extentSize(graphSize);
-        if (graphSize[0] > 0 && graphSize[1] > 0) {
-            const scaleFactor = 4;
-            if (this.viewport().checkingScale() && (Math.max(...graphSize) * cam.scale() < Math.min(cam.height(), cam.width())/(scaleFactor))) {
-                const scale = (Math.min(cam.height(), cam.width())/scaleFactor) / (cam.scale() * Math.max(...graphSize));
+        const checkScale = () => {
+            let adjusted = false;
+            let scaleFactor = initialScale/2;
+
+            const graphSize = [NaN, NaN];
+            this.node().layout().absoluteSize(graphSize);
+            if (graphSize[0] * cam.scale() > cam.width()*scaleFactor) {
+                const scale = (cam.width()*scaleFactor)/(graphSize[0] * cam.scale());
                 if (!isNaN(scale)) {
-                    this.viewport().logMessage("Zooming camera to keep node within scale");
+                    this.viewport().logMessage("Zooming out camera to keep node horizontally within scale");
                     cam.zoomToPoint(
                         scale,
                         cam.width()/2,
                         cam.height()/2
                     );
-                    viewport.clearCheckScale();
+                    adjusted = true;
                 }
-                return true;
             }
+            if (graphSize[1] * cam.scale() > cam.height()*scaleFactor) {
+                const scale = (cam.height()*scaleFactor)/(graphSize[1] * cam.scale());
+                if (!isNaN(scale)) {
+                    this.viewport().logMessage("Zooming out camera to keep node vertically within scale");
+                    cam.zoomToPoint(
+                        scale,
+                        cam.width()/2,
+                        cam.height()/2
+                    );
+                    adjusted = true;
+                }
+            }
+            if (!adjusted) {
+                let scaleFactor = initialScale;
+                this.widget().layout().extentSize(graphSize);
+                if (Math.max(...graphSize) * cam.scale() < Math.min(cam.height(), cam.width())/(scaleFactor)) {
+                    const scale = (Math.min(cam.height(), cam.width())/scaleFactor) / (cam.scale() * Math.max(...graphSize));
+                    if (!isNaN(scale)) {
+                        this.viewport().logMessage("Zooming in camera to keep graph within scale");
+                        cam.zoomToPoint(
+                            scale,
+                            cam.width()/2,
+                            cam.height()/2
+                        );
+                        adjusted = true;
+                    }
+                }
+            }
+            viewport.clearCheckScale();
+            return true;
+        };
+
+
+        if (this.viewport().showingInCamera()) {
+            return showInCamera();
+        }
+        if (this.viewport().checkingScale()) {
+            return checkScale();
         }
 
         const bodySize = [NaN, NaN];
+        const layout = this.layout();
         layout.absoluteSize(bodySize);
-        if (bodySize[0] > 0 && bodySize[1] > 0 &&
-            this.viewport().ensuringVisible())
-        {
-            if (!cam.containsAny(new Rect(
-                layout.absoluteX(),
-                layout.absoluteY(),
-                bodySize[0],
-                bodySize[1]
-            ))) {
+        const bounds = new Rect(
+            layout.absoluteX(),
+            layout.absoluteY(),
+            bodySize[0]*layout.absoluteScale(),
+            bodySize[1]*layout.absoluteScale()
+        )
+        if (this.viewport().ensuringVisible()) {
+            if (bounds.isNaN()) {
+                return true;
+            }
+            console.log("Ensuring visible");
+            if (!cam.containsAll(bounds)) {
                 this.viewport().logMessage("Showing node in camera to keep it within camera viewport");
                 showNodeInCamera(this.node(), cam);
             }

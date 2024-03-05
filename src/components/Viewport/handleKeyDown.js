@@ -46,7 +46,7 @@ const handleKeyDown = (viewport, key, mouseX, mouseY) => {
             viewport.moveOutward();
         break;
         case 'i':
-        viewport.spawnMove(Direction.INWARD);
+        viewport.spawnMove(Direction.INWARD, false, true);
         break;
         case 'J':
         pull(Direction.DOWNWARD);
@@ -64,19 +64,19 @@ const handleKeyDown = (viewport, key, mouseX, mouseY) => {
         viewport.toggleAlignment();
         break;
         case 'j':
-        viewport.spawnMove(Direction.DOWNWARD);
+        viewport.spawnMove(Direction.DOWNWARD, false, true);
         break;
         case 'k':
-        viewport.spawnMove(Direction.UPWARD);
+        viewport.spawnMove(Direction.UPWARD, false, true);
         break;
         case 'l':
-        viewport.spawnMove(Direction.FORWARD);
+        viewport.spawnMove(Direction.FORWARD, false, true);
         break;
         case 'r':
             viewport.showInCamera()
             break;
         case 'h':
-        viewport.spawnMove(Direction.BACKWARD);
+        viewport.spawnMove(Direction.BACKWARD, false, true);
         break;
         case 'ArrowUp':
             cam.adjustOrigin(0, MOVE_SPEED/cam.scale());

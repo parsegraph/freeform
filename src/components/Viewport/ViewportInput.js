@@ -1,6 +1,6 @@
 import React from 'react';
 import { Direction } from "parsegraph";
-import { MAX_CLICK_DELAY_MS, SHOW_KEY_STROKES } from "../../settings";
+import { MAX_CLICK_DELAY_MS, SHOW_KEY_STROKES, SINGLE_TAP_GESTURES } from "../../settings";
 import {
   midPoint
 } from 'parsegraph-matrix';
@@ -79,6 +79,9 @@ export default class ViewportInput {
 
         let clickedOnSelected = false;
         canvas.addEventListener('mousedown', e => {
+            if (!this.viewport().hasWidget()) {
+                return;
+            }
             if (this.carouselContainer().contains(e.target)) {
                 return;
             }
@@ -100,12 +103,15 @@ export default class ViewportInput {
                     car.moveTo(selectedNode);
                     viewport.refresh();
                 }
-                touchingNode = clickedOnSelected;
+                touchingNode = SINGLE_TAP_GESTURES || clickedOnSelected;
                 viewport.refresh();
             }
         });
 
         canvas.addEventListener('mouseup', e => {
+            if (!this.viewport().hasWidget()) {
+                return;
+            }
             let hadGesture = false;
             if (touchingNode) {
                 hadGesture = gesture(mouseX, mouseY);
@@ -134,6 +140,9 @@ export default class ViewportInput {
         });
 
         canvas.addEventListener('mousemove', e => {
+            if (!this.viewport().hasWidget()) {
+                return;
+            }
             const car = viewport.caret();
             const cam = viewport.camera();
             const dx = e.clientX - mouseX;
@@ -157,6 +166,9 @@ export default class ViewportInput {
 
         let touchingNode = false;
         canvas.addEventListener('touchstart', e => {
+            if (!this.viewport().hasWidget()) {
+                return;
+            }
             const car = viewport.caret();
             const cam = viewport.camera();
             if (!car.root()) {
@@ -178,8 +190,8 @@ export default class ViewportInput {
                 let selectedNode = car.root().layout().nodeUnderCoords(worldX, worldY, 1, size);
                 const boundsRect = absoluteSizeRect(selectedNode);
                 if (selectedNode && cam.containsAll(boundsRect)) {
-                    touchingNode = true;
                     clickedOnSelected = car.node() === selectedNode;
+                    touchingNode = SINGLE_TAP_GESTURES || clickedOnSelected;
                     if (!clickedOnSelected) {
                         car.moveTo(selectedNode);
                         viewport.refresh();
@@ -215,9 +227,9 @@ export default class ViewportInput {
             if (worldX === layout.absoluteX() || dy > dx) {
                 if (dist > bodySize[1]/2) {
                     if (worldY > layout.absoluteY()) {
-                        viewport.spawnMove(Direction.DOWNWARD, true);
+                        viewport.spawnMove(Direction.DOWNWARD, true, true);
                     } else {
-                        viewport.spawnMove(Direction.UPWARD, true);
+                        viewport.spawnMove(Direction.UPWARD, true, true);
                     }
                     isDown = NaN;
                     return true;
@@ -225,9 +237,9 @@ export default class ViewportInput {
             } else {
                 if (dist > bodySize[0]/2) {
                     if (worldX > layout.absoluteX()) {
-                        viewport.spawnMove(Direction.FORWARD, true);
+                        viewport.spawnMove(Direction.FORWARD, true, true);
                     } else {
-                        viewport.spawnMove(Direction.BACKWARD, true);
+                        viewport.spawnMove(Direction.BACKWARD, true, true);
                     }
                     isDown = NaN;
                     return true;
@@ -237,6 +249,9 @@ export default class ViewportInput {
         };
 
         canvas.addEventListener('touchend', e => {
+            if (!this.viewport().hasWidget()) {
+                return;
+            }
             const car = viewport.caret();
             const cam = viewport.camera();
             if (!car.root()) {
@@ -273,6 +288,9 @@ export default class ViewportInput {
         });
 
         canvas.addEventListener('touchmove', e => {
+            if (!this.viewport().hasWidget()) {
+                return;
+            }
             const car = viewport.caret();
             const cam = viewport.camera();
             e.preventDefault();
@@ -313,6 +331,9 @@ export default class ViewportInput {
         });
 
         canvas.addEventListener('wheel', e => {
+            if (!this.viewport().hasWidget()) {
+                return;
+            }
             const cam = viewport.camera();
             if (!isNaN(mouseX)) {
                 cam.zoomToPoint(Math.pow(1.1, e.deltaY > 0 ? -1 : 1), mouseX, mouseY);
@@ -321,6 +342,9 @@ export default class ViewportInput {
         });
 
         canvas.addEventListener('keydown', e => {
+            if (!this.viewport().hasWidget()) {
+                return;
+            }
             if (viewport.showingEditor()) {
                 return;
             }
@@ -336,7 +360,10 @@ export default class ViewportInput {
 
         new ResizeObserver(() => {
             viewport.camera().setSize(canvas.offsetWidth, canvas.offsetHeight);
-            viewport.checkScale();
+            if (this.viewport().hasWidget()) {
+                viewport.checkScale();
+                return;
+            }
         }).observe(canvas);
 
         if (SHOW_KEY_STROKES) {

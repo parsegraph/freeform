@@ -378,15 +378,18 @@ function ImportFromTemplate({openGraph, onClose}) {
   </div></form>;
 }
 
-const createTournamentRounds = (numRounds) => {
-  if (typeof numRounds === "string") {
-    try {
-      numRounds = Number.parseInt(numRounds);
-    } catch (ex) {
-      //console.log(ex);
-      numRounds = 2;
-    }
+const tryParseInt = (str, defaultValue) => {
+  try {
+    return Number.parseInt(str);
+  } catch (ex) {
+    //console.log(ex);
+    return defaultValue;
   }
+}
+
+
+const createTournamentRounds = (numRounds) => {
+  numRounds = tryParseInt(numRounds, 2);
   const rounds = [];
   const getLabel = (i) => {
     switch(i) {
@@ -411,7 +414,11 @@ export default function ImportModal({onClose, openGraph, sampleName}) {
       return;
     }
     const sampleParts = sampleName.split("_");
+
     switch (sampleParts[0]) {
+    case "cross":
+      openGraph(buildCross(tryParseInt(sampleParts[1])));
+      break;
     case "lisp":
       openSampleLisp(openGraph);
       break;

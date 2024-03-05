@@ -353,7 +353,7 @@ export default class ViewportInput {
                 this.keystrokes().handleKey(e.key);
             }
 
-            if (!e.ctrlKey && handleKeyDown(viewport, e.key, mouseX, mouseY, e)) {
+            if (handleKeyDown(viewport, e.key, mouseX, mouseY, e)) {
                 e.preventDefault();
             }
         });

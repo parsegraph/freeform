@@ -56,7 +56,7 @@ export default class ViewportRendering {
 
         const container = viewport.container();
 
-        this._pageBackgroundColor = PAGE_BACKGROUND_COLOR;
+        this.resetSettings();
 
         container.style.background = this._pageBackgroundColor.asRGBA();
         //canvas.style.overflow = 'hidden';
@@ -93,6 +93,10 @@ export default class ViewportRendering {
         this._painters = new WeakMap();
         this._worldLabels = null;
         this._bounds = new WeakMap();
+    }
+
+    resetSettings() {
+        this._pageBackgroundColor = PAGE_BACKGROUND_COLOR;
     }
 
     isDone() {

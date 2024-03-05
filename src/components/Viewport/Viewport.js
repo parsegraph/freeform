@@ -55,6 +55,19 @@ const nextAlignment = (alignment, childDir) => {
   }
 };
 
+const createDefaultNodeStyle = () => {
+    return {
+        backgroundColor: DEFAULT_NODE_STYLE.backgroundColor.asHex(),
+        borderColor: DEFAULT_NODE_STYLE.borderColor.asHex(),
+        lineColor: DEFAULT_NODE_STYLE.lineColor.asHex(),
+        textColor: DEFAULT_NODE_STYLE.textColor.asHex(),
+        backgroundAlpha: DEFAULT_NODE_STYLE.backgroundColor.a(),
+        borderAlpha: DEFAULT_NODE_STYLE.borderColor.a(),
+        lineAlpha: DEFAULT_NODE_STYLE.lineColor.a(),
+        textAlpha: DEFAULT_NODE_STYLE.textColor.a(),
+    };
+};
+
 export default class Viewport {
 
     clearShowingInCamera() {
@@ -96,17 +109,7 @@ export default class Viewport {
         }
 
         this._nodeStyles = new WeakMap();
-        this._defaultNodeStyle = {
-            backgroundColor: DEFAULT_NODE_STYLE.backgroundColor.asHex(),
-            borderColor: DEFAULT_NODE_STYLE.borderColor.asHex(),
-            lineColor: DEFAULT_NODE_STYLE.lineColor.asHex(),
-            textColor: DEFAULT_NODE_STYLE.textColor.asHex(),
-            backgroundAlpha: DEFAULT_NODE_STYLE.backgroundColor.a(),
-            borderAlpha: DEFAULT_NODE_STYLE.borderColor.a(),
-            lineAlpha: DEFAULT_NODE_STYLE.lineColor.a(),
-            textAlpha: DEFAULT_NODE_STYLE.textColor.a(),
-        };
-
+        this._defaultNodeStyle = createDefaultNodeStyle();
         this._rendering = null;
         this._showEditor = false;
     }
@@ -442,11 +445,21 @@ export default class Viewport {
             this.camera().restore(viewportData.cam);
             this._showInCamera = false;
             this._checkScale = false;
+            this._ensureVisible = false;
         }
         if (viewportData.pageBackgroundColor) {
             this.rendering().setPageBackgroundColor(Color.fromRGB(viewportData.pageBackgroundColor));
         }
         this.refresh();
+    }
+
+    resetSettings() {
+        this.camera().setOrigin(0, 0);
+        this.camera().setScale(1);
+
+        this.rendering().resetSettings();
+
+        this._defaultNodeStyle = createDefaultNodeStyle();
     }
 
     toggleNodeStyling() {
@@ -715,10 +728,11 @@ export default class Viewport {
                 this.attachInput();
             }
         }
+        this.resetSettings();
         if (viewport) {
             this.load(viewport);
         }
-        this.repaint();
+        this.refresh();
     }
 
     createEditor() {

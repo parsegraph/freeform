@@ -463,7 +463,10 @@ export default class Viewport {
         this.camera().setOrigin(0, 0);
         this.camera().setScale(1);
 
-        this.rendering().resetSettings();
+        this.rendering()?.resetSettings();
+        this._showInCamera = true;
+        this._checkScale = true;
+        this._ensureVisible = true;
 
         this._defaultNodeStyle = createDefaultNodeStyle();
     }
@@ -527,7 +530,7 @@ export default class Viewport {
     };
 
     scheduleRepaint() {
-        this.rendering().reset();
+        this.rendering()?.reset();
         this.scheduleRender();
     }
 

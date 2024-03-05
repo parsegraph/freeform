@@ -90,6 +90,11 @@ class GraphStack {
       ++this._actionIndex;
     }
   }
+  
+  clear() {
+    this._actions = [];
+    this._actionIndex = -1;
+  }
 }
 
 const loadRoom = (openGraph, roomName) => {
@@ -386,6 +391,7 @@ function App() {
           if (canvasRef.current) {
             canvasRef.current.focus();
           }
+          graphs.clear();
           graphs.save(graph, selectedNode, viewportData);
           refresh(!!viewportData?.cam);
         }}/>

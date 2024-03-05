@@ -17,7 +17,7 @@ const SHOW_KEY_STROKES = false;
 const PAGE_BACKGROUND_COLOR = new Color(
     .2, .2, .9, 1
 );
-const PRINT_PAINT_STATS = true;
+const PRINT_PAINT_STATS = false;
 const ENABLE_EXTENT_VIEWING = true;
 
 const CREASE_ROUNDS = 4;

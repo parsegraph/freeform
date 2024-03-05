@@ -70,6 +70,7 @@ const handleKeyDown = (viewport, key, mouseX, mouseY, modifiers) => {
                 viewport.refresh();
             }
             break;
+        case 'r':
         case 'Escape':
             viewport.showInCamera();
             break;
@@ -77,25 +78,31 @@ const handleKeyDown = (viewport, key, mouseX, mouseY, modifiers) => {
         case 'Backspace':
             viewport.removeNode();
         break;
+        case 'e':
         case 'o':
             viewport.moveOutward();
         break;
+        case 'q':
         case 'i':
         viewport.spawnMove(Direction.INWARD, false, true);
         break;
+        case 'S':
         case 'J':
         pull(Direction.DOWNWARD);
         break;
+        case 'W':
         case 'K':
         pull(Direction.UPWARD);
         break;
+        case 'D':
         case 'L':
         pull(Direction.FORWARD);
         break;
+        case 'A':
         case 'H':
         pull(Direction.BACKWARD);
         break;
-        case 'w':
+        case 'b':
             viewport.rendering().toggleWorldLabels();
             viewport.refresh();
             break;
@@ -103,18 +110,19 @@ const handleKeyDown = (viewport, key, mouseX, mouseY, modifiers) => {
         viewport.toggleAlignment();
         break;
         case 'j':
+        case 's':
         viewport.spawnMove(Direction.DOWNWARD, false, true);
         break;
         case 'k':
+        case 'w':
         viewport.spawnMove(Direction.UPWARD, false, true);
         break;
         case 'l':
+        case 'd':
         viewport.spawnMove(Direction.FORWARD, false, true);
         break;
-        case 'r':
-            viewport.showInCamera()
-            break;
         case 'h':
+        case 'a':
         viewport.spawnMove(Direction.BACKWARD, false, true);
         break;
         case 'Tab':
@@ -149,7 +157,7 @@ const handleKeyDown = (viewport, key, mouseX, mouseY, modifiers) => {
         case 'R':
             viewport.redo()
             break;
-        case 'e':
+        case 'n':
             viewport.toggleExtents();
             break;
         case 'p':

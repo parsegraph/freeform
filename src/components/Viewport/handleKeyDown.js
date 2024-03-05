@@ -60,6 +60,9 @@ const handleKeyDown = (viewport, key, mouseX, mouseY, modifiers) => {
             }
             break;
         case 'r':
+            if (modifiers.ctrlKey) {
+                return false;
+            }
         case 'Escape':
             viewport.showInCamera();
             break;

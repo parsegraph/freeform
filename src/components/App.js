@@ -259,7 +259,9 @@ function App() {
       return;
     }
     viewport.setSaveGraph((graph, selectedNode)=>{
-      graphs.save(graph, selectedNode, viewport.toJSON());
+      if (!viewport.showingStyling()) {
+        graphs.save(graph, selectedNode, viewport.toJSON());
+      }
       if (autopublish && PUBLIC_SERVERS) {
         publish();
       } else {

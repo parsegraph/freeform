@@ -471,6 +471,10 @@ export default class Viewport {
         this._defaultNodeStyle = createDefaultNodeStyle();
     }
 
+    showingStyling() {
+        return this._showingStyling;
+    }
+
     toggleNodeStyling() {
         this._showingStyling = !this._showingStyling;
         if (this._showingStyling) {

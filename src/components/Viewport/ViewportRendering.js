@@ -86,6 +86,15 @@ export default class ViewportRendering {
         this._glProvider = glProvider;
         container.appendChild(textCanvas);
 
+        this._extentGlProvider = new BasicGLProvider();
+        this._extentGlProvider.container();
+        this._extentGlProvider.container().style.position = 'fixed';
+        this._extentGlProvider.container().style.inset = 0;
+        this._extentGlProvider.container();
+        this._extentGlProvider.container().className = 'viewport-extent-container';
+        this._extentGlProvider.canvas().className = 'viewport-extent-canvas';
+        container.appendChild(this._extentGlProvider.container());
+
         container.appendChild(labelsCanvas);
 
         this._viewport = viewport;
@@ -99,6 +108,10 @@ export default class ViewportRendering {
 
     resetSettings() {
         this._pageBackgroundColor = PAGE_BACKGROUND_COLOR;
+    }
+
+    extentGlProvider() {
+        return this._extentGlProvider;
     }
 
     isDone() {
@@ -718,8 +731,24 @@ export default class ViewportRendering {
         if (this.node().layout().needsCommit()) {
             return false;
         }
+        if (!this.extentGlProvider().canProject()) {
+            return false;
+        }
+
+        if (this.extentGlProvider().render()) {
+            return false;
+        }
+
         this.paintExtents();
         const layout = this.layout();
+        const gl = this.extentGlProvider().gl();
+        const cam = this.camera();
+        gl.viewport(0, 0, cam.width(), cam.height());
+
+        gl.clearColor(0, 0, 0, 0);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
         this._extentPainter.render(matrixMultiply3x3(
             makeScale3x3(
                 layout.absoluteScale()
@@ -763,12 +792,12 @@ export default class ViewportRendering {
         }
 
         if (!this._extentPainter) {
-            this._extentPainter = new WebGLBlockPainter(this.glProvider());
+            this._extentPainter = new WebGLBlockPainter(this.extentGlProvider());
         } else {
             this._extentPainter.clear();
         }
-        this._extentPainter.setBackgroundColor(new Color(1, 0, 0, 0.2));
-        this._extentPainter.setBorderColor(new Color(1, 0, 0, 0.5));
+        this._extentPainter.setBackgroundColor(new Color(1, 0, 0, 0));
+        this._extentPainter.setBorderColor(new Color(1, 0, 0, 1));
 
         const layout = this.node().layout();
         const extentSize = [NaN, NaN];
@@ -778,6 +807,7 @@ export default class ViewportRendering {
             let offset = 0;
             const dirSign = directionSign(dir);
 
+            const borderThickness = 1;
             layout.extentsAt(dir).forEach((length, size) => {
                 if (getDirectionAxis(dir) === Axis.VERTICAL) {
                     if (dir === Direction.UPWARD) {
@@ -786,7 +816,7 @@ export default class ViewportRendering {
                             dirSign*size/2,
                             length,
                             size,
-                            0, 0
+                            0, borderThickness
                         );
                     } else {
                         this._extentPainter.drawBlock(
@@ -794,7 +824,7 @@ export default class ViewportRendering {
                             dirSign*size/2,
                             length,
                             size,
-                            0, 0
+                            0, borderThickness
                         );
                     }
                 } else {
@@ -805,7 +835,7 @@ export default class ViewportRendering {
                             dirSign*layout.extentOffsetAt(dir) - dirSign * offset - dirSign*length/2,
                             size,
                             length,
-                            0, 0
+                            0, borderThickness
                         );
                     } else {
                         this._extentPainter.drawBlock(
@@ -813,7 +843,7 @@ export default class ViewportRendering {
                             -dirSign*layout.extentOffsetAt(dir) + dirSign * offset + dirSign*length/2,
                             size,
                             length,
-                            0, 0
+                            0, borderThickness
                         );
                     }
                 }

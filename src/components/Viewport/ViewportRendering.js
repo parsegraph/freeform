@@ -201,7 +201,7 @@ export default class ViewportRendering {
         const cam = this.camera();
 
         const showInCamera = () => {
-            this.viewport().logMessage("Explicitly showing node in camera");
+            //this.viewport().logMessage("Explicitly showing node in camera");
             showNodeInCamera(this.viewport().node(), cam);
             this.viewport().clearShowingInCamera();
             this.viewport()._checkScale = true;
@@ -217,7 +217,7 @@ export default class ViewportRendering {
             if (graphSize[0] * cam.scale() > cam.width()*scaleFactor) {
                 const scale = (cam.width()*scaleFactor)/(graphSize[0] * cam.scale());
                 if (!isNaN(scale)) {
-                    this.viewport().logMessage("Zooming out camera to keep node horizontally within scale");
+                    //this.viewport().logMessage("Zooming out camera to keep node horizontally within scale");
                     cam.zoomToPoint(
                         scale,
                         cam.width()/2,
@@ -229,7 +229,7 @@ export default class ViewportRendering {
             if (graphSize[1] * cam.scale() > cam.height()*scaleFactor) {
                 const scale = (cam.height()*scaleFactor)/(graphSize[1] * cam.scale());
                 if (!isNaN(scale)) {
-                    this.viewport().logMessage("Zooming out camera to keep node vertically within scale");
+                    //this.viewport().logMessage("Zooming out camera to keep node vertically within scale");
                     cam.zoomToPoint(
                         scale,
                         cam.width()/2,
@@ -244,7 +244,7 @@ export default class ViewportRendering {
                 if (Math.max(...graphSize) * cam.scale() < Math.min(cam.height(), cam.width())/(scaleFactor)) {
                     const scale = (Math.min(cam.height(), cam.width())/scaleFactor) / (cam.scale() * Math.max(...graphSize));
                     if (!isNaN(scale)) {
-                        this.viewport().logMessage("Zooming in camera to keep graph within scale");
+                        //this.viewport().logMessage("Zooming in camera to keep graph within scale");
                         cam.zoomToPoint(
                             scale,
                             cam.width()/2,

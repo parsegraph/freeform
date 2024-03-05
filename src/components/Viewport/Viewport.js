@@ -13,7 +13,6 @@ import {
 } from "parsegraph";
 import Color from 'parsegraph-color';
 import Camera from 'parsegraph-camera';
-import Rect from "parsegraph-rect";
 import { MAX_RENDER_ATTEMPTS, CRANK_SPEED_MS, DEFAULT_NODE_STYLE, USE_LOCAL_STORAGE, SHOW_KEY_STROKES, ENABLE_EXTENT_VIEWING, nodeHasValue, MAX_PAINT_TIME_MS, SLOW_RENDER } from "../../settings";
 import ViewportRendering from "./ViewportRendering";
 import ViewportInput from "./ViewportInput";

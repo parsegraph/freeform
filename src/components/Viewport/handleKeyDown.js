@@ -37,17 +37,6 @@ const handleKeyDown = (viewport, key, mouseX, mouseY, modifiers) => {
         viewport.repaint();
     };
 
-    const toggleCrease = () => {
-        if (car.node().paintGroups().isPaintGroup()) {
-            viewport.logMessage("Uncreasing");
-            car.uncrease();
-        } else {
-            viewport.logMessage("Creasing");
-            car.crease();
-        }
-        viewport.repaint();
-    }
-
     switch (key) {
         case 'PageUp':
             movePaintGroup(true);
@@ -161,7 +150,7 @@ const handleKeyDown = (viewport, key, mouseX, mouseY, modifiers) => {
             viewport.toggleExtents();
             break;
         case 'p':
-            toggleCrease();
+            viewport.toggleCrease();
             break;
         case 'Insert':
         case 'Enter':

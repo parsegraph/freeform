@@ -488,7 +488,7 @@ function NodeActions({viewport}) {
     <button className="edit" onClick={()=>viewport.togglePreferredAxis()}>Preferred Axis</button>
     <button className="edit" onClick={()=>viewport.toggleNodeScale()}>Scale</button>
     <button className="edit" onClick={()=>viewport.toggleNodeFit()}>Fit</button>
-    <button className="edit" onClick={()=>viewport.pullNode()}>Pull</button>
+    <button className="edit" onClick={()=>viewport.toggleCrease()}>Crease</button>
   </>;
 }
 

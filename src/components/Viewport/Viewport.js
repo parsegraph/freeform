@@ -119,6 +119,19 @@ export default class Viewport {
         return this._rendering;
     }
 
+    toggleCrease() {
+        const car = this.caret();
+        if (car.node().paintGroups().isPaintGroup()) {
+            this.logMessage("Uncreasing");
+            car.uncrease();
+        } else {
+            this.logMessage("Creasing");
+            car.crease();
+        }
+        this.repaint();
+        this.save();
+    }
+
     mountStatus(statusContainer) {
         if (this.statusElem().parentElement === statusContainer) {
             return;

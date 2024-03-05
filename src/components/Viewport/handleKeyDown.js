@@ -1,7 +1,7 @@
 import { Direction, reverseDirection } from "parsegraph";
 import { MOVE_SPEED } from "../../settings";
 
-const handleKeyDown = (viewport, key, mouseX, mouseY) => {
+const handleKeyDown = (viewport, key, mouseX, mouseY, modifiers) => {
     const cam = viewport.camera();
     const car = viewport.caret();
 
@@ -19,7 +19,42 @@ const handleKeyDown = (viewport, key, mouseX, mouseY) => {
         return;
     };
 
+    const tab = () => {
+        if (modifiers.shiftKey) {
+            car.moveTo(car.node().siblings().next());
+        } else {
+            car.moveTo(car.node().siblings().prev());
+        }
+        viewport.repaint();
+    };
+
+    const movePaintGroup = (next) => {
+        if (next) {
+            car.moveTo(car.node().paintGroup().next());
+        } else {
+            car.moveTo(car.node().paintGroup().prev());
+        }
+        viewport.repaint();
+    };
+
+    const toggleCrease = () => {
+        if (car.node().paintGroups().isPaintGroup()) {
+            viewport.logMessage("Uncreasing");
+            car.uncrease();
+        } else {
+            viewport.logMessage("Creasing");
+            car.crease();
+        }
+        viewport.repaint();
+    }
+
     switch (key) {
+        case 'PageUp':
+            movePaintGroup(true);
+            break;
+        case 'PageDown':
+            movePaintGroup(false);
+            break;
         case '-':
             if (!isNaN(mouseX)) {
                 viewport.checkScale();
@@ -82,6 +117,9 @@ const handleKeyDown = (viewport, key, mouseX, mouseY) => {
         case 'h':
         viewport.spawnMove(Direction.BACKWARD, false, true);
         break;
+        case 'Tab':
+            tab();
+            break;
         case 'ArrowUp':
             cam.adjustOrigin(0, MOVE_SPEED/cam.scale());
             viewport.refresh();
@@ -114,6 +152,10 @@ const handleKeyDown = (viewport, key, mouseX, mouseY) => {
         case 'e':
             viewport.toggleExtents();
             break;
+        case 'p':
+            toggleCrease();
+            break;
+        case 'Insert':
         case 'Enter':
             viewport.toggleEditor();
             viewport.refresh();

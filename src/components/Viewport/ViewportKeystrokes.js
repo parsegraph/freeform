@@ -14,6 +14,19 @@ export default class ViewportKeystrokes {
         this._keyStrokeElem.style.padding = '5px';
         this._keyStrokeElem.style.display = 'none';
         viewport.container().appendChild(this._keyStrokeElem);
+
+        this._keyStrokeTime = NaN;
+    }
+
+    refreshKeystrokes() {
+        if (!SHOW_KEY_STROKES || !this._keyStrokeElem) {
+            return;
+        }
+        if (Date.now() - this._keyStrokeTime > 1000) {
+            this._keyStrokeElem.style.display = 'none';
+
+            this._keyStrokeElem.innerText = '';
+        }
     }
 
     handleKey(key) {

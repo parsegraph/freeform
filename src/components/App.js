@@ -186,7 +186,7 @@ function App() {
       return;
     }
     const id = setInterval(() => {
-      viewport.refreshKeystrokes();
+      viewport.input().keystrokes()?.refreshKeystrokes();
     }, 1000);
     return () => {
       clearInterval(id);

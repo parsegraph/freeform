@@ -90,9 +90,6 @@ export default class Viewport {
         this._saveGraph = () => {};
         this._container = null;
 
-        this._keyStrokeElem = null;
-        this._keyStrokeTime = NaN;
-
         this._showInCamera = true;
         this._ensureVisible = true;
         this._checkScale = true;
@@ -120,17 +117,6 @@ export default class Viewport {
 
     rendering() {
         return this._rendering;
-    }
-
-    refreshKeystrokes() {
-        if (!SHOW_KEY_STROKES || !this._keyStrokeElem) {
-            return;
-        }
-        if (Date.now() - this._keyStrokeTime > 1000) {
-            this._keyStrokeElem.style.display = 'none';
-
-            this._keyStrokeElem.innerText = '';
-        }
     }
 
     mountStatus(statusContainer) {

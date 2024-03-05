@@ -350,10 +350,10 @@ export default class ViewportInput {
             }
 
             if (this.keystrokes()) {
-                this.keystrokes().key(e.key);
+                this.keystrokes().handleKey(e.key);
             }
 
-            if (!e.ctrlKey && handleKeyDown(viewport, e.key, mouseX, mouseY)) {
+            if (!e.ctrlKey && handleKeyDown(viewport, e.key, mouseX, mouseY, e)) {
                 e.preventDefault();
             }
         });

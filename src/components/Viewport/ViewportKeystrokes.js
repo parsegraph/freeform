@@ -33,11 +33,32 @@ export default class ViewportKeystrokes {
         if (!SHOW_KEY_STROKES) {
             return;
         }
-        if (this._keyStrokeElem.innerText === "") {
-            this._keyStrokeElem.innerText += key;
+        let text = this._keyStrokeElem.innerText;
+        if (text === "") {
+            text = key;
         } else {
-            this._keyStrokeElem.innerText += " " + key;
+            if (text.endsWith(' ' + key) || text === key) {
+                text += "(x2)"
+            }
+            else if (text.match(/\(x([^\)]+)\)$/)) {
+                const m = text.match(/\(x([^\)]+)\)$/);
+                const textPart = text.substring(0, text.length - m[0].length);
+                console.log('"' + textPart + '"', '"' + m[0] + '"');
+                if (textPart.endsWith(key)) {
+                    console.log("ends with " + key);
+                    const times = Number.parseInt(m[1]);
+                    console.log(m[1], times, m, m[0]);
+                    text = textPart + "(x" + (times + 1) + ")";
+                } else {
+                    console.log("does not end with " + key);
+                    text += " " + key;
+                }
+            } else {
+                console.log("ubsted");
+                text += " " + key;
+            }
         }
+        this._keyStrokeElem.innerText = text;
         this._keyStrokeTime = Date.now();
         this._keyStrokeElem.style.display = 'block';
     }

@@ -2,6 +2,7 @@
 deploy.sh
 public/occluder.js
 
+*.swp
 # dependencies
 /node_modules
 /.pnp

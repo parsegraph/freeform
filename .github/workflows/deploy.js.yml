@@ -21,9 +21,7 @@ jobs:
     - run: cd occluder && yarn && ./deploy.sh && cd ..
     - run: yarn
     - run: yarn build
-    - run: cd build
-    - run: pwd && ls
-    - run: sed -i -re 's/React App/parsegraph/g' ./index.html
+    - run: cd build && sed -i -re 's/React App/parsegraph/g' ./index.html
 
     - run: mkdir -p ~/.ssh
     - run: echo -n "$SSH_TOKEN" | base64 -d >$HOME/.ssh/id_rsa
@@ -37,9 +35,9 @@ jobs:
       env:
           SSH_KNOWN_HOST: ${{ secrets.PARSEGRAPH_SSH_KNOWN_HOST }}
 
-    - run: scp * "$SSH_HOST:$PARSEGRAPH_PUBLIC_HTML/freeform"
+    - run: cd build && scp * "$SSH_HOST:$PARSEGRAPH_PUBLIC_HTML/freeform"
       env:
           SSH_HOST: ${{ secrets.PARSEGRAPH_SSH_HOST }}
-    - run: scp -r ./static/* "$SSH_HOST:$PARSEGRAPH_PUBLIC_HTML/static"
+    - run: cd build && scp -r ./static/* "$SSH_HOST:$PARSEGRAPH_PUBLIC_HTML/static"
       env:
           SSH_HOST: ${{ secrets.PARSEGRAPH_SSH_HOST }}

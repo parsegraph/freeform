@@ -20,7 +20,7 @@ jobs:
         registry-url: 'https://registry.npmjs.org'
     - run: yarn
     - run: yarn build
-    - run: cd occluder && ./deploy.sh && cd ..
+    - run: cd occluder && yarn && ./deploy.sh && cd ..
     - run: cd build
     - run: sed -i -re 's/React App/parsegraph/g' index.html
 

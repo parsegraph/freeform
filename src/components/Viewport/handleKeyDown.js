@@ -146,6 +146,9 @@ const handleKeyDown = (viewport, key, mouseX, mouseY, modifiers) => {
         case 'f':
             viewport.toggleNodeFit();
             break;
+        case 't':
+            viewport.togglePreferredAxis();
+            break;
         case 'z':
         case 'u':
             viewport.undo();

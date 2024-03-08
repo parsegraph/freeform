@@ -43,6 +43,8 @@ const initialScale = 8;
 const MIN_VISIBLE_GRAPH_SCREEN = 4;
 
 const caretColor = new Color(0.95, 0.9, 0, 1);
+const caretHighlightColor = new Color(1, 1, 0, 1);
+const highlightColor = new Color(1, 1, 1, 0.7);
 
 // Node colors
 const borderColor = new Color(0, 0, 0, 0.5);
@@ -675,6 +677,7 @@ export default class ViewportRendering {
     ctx.scale(cam.scale(), cam.scale());
     ctx.translate(cam.x(), cam.y());
 
+    this.renderHovered();
     this.renderCaret();
 
     if (this._showingStats) {
@@ -716,7 +719,10 @@ export default class ViewportRendering {
     if (this.node()) {
       ctx.lineWidth = (BORDER_THICKNESS / 2) * layout.absoluteScale();
       ctx.lineJoin = "round";
-      ctx.strokeStyle = caretColor.asRGBA();
+      let hovered = this.viewport().input()?.hoveredNode();
+      ctx.strokeStyle = hovered === this.node() ?
+          caretHighlightColor.asRGBA() :
+          caretColor.asRGBA();
       const bodySize = [0, 0];
       layout.size(bodySize);
       if (this.viewport().showingCaret()) {
@@ -786,6 +792,61 @@ export default class ViewportRendering {
       } else {
         this.carouselContainer().style.display = "none";
       }
+    }
+  }
+
+  renderHovered() {
+    const ctx = this.ctx();
+    const cam = this.camera();
+
+    let node = this.viewport().input()?.hoveredNode();
+    if (!node || this.node() === node) {
+        return;
+    }
+    const layout = node.layout();
+    if (layout.needsCommit() || layout.needsAbsolutePos()) {
+      return;
+    }
+
+    ctx.resetTransform();
+    ctx.scale(cam.scale(), cam.scale());
+    ctx.translate(cam.x(), cam.y());
+
+    ctx.lineWidth = (BORDER_THICKNESS / 2) * layout.absoluteScale();
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = highlightColor.asRGBA();
+    const bodySize = [0, 0];
+    layout.size(bodySize);
+    if (
+        nodeHasValue(node) ||
+        node.neighbors().hasNode(Direction.INWARD)
+    ) {
+        ctx.beginPath();
+        ctx.roundRect(
+        layout.absoluteX() -
+            (layout.absoluteScale() * bodySize[0]) / 2 +
+            (BORDER_THICKNESS / 4) * layout.absoluteScale(),
+        layout.absoluteY() -
+            (layout.absoluteScale() * bodySize[1]) / 2 +
+            (BORDER_THICKNESS / 4) * layout.absoluteScale(),
+        layout.absoluteScale() * bodySize[0] -
+            (BORDER_THICKNESS / 2) * layout.absoluteScale(),
+        layout.absoluteScale() * bodySize[1] -
+            (BORDER_THICKNESS / 2) * layout.absoluteScale(),
+        (BORDER_ROUNDEDNESS * layout.absoluteScale()) / 2.13
+        );
+        ctx.stroke();
+    } else {
+      ctx.beginPath();
+      ctx.arc(
+      layout.absoluteX(),
+      layout.absoluteY(),
+      (bodySize[0] / 2) * layout.absoluteScale() -
+          (BORDER_THICKNESS / 4) * layout.absoluteScale(),
+      0,
+      Math.PI * 2
+      );
+      ctx.stroke();
     }
   }
 

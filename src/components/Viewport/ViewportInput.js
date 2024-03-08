@@ -159,10 +159,20 @@ export default class ViewportInput {
       const cam = viewport.camera();
       const dx = e.clientX - mouseX;
       const dy = e.clientY - mouseY;
-      if (isDown && !touchingNode) {
-        cam.adjustOrigin(dx / cam.scale(), dy / cam.scale());
-        viewport.refresh();
-      }
+      if (!touchingNode) {
+        if (isDown) {
+            cam.adjustOrigin(dx / cam.scale(), dy / cam.scale());
+            viewport.refresh();
+        } else {
+            const [worldX, worldY] = cam.transform(e.clientX, e.clientY);
+            let hoveredNode = car.root().layout()
+                .nodeUnderCoords(worldX, worldY, 1, size);
+            if (this._hoveredNode !== hoveredNode) {
+                viewport.refresh();
+            }
+            this._hoveredNode = hoveredNode;
+        }
+      } 
       [mouseX, mouseY] = [e.clientX, e.clientY];
     });
 
@@ -398,6 +408,10 @@ export default class ViewportInput {
     }).observe(canvas);
 
     this._keystrokes = new ViewportKeystrokes(viewport);
+  }
+
+  hoveredNode() {
+    return this._hoveredNode;
   }
 
   keystrokes() {

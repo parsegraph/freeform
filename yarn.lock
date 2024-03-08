@@ -7200,10 +7200,10 @@ parsegraph@^6.1.4:
   resolved "https://registry.yarnpkg.com/parsegraph/-/parsegraph-6.1.4.tgz#bc709b034d21d27a75fc567f3a786c024b46fb72"
   integrity sha512-MFyh4+WzOyWpLWcc/XoOoE+tN4cuBTwQLvOpQRRYK9KRUcE0xvYArGR6CipZXCjHCKOpVA0R+vtes9QWDCE6Dw==
 
-parsegraph@^6.1.7:
-  version "6.1.7"
-  resolved "https://registry.yarnpkg.com/parsegraph/-/parsegraph-6.1.7.tgz#ed04a5e17515405a7ba006f50013e5dfa271ebbc"
-  integrity sha512-7BLaCNGjkhcdH7PvYeCTSMQqGVYE6DJHwjghYn69/JzYGx/9FiZ1LUHTZZysdKPLGKLmbwa+IcSjVtycVNPpdA==
+parsegraph@^6.2.0:
+  version "6.2.0"
+  resolved "https://registry.yarnpkg.com/parsegraph/-/parsegraph-6.2.0.tgz#d177d84c1f0f3277628be88442916df665ea8838"
+  integrity sha512-FS6noNlu4bkwf4lg+0Dt4h2vsJGOcwgbcHmKjwcu1SusYJ0nWrCZMJ3GbZDIOj+j0Bt3VM+7Gb8hCQtW+An9Yw==
 
 parseurl@~1.3.2, parseurl@~1.3.3:
   version "1.3.3"

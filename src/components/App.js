@@ -456,7 +456,6 @@ function App() {
           ref={canvasRef}
           tabIndex={0}
         />
-        ;
         {(!hasWidget || importModalOpen) && (
           <div className="modal">
             <ImportModal

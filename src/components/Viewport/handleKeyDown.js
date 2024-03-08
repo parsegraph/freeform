@@ -184,7 +184,6 @@ const handleKeyDown = (viewport, key, mouseX, mouseY, modifiers) => {
     case "Shift":
       return false;
     default:
-      console.log("Unhandled '" + key + "'");
       return false;
   }
   return true;

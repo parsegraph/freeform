@@ -366,9 +366,7 @@ export default class ViewportInput {
             }
         }).observe(canvas);
 
-        if (SHOW_KEY_STROKES) {
-            this._keystrokes = new ViewportKeystrokes(viewport);
-        }
+        this._keystrokes = new ViewportKeystrokes(viewport);
     }
 
     keystrokes() {

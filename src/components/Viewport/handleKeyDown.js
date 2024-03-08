@@ -117,6 +117,16 @@ const handleKeyDown = (viewport, key, mouseX, mouseY, modifiers) => {
         case 'a':
         viewport.spawnMove(Direction.BACKWARD, false, true);
         break;
+        case ',':
+            viewport.input().keystrokes().toggleKeystrokes();
+            viewport.logMessage("Toggling keystrokes")
+            viewport.refresh();
+            break;
+        case 'm':
+            viewport.rendering().toggleStats();
+            viewport.logMessage("Toggling metrics")
+            viewport.refresh();
+            break;
         case 'Tab':
             tab();
             break;

@@ -106,6 +106,8 @@ export default class ViewportRendering {
         this._bounds = new WeakMap();
 
         this._showWorldLabels = SHOW_WORLD_LABELS;
+
+        this._showingStats = PRINT_PAINT_STATS;
     }
 
     resetSettings() {
@@ -384,6 +386,10 @@ export default class ViewportRendering {
         return true;
     }
 
+    toggleStats() {
+        this._showingStats = !this._showingStats;
+    }
+
     phaseName() {
         if (this.isDone()) {
             return "Finished";
@@ -572,7 +578,7 @@ export default class ViewportRendering {
 
         this.renderCaret();
 
-        if (PRINT_PAINT_STATS) {
+        if (this._showingStats) {
             const {i, j, k, dirtyGroups, offscreenGroups, allGroups } = renderData;
             ctx.resetTransform();
             ctx.font = "18px sans-serif";

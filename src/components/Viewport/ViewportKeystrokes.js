@@ -16,12 +16,19 @@ export default class ViewportKeystrokes {
         viewport.container().appendChild(this._keyStrokeElem);
 
         this._keyStrokeTime = NaN;
+
+        this._showingKeystrokes = SHOW_KEY_STROKES;
+    }
+
+    toggleKeystrokes() {
+        this._showingKeystrokes = !this._showingKeystrokes;
+    }
+
+    showingKeystrokes() {
+        return this._showingKeystrokes;
     }
 
     refreshKeystrokes() {
-        if (!SHOW_KEY_STROKES || !this._keyStrokeElem) {
-            return;
-        }
         if (Date.now() - this._keyStrokeTime > 1000) {
             this._keyStrokeElem.style.display = 'none';
 
@@ -30,7 +37,7 @@ export default class ViewportKeystrokes {
     }
 
     handleKey(key) {
-        if (!SHOW_KEY_STROKES) {
+        if (!this.showingKeystrokes()) {
             return;
         }
         let text = this._keyStrokeElem.innerText;

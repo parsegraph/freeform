@@ -68,10 +68,6 @@ export default class ViewportInput {
     //container.addEventListener('dragover', e => e.preventDefault());
     //container.addEventListener('drop', drop)
 
-    canvas.addEventListener("focus", () => {
-      viewport.hideEditor();
-    });
-
     let isDown = null;
     let [mouseX, mouseY] = [NaN, NaN];
 
@@ -108,7 +104,7 @@ export default class ViewportInput {
           cam.containsAll(boundsRect) ||
           selectedNode.neighbors().hasAncestor(car.node()))
       ) {
-        if (!clickedOnSelected && cam.containsAll(boundsRect)) {
+        if (SINGLE_TAP_GESTURES && !clickedOnSelected && cam.containsAll(boundsRect)) {
           car.moveTo(selectedNode);
           viewport.refresh();
         }
@@ -140,9 +136,12 @@ export default class ViewportInput {
           .nodeUnderCoords(worldX, worldY, 1, size);
         if (clickedOnSelected && selectedNode === car.node()) {
           viewport.toggleEditor();
-        } else if (selectedNode) {
-          car.moveTo(selectedNode);
-          viewport.refresh();
+        } else {
+          viewport.hideEditor();
+          if (selectedNode) {
+            car.moveTo(selectedNode);
+            viewport.refresh();
+          }
         }
       }
 

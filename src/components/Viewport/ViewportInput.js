@@ -101,15 +101,15 @@ export default class ViewportInput {
       const boundsRect = absoluteSizeRect(selectedNode);
       if (
         selectedNode &&
+        cam.containsAll(boundsRect) &&
         (clickedOnSelected ||
-          cam.containsAll(boundsRect) ||
           selectedNode.neighbors().hasAncestor(car.node()))
       ) {
         if (SINGLE_TAP_GESTURES && !clickedOnSelected && cam.containsAll(boundsRect)) {
           car.moveTo(selectedNode);
           viewport.refresh();
         }
-        touchingNode = SINGLE_TAP_GESTURES || clickedOnSelected;
+        touchingNode = (SINGLE_TAP_GESTURES || clickedOnSelected) && cam.containsAll(boundsRect);
         viewport.refresh();
       }
     });

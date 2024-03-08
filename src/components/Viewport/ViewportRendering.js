@@ -218,7 +218,47 @@ export default class ViewportRendering {
 
     const showInCamera = () => {
       //this.viewport().logMessage("Explicitly showing node in camera");
+      const [x, y, scale] = [cam.x(), cam.y(), cam.scale()]
       showNodeInCamera(this.viewport().node(), cam);
+      
+      const FUZZINESS = 1e-3;
+      if (Math.abs(cam.x() - x) < FUZZINESS && Math.abs(cam.y() - y) < FUZZINESS) {
+        let scaleFactor = MIN_VISIBLE_GRAPH_SCREEN*.75;
+        const graphSize = [NaN, NaN];
+        this.widget().layout().extentSize(graphSize);
+        const scale = Math.min(
+            cam.height(), cam.width()) /
+            scaleFactor /
+            (cam.scale() * Math.max(...graphSize)
+        );
+        if (!isNaN(scale)) {
+            let scaleFactor = 1/4;
+            if (Math.abs(1 - scale) < FUZZINESS) {
+                //this.viewport().logMessage("Showing node at max scale")
+                this.node().layout().absoluteSize(graphSize);
+                if (graphSize[0] < graphSize[1]) {
+                    const scale =
+                        (cam.width() * scaleFactor) / (graphSize[0] * cam.scale());
+                    if (!isNaN(scale)) {
+                        //this.viewport().logMessage("Zooming out camera to keep node horizontally within scale");
+                        cam.zoomToPoint(scale, cam.width() / 2, cam.height() / 2);
+                    }
+                } else {
+                    const scale =
+                        (cam.height() * scaleFactor) / (graphSize[1] * cam.scale());
+                    if (!isNaN(scale)) {
+                        //this.viewport().logMessage("Zooming out camera to keep node vertically within scale");
+                        cam.zoomToPoint(scale, cam.width() / 2, cam.height() / 2);
+                    }
+                }
+            } else {
+                //this.viewport().logMessage("Showing graph at min scale")
+                cam.zoomToPoint(scale, cam.width() / 2, cam.height() / 2);
+            }
+        }
+      } else {
+        //this.viewport().logMessage("Showing node in camera");
+      }
       this.viewport().clearShowingInCamera();
       this.viewport()._checkScale = true;
       return true;

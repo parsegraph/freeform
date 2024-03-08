@@ -280,7 +280,6 @@ export default class ViewportRendering {
             if (bounds.isNaN()) {
                 return true;
             }
-            console.log("Ensuring visible");
             if (!cam.containsAll(bounds)) {
                 this.viewport().logMessage("Showing node in camera to keep it within camera viewport");
                 showNodeInCamera(this.node(), cam);
@@ -375,7 +374,6 @@ export default class ViewportRendering {
             return false;
         }
 
-        //console.log(this.phaseName());
         if (!step[1]()) {
             this.nextPhase();
             if (step) {

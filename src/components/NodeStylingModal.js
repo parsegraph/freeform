@@ -97,7 +97,7 @@ export default function NodeStylingModal({
   const update = (newStyle) => {
     setStyle(newStyle);
     if (isLive) {
-      updateStyle(style);
+      updateStyle(newStyle);
     }
     if (updateDefault) {
       viewport.updateDefaultNodeStyle(newStyle);

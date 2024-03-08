@@ -331,9 +331,9 @@ export default class ViewportRendering {
         return true;
       }
       if (!cam.containsAll(bounds)) {
-        this.viewport().logMessage(
+        /*this.viewport().logMessage(
           "Showing node in camera to keep it within camera viewport"
-        );
+        );*/
         showNodeInCamera(this.node(), cam);
       }
       this.viewport().clearEnsuringVisible();

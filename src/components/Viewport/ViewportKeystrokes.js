@@ -50,18 +50,13 @@ export default class ViewportKeystrokes {
             else if (text.match(/\(x([^\)]+)\)$/)) {
                 const m = text.match(/\(x([^\)]+)\)$/);
                 const textPart = text.substring(0, text.length - m[0].length);
-                console.log('"' + textPart + '"', '"' + m[0] + '"');
                 if (textPart.endsWith(key)) {
-                    console.log("ends with " + key);
                     const times = Number.parseInt(m[1]);
-                    console.log(m[1], times, m, m[0]);
                     text = textPart + "(x" + (times + 1) + ")";
                 } else {
-                    console.log("does not end with " + key);
                     text += " " + key;
                 }
             } else {
-                console.log("ubsted");
                 text += " " + key;
             }
         }

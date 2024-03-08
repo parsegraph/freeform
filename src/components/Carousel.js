@@ -1,4 +1,5 @@
 import { Direction } from "parsegraph";
+import './Carousel.css';
 
 export default function Carousel({ viewport }) {
   return (

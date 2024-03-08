@@ -1,0 +1,12 @@
+.Carousel {
+  pointer-events: none;
+}
+
+.Carousel .dir {
+  user-select: none;
+  pointer-events: all;
+}
+
+.dir:hover {
+  background: rgba(255, 255, 255, 0.2);
+}

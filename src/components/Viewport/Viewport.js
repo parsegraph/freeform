@@ -404,6 +404,7 @@ export default class Viewport {
   carouselContainer() {
     if (!this._carouselContainer) {
       this._carouselContainer = document.createElement("div");
+      this._carouselContainer.className = "Carousel";
       this._carouselContainer.style.display = "none";
       this._carouselContainer.style.position = "absolute";
       this._carouselContainer.style.left = "50%";

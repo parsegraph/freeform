@@ -451,6 +451,7 @@ function App() {
     <>
       <div className="App">
         <div
+          id="parsegraph"
           style={{ position: "fixed", inset: "0" }}
           ref={canvasRef}
           tabIndex={0}

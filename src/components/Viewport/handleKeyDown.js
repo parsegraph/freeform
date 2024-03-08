@@ -1,5 +1,5 @@
 import { Direction, reverseDirection } from "parsegraph";
-import { MOVE_SPEED } from "../../settings";
+import { DONT_TOUCH_CAMERA, MOVE_SPEED } from "../../settings";
 
 const handleKeyDown = (viewport, key, mouseX, mouseY, modifiers) => {
   const cam = viewport.camera();
@@ -75,11 +75,11 @@ const handleKeyDown = (viewport, key, mouseX, mouseY, modifiers) => {
       break;
     case "e":
     case "o":
-      viewport.moveOutward();
+      viewport.moveOutward(DONT_TOUCH_CAMERA);
       break;
     case "q":
     case "i":
-      viewport.spawnMove(Direction.INWARD, false, true);
+      viewport.spawnMove(Direction.INWARD, false, DONT_TOUCH_CAMERA);
       break;
     case "S":
     case "J":
@@ -106,19 +106,19 @@ const handleKeyDown = (viewport, key, mouseX, mouseY, modifiers) => {
       break;
     case "j":
     case "s":
-      viewport.spawnMove(Direction.DOWNWARD, false, true);
+      viewport.spawnMove(Direction.DOWNWARD, false, DONT_TOUCH_CAMERA);
       break;
     case "k":
     case "w":
-      viewport.spawnMove(Direction.UPWARD, false, true);
+      viewport.spawnMove(Direction.UPWARD, false, DONT_TOUCH_CAMERA);
       break;
     case "l":
     case "d":
-      viewport.spawnMove(Direction.FORWARD, false, true);
+      viewport.spawnMove(Direction.FORWARD, false, DONT_TOUCH_CAMERA);
       break;
     case "h":
     case "a":
-      viewport.spawnMove(Direction.BACKWARD, false, true);
+      viewport.spawnMove(Direction.BACKWARD, false, DONT_TOUCH_CAMERA);
       break;
     case ",":
       viewport.input().keystrokes().toggleKeystrokes();

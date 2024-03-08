@@ -524,18 +524,20 @@ export default class Viewport {
     this._toggleNodeStyling = toggleNodeStyling;
   }
 
-  moveOutward() {
+  moveOutward(dontTouchCamera) {
     if (this._userCaret.has(Direction.OUTWARD)) {
       this._userCaret.move(Direction.OUTWARD);
-      this.showInCamera();
-      this.refresh();
     } else if (!this._userCaret.node().neighbors().isRoot()) {
       this._userCaret.move(
         this._userCaret.node().neighbors().parentDirection()
       );
-      this.showInCamera();
-      this.refresh();
+    } else {
+      return;
     }
+    if (!dontTouchCamera) {
+      this.showInCamera();
+    }
+    this.repaint();
   }
 
   mountEditor(editorContainer) {

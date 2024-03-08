@@ -7,15 +7,7 @@ export class WorldLabel {
     return this._text;
   }
 
-  constructor(
-    text,
-    x,
-    y,
-    fontSize,
-    scale,
-    color,
-    strokeColor
-  ) {
+  constructor(text, x, y, fontSize, scale, color, strokeColor) {
     this._text = text;
     this._x = x;
     this._y = y;
@@ -92,16 +84,10 @@ export class WorldLabels {
     return this._scaleMultiplier;
   }
 
-  draw(
-    text,
-    x,
-    y,
-    size,
-    scale = 1,
-    color = null,
-    strokeColor = null
-  ) {
-    this._labels.push(new WorldLabel(text, x, y, size, scale, color, strokeColor));
+  draw(text, x, y, size, scale = 1, color = null, strokeColor = null) {
+    this._labels.push(
+      new WorldLabel(text, x, y, size, scale, color, strokeColor)
+    );
   }
 
   clear() {
@@ -134,31 +120,42 @@ export class WorldLabels {
     return this._labels;
   }
 
-  prepareRender(ctx, worldX, worldY, worldWidth, worldHeight, worldScale, onFinish) {
+  prepareRender(
+    ctx,
+    worldX,
+    worldY,
+    worldWidth,
+    worldHeight,
+    worldScale,
+    onFinish
+  ) {
     let curFontSize = NaN;
     this._worldScale = worldScale;
 
-    const filteredLabels = this.labels().filter(label => {
-        if (label.scale() > this.scaleMultiplier() / worldScale) {
-            return false;
-        }
-        if (label.knownSize()) {
-          return true;
-        }
-        if (label.fontSize() !== curFontSize) {
-            ctx.font = `${Math.round(label.fontSize() / worldScale)}px ${this.font()}`;
-            curFontSize = label.fontSize();
-        }
-        const metrics = ctx.measureText(label.text());
-        const height = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
-        const width = metrics.width;
-        label.setMeasuredSize(width, height);
+    const filteredLabels = this.labels().filter((label) => {
+      if (label.scale() > this.scaleMultiplier() / worldScale) {
+        return false;
+      }
+      if (label.knownSize()) {
         return true;
+      }
+      if (label.fontSize() !== curFontSize) {
+        ctx.font = `${Math.round(
+          label.fontSize() / worldScale
+        )}px ${this.font()}`;
+        curFontSize = label.fontSize();
+      }
+      const metrics = ctx.measureText(label.text());
+      const height =
+        metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
+      const width = metrics.width;
+      label.setMeasuredSize(width, height);
+      return true;
     });
 
     this._workerKey = Math.random() + "-" + Date.now();
     this._workerCallback = (data) => {
-      this._drawnLabels = data.map(index => filteredLabels[index]);
+      this._drawnLabels = data.map((index) => filteredLabels[index]);
       onFinish();
     };
 
@@ -168,7 +165,7 @@ export class WorldLabels {
       worldWidth,
       worldHeight,
       worldScale,
-      filteredLabels.map(label => {
+      filteredLabels.map((label) => {
         return {
           scale: label.scale(),
           fontSize: label.fontSize(),
@@ -176,15 +173,13 @@ export class WorldLabels {
           x: label.x(),
           y: label.y(),
           width: label.measuredWidth(),
-          height: label.measuredHeight()
+          height: label.measuredHeight(),
         };
       }),
-      this._workerKey
+      this._workerKey,
     ]);
 
-    return () => {
-
-    };
+    return () => {};
   }
 
   clone() {
@@ -203,7 +198,7 @@ export class WorldLabels {
       const overlay = ctx;
       overlay.font = `${Math.round(label.fontSize() / scale)}px ${this.font()}`;
 
-      const lumLimit = 0.2
+      const lumLimit = 0.2;
       overlay.strokeStyle = bg.luminance() > lumLimit ? "white" : "black";
       overlay.miterLimit = this.lineWidth();
       overlay.lineWidth = this.lineWidth() / scale;

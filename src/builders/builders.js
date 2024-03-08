@@ -1,6 +1,14 @@
-import { Alignment, Direction, DirectionCaret, DirectionNode, PreferredAxis, reverseDirection, turnPositive } from 'parsegraph';
-import Color from 'parsegraph-color';
-import { CREASE_ROUNDS, MAX_ROUNDS } from '../settings';
+import {
+  Alignment,
+  Direction,
+  DirectionCaret,
+  DirectionNode,
+  PreferredAxis,
+  reverseDirection,
+  turnPositive,
+} from "parsegraph";
+import Color from "parsegraph-color";
+import { CREASE_ROUNDS, MAX_ROUNDS } from "../settings";
 
 const SIZE = MAX_ROUNDS;
 
@@ -9,49 +17,49 @@ const buildRandom = (steps) => {
 
   for (let i = 0; i < steps; ++i) {
     switch (Math.floor(7 * Math.random())) {
-    case 0:
+      case 0:
         if (car.has(Direction.FORWARD)) {
-            car.pull(Direction.FORWARD);
+          car.pull(Direction.FORWARD);
         } else {
-            car.spawnMove(Direction.FORWARD);
+          car.spawnMove(Direction.FORWARD);
         }
         break;
-    case 1:
+      case 1:
         if (car.has(Direction.BACKWARD)) {
-            car.pull(Direction.BACKWARD);
+          car.pull(Direction.BACKWARD);
         } else {
-            car.spawnMove(Direction.BACKWARD);
+          car.spawnMove(Direction.BACKWARD);
         }
         break;
-    case 2:
+      case 2:
         if (car.has(Direction.DOWNWARD)) {
-            car.pull(Direction.DOWNWARD);
+          car.pull(Direction.DOWNWARD);
         } else {
-            car.spawnMove(Direction.DOWNWARD);
+          car.spawnMove(Direction.DOWNWARD);
         }
         break;
-    case 3:
+      case 3:
         if (car.has(Direction.UPWARD)) {
-            car.pull(Direction.UPWARD);
+          car.pull(Direction.UPWARD);
         } else {
-            car.spawnMove(Direction.UPWARD);
+          car.spawnMove(Direction.UPWARD);
         }
         break;
-    case 4:
+      case 4:
         if (car.has(Direction.INWARD)) {
-            car.pull(Direction.INWARD);
+          car.pull(Direction.INWARD);
         } else {
-            car.spawnMove(Direction.INWARD);
+          car.spawnMove(Direction.INWARD);
         }
         break;
-    case 5:
+      case 5:
         car.shrink();
         break;
-    default:
+      default:
         if (!car.node().neighbors().isRoot()) {
-            car.moveTo(car.node().neighbors().parentNode());
+          car.moveTo(car.node().neighbors().parentNode());
         } else {
-            car.node().siblings().setLayoutPreference(PreferredAxis.VERTICAL);
+          car.node().siblings().setLayoutPreference(PreferredAxis.VERTICAL);
         }
         break;
     }
@@ -74,11 +82,11 @@ const buildGrid = (sizeStr) => {
     }
   }
   const car = new DirectionCaret();
-  for(let col = 0; col < size; ++col) {
-    car.spawnMove('d');
+  for (let col = 0; col < size; ++col) {
+    car.spawnMove("d");
     car.push();
-    for(let row = 0; row < size; ++row) {
-      car.spawnMove('f', row);
+    for (let row = 0; row < size; ++row) {
+      car.spawnMove("f", row);
     }
     car.pop();
   }
@@ -88,36 +96,36 @@ const buildGrid = (sizeStr) => {
 const buildAlternatingColumns = () => {
   const styles = {};
   const car = new DirectionCaret();
-  for(let col = 0; col < 10 * SIZE; ++col) {
-    car.spawnMove('f');
+  for (let col = 0; col < 10 * SIZE; ++col) {
+    car.spawnMove("f");
     car.push();
     if (col % CREASE_ROUNDS === 0) {
       car.crease();
     }
     const c = Color.random();
-    for(let row = 0; row < 10 * SIZE; ++row) {
-      car.spawnMove(col % 2 !== 0 ? 'u' : 'd', row);
+    for (let row = 0; row < 10 * SIZE; ++row) {
+      car.spawnMove(col % 2 !== 0 ? "u" : "d", row);
       styles[car.node().id()] = {
         backgroundColor: c.asHex(),
-        backgroundAlpha: 1
-      }
+        backgroundAlpha: 1,
+      };
     }
     car.pop();
   }
   return [car.root(), null, null, { styles }];
-}
+};
 
 const buildPlanner = (inc = 15) => {
   const car = new DirectionCaret();
-  for(let hour = 0; hour < 24; ++hour) {
-    for(let min = 0; min < 60; min += inc) {
+  for (let hour = 0; hour < 24; ++hour) {
+    for (let min = 0; min < 60; min += inc) {
       let str = "";
       if (hour === 0 || hour === 12) {
         str += 12;
       } else if (hour < 12) {
-        str += (hour);
+        str += hour;
       } else {
-        str += (hour - 12);
+        str += hour - 12;
       }
       str += ":";
       if (min < 10) {
@@ -126,14 +134,13 @@ const buildPlanner = (inc = 15) => {
         str += min;
       }
       str += " " + (hour >= 12 ? "PM" : "AM");
-      car.spawnMove('d', str);
+      car.spawnMove("d", str);
     }
   }
   return car.root();
-}
+};
 
-const marchSpawn = (car, dir, labels) =>
-{
+const marchSpawn = (car, dir, labels) => {
   if (!labels || labels.length <= 0) {
     throw new Error("No labels to spawn from");
   }
@@ -151,7 +158,7 @@ const marchSpawn = (car, dir, labels) =>
       return car.root();
     }
 
-    car.align(dir, 'c');
+    car.align(dir, "c");
     car.spawnMove(dir);
     car.push();
     try {
@@ -187,22 +194,33 @@ const buildTournament = (vertical, ...rounds) => {
   root.neighbors().nodeAt(dir).setValue();
   root.neighbors().nodeAt(revdir).setValue();
   return root;
-}
+};
 
 const buildMarchMadness = (vertical) => {
-  return buildTournament(vertical, "Finals", "Conference Finals", "Conference Semifinals", "First Round");
+  return buildTournament(
+    vertical,
+    "Finals",
+    "Conference Finals",
+    "Conference Semifinals",
+    "First Round"
+  );
 };
-;
 const buildFootballPlayoffs = (vertical) => {
-  return buildTournament(vertical, "Championship", "Conference Championship", "Divisional Round", "Wild Card");
+  return buildTournament(
+    vertical,
+    "Championship",
+    "Conference Championship",
+    "Divisional Round",
+    "Wild Card"
+  );
 };
 
 export {
-    buildMarchMadness,
-    buildFootballPlayoffs,
-    buildTournament,
-    buildAlternatingColumns,
-    buildGrid,
-    buildPlanner,
-    buildRandom
-}
+  buildMarchMadness,
+  buildFootballPlayoffs,
+  buildTournament,
+  buildAlternatingColumns,
+  buildGrid,
+  buildPlanner,
+  buildRandom,
+};

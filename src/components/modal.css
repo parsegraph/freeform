@@ -1,37 +1,37 @@
 .tabs * {
-    border: 1px solid grey;
-    border-radius: 3px;
-    cursor: pointer;
-    padding-left: 5px;
-    padding-right: 5px;
-    border-bottom-left-radius: 0px;
-    border-bottom-right-radius: 0px;
-    transform: translate(0, 1px);
-    background: lightblue;
-    z-index: 0;
-    color: black;
+  border: 1px solid grey;
+  border-radius: 3px;
+  cursor: pointer;
+  padding-left: 5px;
+  padding-right: 5px;
+  border-bottom-left-radius: 0px;
+  border-bottom-right-radius: 0px;
+  transform: translate(0, 1px);
+  background: lightblue;
+  z-index: 0;
+  color: black;
 }
 
 .tabs > .active {
-    z-index: 3;
-    border-bottom: 1px solid lightblue;
+  z-index: 3;
+  border-bottom: 1px solid lightblue;
 }
 
 .tabs {
-    z-index: 1;
-    padding-left: 5px;
-    display: block;
-    border-bottom: 1px solid grey;
-    margin-bottom: .5em;
+  z-index: 1;
+  padding-left: 5px;
+  display: block;
+  border-bottom: 1px solid grey;
+  margin-bottom: 0.5em;
 }
 
 .buttons > * {
-    flex-grow: 1;
+  flex-grow: 1;
 }
 
 .buttons {
-    padding-top: .5em;
-    display: flex;
-    gap: 5px;
-    flex-wrap: wrap;
+  padding-top: 0.5em;
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
 }

@@ -1,17 +1,19 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import './App.css';
+import { useCallback, useEffect, useRef, useState } from "react";
+import "./App.css";
 
-import {createRoot} from 'react-dom/client';
+import { createRoot } from "react-dom/client";
 
-import { 
-  Direction, deserializeParsegraph, serializeParsegraph,
+import {
+  Direction,
+  deserializeParsegraph,
+  serializeParsegraph,
 } from "parsegraph";
-import Viewport from './Viewport/Viewport';
-import ImportModal from './ImportModal';
-import ExportModal from './ExportModal';
-import { PUBLIC_SERVERS, USE_LOCAL_STORAGE } from '../settings';
-import NodeStylingModal from './NodeStylingModal';
-import Color from 'parsegraph-color';
+import Viewport from "./Viewport/Viewport";
+import ImportModal from "./ImportModal";
+import ExportModal from "./ExportModal";
+import { PUBLIC_SERVERS, USE_LOCAL_STORAGE } from "../settings";
+import NodeStylingModal from "./NodeStylingModal";
+import Color from "parsegraph-color";
 
 const sessionId = crypto.randomUUID();
 
@@ -84,10 +86,16 @@ class GraphStack {
   save(newGraph, selectedNode, viewport) {
     const newGraphData = serializeParsegraph(newGraph);
     if (selectedNode) {
-      newGraphData.selectedNode = typeof selectedNode === "object" ? selectedNode.id() : selectedNode;
+      newGraphData.selectedNode =
+        typeof selectedNode === "object" ? selectedNode.id() : selectedNode;
     }
-    newGraphData.viewport = viewport instanceof Viewport ? viewport.toJSON() : viewport;
-    if (this.hasWidget() && JSON.stringify(this._actions[this._actionIndex]) === JSON.stringify(newGraphData)) {
+    newGraphData.viewport =
+      viewport instanceof Viewport ? viewport.toJSON() : viewport;
+    if (
+      this.hasWidget() &&
+      JSON.stringify(this._actions[this._actionIndex]) ===
+        JSON.stringify(newGraphData)
+    ) {
       return;
     }
     if (this._actionIndex < this._actions.length - 1) {
@@ -108,7 +116,7 @@ class GraphStack {
       ++this._actionIndex;
     }
   }
-  
+
   clear() {
     this._actions = [];
     this._actionIndex = -1;
@@ -116,12 +124,14 @@ class GraphStack {
 }
 
 const loadRoom = (openGraph, roomName) => {
-  return fetch("/public/" + roomName).then(resp=>resp.json()).then(roomData =>{
-    openGraph(deserializeParsegraph(roomData));
-  });
-}
+  return fetch("/public/" + roomName)
+    .then((resp) => resp.json())
+    .then((roomData) => {
+      openGraph(deserializeParsegraph(roomData));
+    });
+};
 
-let initialRoom
+let initialRoom;
 const loadInitialRoom = (openGraph) => {
   const urlParams = new URLSearchParams(window.location.search);
   const roomName = urlParams.get("public");
@@ -131,13 +141,12 @@ const loadInitialRoom = (openGraph) => {
   if (!initialRoom) {
     initialRoom = loadRoom(openGraph, roomName);
   }
-  return initialRoom.then(roomData => {
+  return initialRoom.then((roomData) => {
     if (roomData) {
       openGraph(deserializeParsegraph(roomData));
     }
   });
-}
-
+};
 
 function App() {
   const [viewport] = useState(new Viewport());
@@ -146,7 +155,6 @@ function App() {
   const [needsSave, setNeedsSave] = useState(false);
 
   const [hasWidget, setHasWidget] = useState(false);
-
 
   const [autopublish, setAutopublish] = useState(false);
 
@@ -158,16 +166,19 @@ function App() {
   const [roomName, setRoomName] = useState(urlParams.get("public"));
   const [sampleName, setSampleName] = useState(urlParams.get("sample"));
 
-  const refresh = useCallback((dontTouchCamera) => {
-    setHasWidget(graphs.hasWidget());
-    if (graphs.hasWidget()) {
-      viewport.show(graphs.widget(), graphs.viewportData());
-      viewport.moveToId(graphs.selectedNode());
-      if (!dontTouchCamera) {
-        viewport.showInCamera();
+  const refresh = useCallback(
+    (dontTouchCamera) => {
+      setHasWidget(graphs.hasWidget());
+      if (graphs.hasWidget()) {
+        viewport.show(graphs.widget(), graphs.viewportData());
+        viewport.moveToId(graphs.selectedNode());
+        if (!dontTouchCamera) {
+          viewport.showInCamera();
+        }
       }
-    }
-  }, [viewport, graphs]);
+    },
+    [viewport, graphs]
+  );
 
   const publish = useCallback(() => {
     if (!PUBLIC_SERVERS) {
@@ -177,30 +188,32 @@ function App() {
       return;
     }
     // TODO this won't serialize colors
-    fetch('/public/' + roomName + "?sid=" + sessionId, {
+    fetch("/public/" + roomName + "?sid=" + sessionId, {
       body: JSON.stringify(serializeParsegraph(graphs.widget())),
       headers: {
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
       },
-      method: 'POST'
-    }).then(resp=>{
-      viewport.logMessage("Saved to " + roomName);
-      setNeedsSave(false);
-    }).catch(ex => {
-      console.log(ex);
-      viewport.logMessage("Failed to save");
-    }); 
+      method: "POST",
+    })
+      .then((resp) => {
+        viewport.logMessage("Saved to " + roomName);
+        setNeedsSave(false);
+      })
+      .catch((ex) => {
+        console.log(ex);
+        viewport.logMessage("Failed to save");
+      });
   }, [graphs, roomName, viewport]);
 
   const openImportModal = () => {
     setExportModalOpen(false);
-    setImportModalOpen(old=>!old);
-  }
+    setImportModalOpen((old) => !old);
+  };
 
   const openExportModal = () => {
     setImportModalOpen(false);
-    setExportModalOpen(old=>!old);
-  }
+    setExportModalOpen((old) => !old);
+  };
 
   const [showNodeActions, setShowNodeActions] = useState(false);
 
@@ -226,8 +239,8 @@ function App() {
     if (!PUBLIC_SERVERS) {
       return;
     }
-    const es = new EventSource("/public/" + roomName + "?sid=" + sessionId)
-    es.onmessage = e => {
+    const es = new EventSource("/public/" + roomName + "?sid=" + sessionId);
+    es.onmessage = (e) => {
       const selectedNode = viewport._userCaret.node().id();
       graphs.save(deserializeParsegraph(JSON.parse(e.data)));
       resetUndoCounts();
@@ -236,10 +249,10 @@ function App() {
     };
     es.onerror = () => {
       setAutopublish(false);
-    }
+    };
     return () => {
       es.close();
-    }
+    };
   }, [autopublish, graphs, refresh, roomName, viewport]);
 
   const [undoSize, setUndoSize] = useState(0);
@@ -248,12 +261,12 @@ function App() {
   const refreshUndoCounts = () => {
     setUndoSize(graphs.undoCount());
     setRedoSize(graphs.redoCount());
-  }
+  };
 
   const resetUndoCounts = () => {
     setUndoSize(0);
     setRedoSize(0);
-  }
+  };
 
   const undo = useCallback(() => {
     graphs.undo();
@@ -293,7 +306,7 @@ function App() {
     if (!graphs) {
       return;
     }
-    viewport.setSaveGraph((graph, selectedNode)=>{
+    viewport.setSaveGraph((graph, selectedNode) => {
       if (!viewport.showingStyling()) {
         graphs.save(graph, selectedNode, viewport.toJSON());
         refreshUndoCounts();
@@ -307,14 +320,14 @@ function App() {
     viewport.setUndo(undo);
     viewport.setRedo(redo);
     viewport.setToggleNodeActions(() => {
-      setShowNodeActions(orig=>!orig);
+      setShowNodeActions((orig) => !orig);
     });
     if (graphs._actionIndex < 0) {
       return;
     }
     viewport.show(graphs.widget(), graphs.viewportData());
-  }, [graphs, viewport, refresh, autopublish, publish, undo, redo])
-  
+  }, [graphs, viewport, refresh, autopublish, publish, undo, redo]);
+
   useEffect(() => {
     if (autopublish) {
       return;
@@ -325,7 +338,7 @@ function App() {
     }
 
     window.onbeforeunload = () => {
-      return 'Are you sure you want to lose your unexported changes?';
+      return "Are you sure you want to lose your unexported changes?";
     };
   }, [needsSave, autopublish]);
 
@@ -341,7 +354,10 @@ function App() {
         refreshUndoCounts();
         setNodeStyling({
           ...viewport.getNodeStyle(),
-          pageBackgroundColor: viewport.rendering().pageBackgroundColor().asHex()
+          pageBackgroundColor: viewport
+            .rendering()
+            .pageBackgroundColor()
+            .asHex(),
         });
       }
       setNodeStylingModalOpen(showingStyling);
@@ -350,65 +366,75 @@ function App() {
 
   const updateNodeStyling = (newStyling) => {
     if (newStyling.pageBackgroundColor) {
-      viewport.rendering().setPageBackgroundColor(Color.fromHex(newStyling.pageBackgroundColor));
+      viewport
+        .rendering()
+        .setPageBackgroundColor(Color.fromHex(newStyling.pageBackgroundColor));
       delete newStyling.pageBackgroundColor;
       viewport.refresh();
     }
     viewport.updateNodeStyle(newStyling);
     graphs.replace(graphs.widget(), viewport.node().id(), viewport);
-  }
+  };
 
   const modalRef = useRef();
-  useEffect(()=>{
+  useEffect(() => {
     if (!modalRef.current || !nodeStylingModalOpen) {
-        return;
+      return;
     }
 
     const modal = modalRef.current;
     const mouseUp = () => {
-        window.removeEventListener('mousemove', mouseMove, true);
-    }
-    window.addEventListener('mouseup', mouseUp, false);
+      window.removeEventListener("mousemove", mouseMove, true);
+    };
+    window.addEventListener("mouseup", mouseUp, false);
 
     const setPos = (x, y) => {
       modal.style.left = x + "px";
       modal.style.top = y + "px";
-    }
+    };
 
     const mouseMove = (e) => {
       setPos(e.clientX, e.clientY);
     };
-    
-    modal.addEventListener('mousedown', (e) => {
-      if (e.target.tagName === "INPUT" || e.target.tagName === "BUTTON") {
-        return;
-      }
-      window.addEventListener('mousemove', mouseMove, true);
-    }, false);
+
+    modal.addEventListener(
+      "mousedown",
+      (e) => {
+        if (e.target.tagName === "INPUT" || e.target.tagName === "BUTTON") {
+          return;
+        }
+        window.addEventListener("mousemove", mouseMove, true);
+      },
+      false
+    );
 
     const touchMove = (e) => {
       for (let i = 0; i < e.changedTouches.length; ++i) {
-          const touch = e.changedTouches[i];
-          setPos(touch.clientX, touch.clientY);
+        const touch = e.changedTouches[i];
+        setPos(touch.clientX, touch.clientY);
       }
     };
 
     const touchEnd = () => {
-        window.removeEventListener('touchmove', touchMove, true);
-    }
-    window.addEventListener('touchend', touchEnd, false);
+      window.removeEventListener("touchmove", touchMove, true);
+    };
+    window.addEventListener("touchend", touchEnd, false);
 
-    modal.addEventListener('touchstart', (e) => {
-      if (e.target.tagName === "INPUT" || e.target.tagName === "BUTTON") {
-        return;
-      }
-      e.preventDefault();
-      window.addEventListener('touchmove', touchMove, true);
-    }, false);
+    modal.addEventListener(
+      "touchstart",
+      (e) => {
+        if (e.target.tagName === "INPUT" || e.target.tagName === "BUTTON") {
+          return;
+        }
+        e.preventDefault();
+        window.addEventListener("touchmove", touchMove, true);
+      },
+      false
+    );
 
     return () => {
-      window.removeEventListener('mouseup', mouseUp);
-    }
+      window.removeEventListener("mouseup", mouseUp);
+    };
   }, [modalRef, nodeStylingModalOpen]);
 
   const canvasRef = useRef();
@@ -421,66 +447,145 @@ function App() {
     viewport.mount(canvasRef.current);
   }, [canvasRef, viewport]);
 
-  return (<>
-  <div className="App">
-      <div style={{position: 'fixed', inset: '0'}} ref={canvasRef} tabIndex={0}/>;
-      {(!hasWidget || importModalOpen) && <div className="modal">
-        <ImportModal sampleName={sampleName} onClose={hasWidget ? () => setImportModalOpen(false) : null} openGraph={(graph, selectedNode, roomName, viewportData)=>{
-          setSampleName(null);
-          setRoomName(roomName);
-          if (canvasRef.current) {
-            canvasRef.current.focus();
-          }
-          graphs.clear();
-          graphs.save(graph, selectedNode, viewportData);
-          resetUndoCounts();
-          refresh(!!viewportData?.cam);
-        }}/>
-      </div>}
-      {(exportModalOpen && hasWidget) && <div className="modal">
-        <ExportModal viewport={viewport} onExport={() => {
-          setNeedsSave(false);
-        }} graph={graphs.widget()} onClose={() => setExportModalOpen(false)}/>
-      </div>}
-      {(nodeStylingModalOpen && hasWidget) && <div className="modal" ref={modalRef}>
-        <NodeStylingModal viewport={viewport} style={nodeStyling} updateStyle={updateNodeStyling} onClose={() => {
-          setNodeStylingModalOpen(false);
-          viewport.toggleNodeStyling();
-        }}/>
-      </div>}
-  <div className="AppMenu">
-      <div style={{flexGrow: '1', display: 'flex', gap: '5px'}}>
-        <button onClick={e=>window.location.href="/"}>&lt;&lt;</button>
-      {(hasWidget && !showNodeActions) && <button tabIndex={0} onClick={openImportModal}>Open</button>}
-      {hasWidget && <div style={{flexGrow: '1', display: 'flex', flexDirection: 'column'}}>
-        <div className="buttons" style={{paddingTop: '0'}}>
-          {hasWidget && <button onClick={()=>viewport.toggleNodeStyling()}>Style</button>}
-          {(!showNodeActions && hasWidget) && <>
-            <button onClick={()=>viewport.showInCamera()}>Re-center</button>
-            <button onClick={()=>viewport.moveOutward()}>Outward</button>
-            <button onClick={()=>viewport.toggleEditor()}>Edit</button>
-          </>}
-          {showNodeActions && <NodeActions viewport={viewport}/>}
-          {!showNodeActions && <button className="edit" style={{background: 'red', color: 'white'}} onClick={()=>viewport.removeNode()}>Remove</button>}
-          {!showNodeActions && <UndoRedoActions undo={undo} redo={redo} undoSize={undoSize} redoSize={redoSize}/>}
-          {PUBLIC_SERVERS && roomName && <button onClick={()=>{setAutopublish(orig=>{
-            return !orig
-          })}}>Auto-publish {autopublish ? "ON" : "OFF"}</button>}
+  return (
+    <>
+      <div className="App">
+        <div
+          style={{ position: "fixed", inset: "0" }}
+          ref={canvasRef}
+          tabIndex={0}
+        />
+        ;
+        {(!hasWidget || importModalOpen) && (
+          <div className="modal">
+            <ImportModal
+              sampleName={sampleName}
+              onClose={hasWidget ? () => setImportModalOpen(false) : null}
+              openGraph={(graph, selectedNode, roomName, viewportData) => {
+                setSampleName(null);
+                setRoomName(roomName);
+                if (canvasRef.current) {
+                  canvasRef.current.focus();
+                }
+                graphs.clear();
+                graphs.save(graph, selectedNode, viewportData);
+                resetUndoCounts();
+                refresh(!!viewportData?.cam);
+              }}
+            />
+          </div>
+        )}
+        {exportModalOpen && hasWidget && (
+          <div className="modal">
+            <ExportModal
+              viewport={viewport}
+              onExport={() => {
+                setNeedsSave(false);
+              }}
+              graph={graphs.widget()}
+              onClose={() => setExportModalOpen(false)}
+            />
+          </div>
+        )}
+        {nodeStylingModalOpen && hasWidget && (
+          <div className="modal" ref={modalRef}>
+            <NodeStylingModal
+              viewport={viewport}
+              style={nodeStyling}
+              updateStyle={updateNodeStyling}
+              onClose={() => {
+                setNodeStylingModalOpen(false);
+                viewport.toggleNodeStyling();
+              }}
+            />
+          </div>
+        )}
+        <div className="AppMenu">
+          <div style={{ flexGrow: "1", display: "flex", gap: "5px" }}>
+            <button onClick={(e) => (window.location.href = "/")}>
+              &lt;&lt;
+            </button>
+            {hasWidget && !showNodeActions && (
+              <button tabIndex={0} onClick={openImportModal}>
+                Open
+              </button>
+            )}
+            {hasWidget && (
+              <div
+                style={{
+                  flexGrow: "1",
+                  display: "flex",
+                  flexDirection: "column",
+                }}
+              >
+                <div className="buttons" style={{ paddingTop: "0" }}>
+                  {hasWidget && (
+                    <button onClick={() => viewport.toggleNodeStyling()}>
+                      Style
+                    </button>
+                  )}
+                  {!showNodeActions && hasWidget && (
+                    <>
+                      <button onClick={() => viewport.showInCamera()}>
+                        Re-center
+                      </button>
+                      <button onClick={() => viewport.moveOutward()}>
+                        Outward
+                      </button>
+                      <button onClick={() => viewport.toggleEditor()}>
+                        Edit
+                      </button>
+                    </>
+                  )}
+                  {showNodeActions && <NodeActions viewport={viewport} />}
+                  {!showNodeActions && (
+                    <button
+                      className="edit"
+                      style={{ background: "red", color: "white" }}
+                      onClick={() => viewport.removeNode()}
+                    >
+                      Remove
+                    </button>
+                  )}
+                  {!showNodeActions && (
+                    <UndoRedoActions
+                      undo={undo}
+                      redo={redo}
+                      undoSize={undoSize}
+                      redoSize={redoSize}
+                    />
+                  )}
+                  {PUBLIC_SERVERS && roomName && (
+                    <button
+                      onClick={() => {
+                        setAutopublish((orig) => {
+                          return !orig;
+                        });
+                      }}
+                    >
+                      Auto-publish {autopublish ? "ON" : "OFF"}
+                    </button>
+                  )}
+                </div>
+                <ParsegraphEditor viewport={viewport} />
+              </div>
+            )}
+            {hasWidget && !showNodeActions && (
+              <button onClick={openExportModal}>Save</button>
+            )}
+            {PUBLIC_SERVERS && roomName && (
+              <button onClick={() => publish()}>Publish to {roomName}</button>
+            )}
+          </div>
+          <ParsegraphLog viewport={viewport} />
+          <ParsegraphStatus viewport={viewport} />
         </div>
-        <ParsegraphEditor viewport={viewport}/>
-      </div>}
-      {(hasWidget && !showNodeActions) && <button onClick={openExportModal}>Save</button>}
-      {PUBLIC_SERVERS && roomName && <button onClick={() => publish()}>Publish to {roomName}</button>}
       </div>
-      <ParsegraphLog viewport={viewport}/>
-      <ParsegraphStatus viewport={viewport}/>
-    </div>
-    </div>
     </>
   );
 }
 
-function ParsegraphLog({viewport}) {
+function ParsegraphLog({ viewport }) {
   const logRef = useRef();
 
   useEffect(() => {
@@ -491,12 +596,12 @@ function ParsegraphLog({viewport}) {
       return;
     }
     viewport.mountLog(logRef.current);
-  })
+  });
 
-  return <div id="log" ref={logRef}/>;
+  return <div id="log" ref={logRef} />;
 }
 
-function ParsegraphEditor({viewport}) {
+function ParsegraphEditor({ viewport }) {
   const editorContainerRef = useRef();
 
   useEffect(() => {
@@ -509,11 +614,10 @@ function ParsegraphEditor({viewport}) {
     viewport.mountEditor(editorContainerRef.current);
   }, [viewport, editorContainerRef]);
 
-  return <div ref={editorContainerRef}>
-        </div>;
+  return <div ref={editorContainerRef}></div>;
 }
 
-function ParsegraphStatus({viewport}) {
+function ParsegraphStatus({ viewport }) {
   const ref = useRef();
 
   useEffect(() => {
@@ -529,21 +633,35 @@ function ParsegraphStatus({viewport}) {
   return <div ref={ref}></div>;
 }
 
-function NodeActions({viewport}) {
-  return <>
-    <button className="edit" onClick={()=>viewport.toggleAlignment()}>Align</button>
-    <button className="edit" onClick={()=>viewport.togglePreferredAxis()}>Preferred Axis</button>
-    <button className="edit" onClick={()=>viewport.toggleNodeScale()}>Scale</button>
-    <button className="edit" onClick={()=>viewport.toggleNodeFit()}>Fit</button>
-    <button className="edit" onClick={()=>viewport.toggleCrease()}>Crease</button>
-  </>;
+function NodeActions({ viewport }) {
+  return (
+    <>
+      <button className="edit" onClick={() => viewport.toggleAlignment()}>
+        Align
+      </button>
+      <button className="edit" onClick={() => viewport.togglePreferredAxis()}>
+        Preferred Axis
+      </button>
+      <button className="edit" onClick={() => viewport.toggleNodeScale()}>
+        Scale
+      </button>
+      <button className="edit" onClick={() => viewport.toggleNodeFit()}>
+        Fit
+      </button>
+      <button className="edit" onClick={() => viewport.toggleCrease()}>
+        Crease
+      </button>
+    </>
+  );
 }
 
-function UndoRedoActions({undo, redo, undoSize, redoSize}) {
-  return <>
-    <button onClick={()=>undo()}>Undo ({undoSize})</button>
-    <button onClick={()=>redo()}>Redo ({redoSize})</button>
-  </>;
+function UndoRedoActions({ undo, redo, undoSize, redoSize }) {
+  return (
+    <>
+      <button onClick={() => undo()}>Undo ({undoSize})</button>
+      <button onClick={() => redo()}>Redo ({redoSize})</button>
+    </>
+  );
 }
 
 export default App;

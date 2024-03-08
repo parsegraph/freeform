@@ -114,6 +114,9 @@ const handleKeyDown = (viewport, key, mouseX, mouseY, modifiers) => {
       break;
     case "l":
     case "d":
+      if (modifiers.ctrlKey) {
+        return false;
+      }
       viewport.spawnMove(Direction.FORWARD, false, DONT_TOUCH_CAMERA);
       break;
     case "h":

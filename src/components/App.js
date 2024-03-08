@@ -71,6 +71,16 @@ class GraphStack {
     return null;
   }
 
+  replace(...saveArgs) {
+    this.save(...saveArgs);
+    if (this._actionIndex < 1) {
+      return;
+    }
+    this._actions[this._actionIndex - 1] = this._actions[this._actionIndex];
+    this._actions.splice(this._actionIndex, 1);
+    this._actionIndex--;
+  }
+
   save(newGraph, selectedNode, viewport) {
     const newGraphData = serializeParsegraph(newGraph);
     if (selectedNode) {
@@ -327,6 +337,8 @@ function App() {
     }
     viewport.setToggleNodeStyling((showingStyling) => {
       if (showingStyling) {
+        graphs.save(graphs.widget(), viewport.node().id(), viewport);
+        refreshUndoCounts();
         setNodeStyling({
           ...viewport.getNodeStyle(),
           pageBackgroundColor: viewport.rendering().pageBackgroundColor().asHex()
@@ -343,9 +355,9 @@ function App() {
       viewport.refresh();
     }
     viewport.updateNodeStyle(newStyling);
-    graphs.save(graphs.widget(), viewport.node().id(), viewport);
+    graphs.replace(graphs.widget(), viewport.node().id(), viewport);
   }
-  
+
   const modalRef = useRef();
   useEffect(()=>{
     if (!modalRef.current || !nodeStylingModalOpen) {

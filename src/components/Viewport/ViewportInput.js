@@ -187,6 +187,7 @@ export default class ViewportInput {
 
     let touchingNode = false;
     canvas.addEventListener("touchstart", (e) => {
+      this._hoveredNode = null;
       if (!this.viewport().hasWidget()) {
         return;
       }
@@ -372,6 +373,7 @@ export default class ViewportInput {
     });
 
     canvas.addEventListener("wheel", (e) => {
+      this._hoveredNode = null;
       if (!this.viewport().hasWidget()) {
         return;
       }
@@ -383,6 +385,8 @@ export default class ViewportInput {
     });
 
     canvas.addEventListener("keydown", (e) => {
+      this._hoveredNode = null;
+
       if (!this.viewport().hasWidget()) {
         return;
       }

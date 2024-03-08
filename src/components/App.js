@@ -14,6 +14,7 @@ import ExportModal from "./ExportModal";
 import { PUBLIC_SERVERS, USE_LOCAL_STORAGE } from "../settings";
 import NodeStylingModal from "./NodeStylingModal";
 import Color from "parsegraph-color";
+import OffscreenModal from "./Viewport/OffscreenModal";
 
 const sessionId = crypto.randomUUID();
 
@@ -302,6 +303,8 @@ function App() {
     });
   }, [autopublish, graphs, refresh]);
 
+  const [offscreen, setOffscreen] = useState(false);
+
   useEffect(() => {
     if (!graphs) {
       return;
@@ -445,6 +448,7 @@ function App() {
       return;
     }
     viewport.mount(canvasRef.current);
+    viewport.rendering().setOffscreenHandler(setOffscreen);
   }, [canvasRef, viewport]);
 
   return (
@@ -456,6 +460,11 @@ function App() {
           ref={canvasRef}
           tabIndex={0}
         />
+        {hasWidget && offscreen && <div className="modal">
+          <OffscreenModal onRecenter={() => {
+            viewport.showInCamera();
+          }}/>
+        </div>}
         {(!hasWidget || importModalOpen) && (
           <div className="modal">
             <ImportModal

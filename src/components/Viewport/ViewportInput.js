@@ -381,11 +381,10 @@ export default class ViewportInput {
         return;
       }
 
-      if (this.keystrokes()) {
-        this.keystrokes().handleKey(e.key);
-      }
-
       if (handleKeyDown(viewport, e.key, mouseX, mouseY, e)) {
+        if (this.keystrokes()) {
+            this.keystrokes().handleKey(e.key);
+        }
         e.preventDefault();
       }
     });

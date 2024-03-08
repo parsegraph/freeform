@@ -5,7 +5,7 @@ name: Deploy parsegraph.com
 
 on:
   push:
-    branches: main
+    branches: freeform
 
 jobs:
   build:

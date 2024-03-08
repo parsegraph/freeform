@@ -862,7 +862,7 @@ export default class Viewport {
   }
 
   hideEditor() {
-    if (!this._showEditor) {
+    if (!this.showingEditor()) {
       return;
     }
     if (this._toggleNodeActions) {
@@ -875,7 +875,7 @@ export default class Viewport {
   }
 
   showEditor() {
-    if (this._showEditor) {
+    if (this.showingEditor()) {
       return;
     }
     if (this._toggleNodeActions) {
@@ -893,7 +893,7 @@ export default class Viewport {
   }
 
   toggleEditor() {
-    if (this._showEditor) {
+    if (this.showingEditor()) {
       this.hideEditor();
     } else {
       this.showEditor();

@@ -278,7 +278,8 @@ const openSampleJson = (openGraph) => {
   return fetch("/package.json")
     .then((resp) => resp.text())
     .then((text) => {
-      openGraph(importers.graphJson(JSON.parse(text)));
+      const graph = importers.graphJson(JSON.parse(text));
+      openGraph(graph, graph.neighbors().hasChild(Direction.INWARD) ? graph.neighbors().nodeAt(Direction.INWARD) : graph);
     });
 };
 

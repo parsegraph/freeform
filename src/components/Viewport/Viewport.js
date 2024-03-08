@@ -361,7 +361,12 @@ export default class Viewport {
   spawnMove(dir, pullIfOccupied, dontTouchCamera) {
     if (this.node().neighbors().hasNode(dir)) {
       if (pullIfOccupied && !this.node().neighbors().isRoot()) {
-        this.pullNode();
+        const parentDir = this.node().neighbors().parentDirection();
+        if (dir === parentDir) {
+          this.pullNode();
+        } else {
+          this.toggleAlignment();
+        }
       } else {
         this.caret().move(dir);
         if (!dontTouchCamera) {

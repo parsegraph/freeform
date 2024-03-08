@@ -811,6 +811,13 @@ export default class ViewportRendering {
 
             const borderThickness = 1;
             layout.extentsAt(dir).forEach((length, size) => {
+                if (isNaN(length)) {
+                    return;
+                }
+                if (isNaN(size) || size < 0) {
+                    offset += length;
+                    return;
+                }
                 if (getDirectionAxis(dir) === Axis.VERTICAL) {
                     if (dir === Direction.UPWARD) {
                         this._extentPainter.drawBlock(

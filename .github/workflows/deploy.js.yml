@@ -37,7 +37,9 @@ jobs:
 
     - run: cd build && scp * "$SSH_HOST:$PARSEGRAPH_PUBLIC_HTML/freeform"
       env:
+          PARSEGRAPH_PUBLIC_HTML: ${{ secrets.PARSEGRAPH_PUBLIC_HTML }}
           SSH_HOST: ${{ secrets.PARSEGRAPH_SSH_HOST }}
     - run: cd build && scp -r ./static/* "$SSH_HOST:$PARSEGRAPH_PUBLIC_HTML/static"
       env:
+          PARSEGRAPH_PUBLIC_HTML: ${{ secrets.PARSEGRAPH_PUBLIC_HTML }}
           SSH_HOST: ${{ secrets.PARSEGRAPH_SSH_HOST }}

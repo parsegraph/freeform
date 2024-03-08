@@ -1,6 +1,7 @@
 import React from "react";
 import { Direction } from "parsegraph";
 import {
+  DONT_TOUCH_CAMERA,
   MAX_CLICK_DELAY_MS,
   SHOW_KEY_STROKES,
   SINGLE_TAP_GESTURES,
@@ -253,9 +254,9 @@ export default class ViewportInput {
       if (worldX === layout.absoluteX() || dy > dx) {
         if (dist > bodySize[1] / 2) {
           if (worldY > layout.absoluteY()) {
-            viewport.spawnMove(Direction.DOWNWARD, true, true);
+            viewport.spawnMove(Direction.DOWNWARD, true, DONT_TOUCH_CAMERA);
           } else {
-            viewport.spawnMove(Direction.UPWARD, true, true);
+            viewport.spawnMove(Direction.UPWARD, true, DONT_TOUCH_CAMERA);
           }
           isDown = NaN;
           return true;
@@ -263,9 +264,9 @@ export default class ViewportInput {
       } else {
         if (dist > bodySize[0] / 2) {
           if (worldX > layout.absoluteX()) {
-            viewport.spawnMove(Direction.FORWARD, true, true);
+            viewport.spawnMove(Direction.FORWARD, true, DONT_TOUCH_CAMERA);
           } else {
-            viewport.spawnMove(Direction.BACKWARD, true, true);
+            viewport.spawnMove(Direction.BACKWARD, true, DONT_TOUCH_CAMERA);
           }
           isDown = NaN;
           return true;

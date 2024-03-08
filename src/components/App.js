@@ -38,6 +38,14 @@ class GraphStack {
     this._actionIndex = this._actions.length - 1;
   }
 
+  undoCount() {
+    return this._actionIndex;
+  }
+
+  redoCount() {
+    return this._actions.length - (this._actionIndex + 1);
+  }
+
   hasWidget() {
     return this._actionIndex >= 0 && this._actionIndex < this._actions.length;
   }
@@ -212,6 +220,7 @@ function App() {
     es.onmessage = e => {
       const selectedNode = viewport._userCaret.node().id();
       graphs.save(deserializeParsegraph(JSON.parse(e.data)));
+      resetUndoCounts();
       refresh(true);
       viewport.moveToId(selectedNode);
     };
@@ -223,6 +232,37 @@ function App() {
     }
   }, [autopublish, graphs, refresh, roomName, viewport]);
 
+  const [undoSize, setUndoSize] = useState(0);
+  const [redoSize, setRedoSize] = useState(0);
+
+  const refreshUndoCounts = () => {
+    setUndoSize(graphs.undoCount());
+    setRedoSize(graphs.redoCount());
+  }
+
+  const resetUndoCounts = () => {
+    setUndoSize(0);
+    setRedoSize(0);
+  }
+
+  const undo = useCallback(() => {
+    graphs.undo();
+    refreshUndoCounts();
+    if (autopublish && PUBLIC_SERVERS) {
+      publish();
+    }
+    refresh(true);
+  }, [autopublish, publish, graphs, refresh]);
+
+  const redo = useCallback(() => {
+    graphs.redo();
+    refreshUndoCounts();
+    if (autopublish && PUBLIC_SERVERS) {
+      publish();
+    }
+    refresh(true);
+  }, [autopublish, publish, graphs, refresh]);
+
   useEffect(() => {
     if (!graphs) {
       return;
@@ -233,26 +273,11 @@ function App() {
     loadInitialRoom((graph, selectedNode) => {
       if (selectedNode || autopublish) {
         graphs.save(graph, selectedNode);
+        resetUndoCounts();
         refresh(true);
       }
     });
   }, [autopublish, graphs, refresh]);
-
-  const undo = useCallback(() => {
-    graphs.undo();
-    if (autopublish && PUBLIC_SERVERS) {
-      publish();
-    }
-    refresh(true);
-  }, [autopublish, publish, graphs, refresh]);
-
-  const redo = useCallback(() => {
-    graphs.redo();
-    if (autopublish && PUBLIC_SERVERS) {
-      publish();
-    }
-    refresh(true);
-  }, [autopublish, publish, graphs, refresh]);
 
   useEffect(() => {
     if (!graphs) {
@@ -261,6 +286,7 @@ function App() {
     viewport.setSaveGraph((graph, selectedNode)=>{
       if (!viewport.showingStyling()) {
         graphs.save(graph, selectedNode, viewport.toJSON());
+        refreshUndoCounts();
       }
       if (autopublish && PUBLIC_SERVERS) {
         publish();
@@ -395,6 +421,7 @@ function App() {
           }
           graphs.clear();
           graphs.save(graph, selectedNode, viewportData);
+          resetUndoCounts();
           refresh(!!viewportData?.cam);
         }}/>
       </div>}
@@ -423,7 +450,7 @@ function App() {
           </>}
           {showNodeActions && <NodeActions viewport={viewport}/>}
           {!showNodeActions && <button className="edit" style={{background: 'red', color: 'white'}} onClick={()=>viewport.removeNode()}>Remove</button>}
-          {!showNodeActions && <UndoRedoActions undo={undo} redo={redo}/>}
+          {!showNodeActions && <UndoRedoActions undo={undo} redo={redo} undoSize={undoSize} redoSize={redoSize}/>}
           {PUBLIC_SERVERS && roomName && <button onClick={()=>{setAutopublish(orig=>{
             return !orig
           })}}>Auto-publish {autopublish ? "ON" : "OFF"}</button>}
@@ -500,10 +527,10 @@ function NodeActions({viewport}) {
   </>;
 }
 
-function UndoRedoActions({undo, redo}) {
+function UndoRedoActions({undo, redo, undoSize, redoSize}) {
   return <>
-    <button onClick={()=>undo()}>Undo</button>
-    <button onClick={()=>redo()}>Redo</button>
+    <button onClick={()=>undo()}>Undo ({undoSize})</button>
+    <button onClick={()=>redo()}>Redo ({redoSize})</button>
   </>;
 }
 

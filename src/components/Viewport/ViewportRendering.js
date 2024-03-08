@@ -693,7 +693,19 @@ export default class ViewportRendering {
       ctx.fillText(cam.toString(), cam.width(), cam.height());
     }
 
+    if (this._offscreenHandler && !needsPaint) {
+        const isOffscreen = renderData.i === 0
+            && renderData.dirtyGroups === 0
+            && renderData.offscreenGroups === renderData.allGroups
+            && renderData.allGroups > 0;
+        this._offscreenHandler(isOffscreen);
+    }
+
     return needsPaint;
+  }
+
+  setOffscreenHandler(offscreenHandler) {
+    this._offscreenHandler = offscreenHandler;
   }
 
   renderCaret() {

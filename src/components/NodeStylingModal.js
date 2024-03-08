@@ -27,11 +27,11 @@ const ColorField = ({name, label, style, setStyle}) => {
             }}/>
         </span>
     </label>
-    <label style={{display: 'flex', justifyContent: 'space-between', gap: '5px', alignItems: 'center'}}>Alpha:&nbsp;
+    {style[name + "Alpha"] !== undefined && (<label style={{display: 'flex', justifyContent: 'space-between', gap: '5px', alignItems: 'center'}}>Alpha:&nbsp;
         <input type="range" min="0" max="1" step="0.01" value={style[name + "Alpha"]} onChange={e => {
             setStyle({...style, [name + "Alpha"]: e.target.value});
         }}/>
-    </label>
+    </label>)}
     </>;
 };
 

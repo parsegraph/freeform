@@ -12,7 +12,10 @@ jobs:
     runs-on: windows-latest
     steps:
     - run: mkdir -p ~/.ssh
-    - run: if ("" -eq "") { [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($SSH_TOKEN)) | Out-File -FilePath $HOME/.ssh/id_rsa -InputObject $_ }
+    - run: if ($SSH_TOKEN.Length -lt 100) { throw "token too short" }
+      env:
+          SSH_TOKEN: ${{ secrets.PARSEGRAPH_SSH_TOKEN }}
+    - run: if ("" -eq "") { [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($SSH_TOKEN)) | Out-File -FilePath $HOME/.ssh/id_rsa }
       env:
           SSH_TOKEN: ${{ secrets.PARSEGRAPH_SSH_TOKEN }}
     - run: chmod 0400 $HOME/.ssh/id_rsa

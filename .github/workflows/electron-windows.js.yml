@@ -36,8 +36,12 @@ jobs:
     - run: yarn
     - run: yarn build
     - run: cd build && sed -i -re 's/React App/parsegraph/g' ./index.html
-    - run: cd electron && yarn && ./build.sh
-
+    - run: cd electron && yarn
+    - run: cd ../occluder && yarn build && cp dist/main.js ../public/occluder.js
+    - run: cd .. && yarn build && cd -
+    - run: cp -f ../build/index.html ../build/favicon.ico .
+    - run: cp -r -f ../build/static .
+    - run: yarn make
 
     - run: set VERSION (node -e 'console.log(JSON.parse(require("fs").readFileSync("electron/package.json")).version)') && ssh $Env:SSH_HOST "mkdir -p $Env:PARSEGRAPH_PUBLIC_HTML/electron/$VERSION"
       env:

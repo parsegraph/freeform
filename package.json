@@ -11,7 +11,6 @@
     "@testing-library/user-event": "^13.5.0",
     "buffer": "^6.0.3",
     "eslint": "^8.33.0",
-    "eslint-config-google": "^0.14.0",
     "eslint-config-prettier": "^8.6.0",
     "exif-parser": "^0.1.12",
     "exif-reader": "^2.0.1",
@@ -37,7 +36,13 @@
     "test": "react-scripts test",
     "eject": "react-scripts eject",
     "prettier": "prettier --write src",
-    "lint": "yarn prettier && npx eslint --fix ./src/** --ignore-pattern *.spec.js --ignore-pattern *.spec.ts"
+    "lint": "yarn prettier && npx eslint --fix ./src/** --ignore-pattern *.spec.js --ignore-pattern *.spec.ts --ignore-pattern *.css"
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app",
+      "react-app/jest"
+    ]
   },
   "browserslist": {
     "production": [
@@ -50,5 +55,8 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
+  },
+  "devDependencies": {
+    "eslint-config-react-app": "^7.0.1"
   }
 }

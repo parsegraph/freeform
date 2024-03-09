@@ -32,13 +32,11 @@ jobs:
       with:
         node-version: 20
         registry-url: 'https://registry.npmjs.org'
-    - run: cd occluder && yarn && ./deploy.sh && cd ..
+    - run: cd ../occluder && yarn build && cp dist/main.js ../public/occluder.js
     - run: yarn
     - run: yarn build
     - run: cd build && sed -i -re 's/React App/parsegraph/g' ./index.html
     - run: cd electron && yarn
-    - run: cd ../occluder && yarn build && cp dist/main.js ../public/occluder.js
-    - run: cd .. && yarn build && cd -
     - run: cp -f ../build/index.html ../build/favicon.ico .
     - run: cp -r -f ../build/static .
     - run: yarn make

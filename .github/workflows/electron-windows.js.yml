@@ -35,10 +35,10 @@ jobs:
     - run: cd occluder && yarn && yarn build && cp dist/main.js ../public/occluder.js && cd -
     - run: yarn
     - run: yarn build
-    - run: cd build && sed -i -re 's/React App/parsegraph/g' ./index.html
     - run: cd electron && yarn
     - run: cd electron && cp -Force ../build/favicon.ico .
     - run: cd electron && cp -Force ../build/index.html .
+    - run: cd electron && sed -i -re 's/React App/parsegraph/g' ./index.html
     - run: cd electron && cp -r -Force ../build/static .
     - run: cd electron && yarn make
 

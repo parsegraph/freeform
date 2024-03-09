@@ -30,6 +30,7 @@ import {
   PUBLIC_SERVERS,
 } from "../settings";
 import Color from "parsegraph-color";
+import { generatePrimes } from "../generators/generators";
 
 function ImportFromFile({ openGraph, onClose }) {
   const [importData, setImportData] = useState(null);
@@ -384,10 +385,25 @@ const buildCross = (numRounds) => {
   return car.root();
 };
 
+const buildPrimes = (maxRounds, setProgress) => {
+  const step = generatePrimes(setProgress);
+  let curStep = 0;
+  return (numSteps) => {
+    if (curStep >= maxRounds) {
+      return Promise.resolve(null);
+    }
+    return step(Math.min(numSteps, maxRounds - curStep));
+  }
+};
+
 function ImportFromTemplate({ openGraph, onClose }) {
   const [importType, setImportType] = useState("blank");
   const [numRounds, setNumRounds] = useState(5);
   const [vertical, setVertical] = useState(false);
+
+  const [progress, setProgress] = useState(0);
+
+  const [submitting, setSubmitting] = useState(false);
 
   const createFromTemplate = () => {
     switch (importType) {
@@ -453,6 +469,9 @@ function ImportFromTemplate({ openGraph, onClose }) {
       case "cross":
         openGraph(buildCross(numRounds));
         break;
+      case "primes":
+        openGraph(buildPrimes(numRounds, setProgress));
+        break;
       default:
         openGraph(new DirectionNode("Unknown import type: " + importType));
         break;
@@ -462,10 +481,32 @@ function ImportFromTemplate({ openGraph, onClose }) {
     }
   };
 
+  const getMaxRounds = () => {
+    switch (importType) {
+    case "primes": 
+      return 2000;
+    case "cross": 
+      return MAX_ROUNDS - 3;
+    default:
+      return MAX_ROUNDS;
+    }
+  };
+
+  const hasVariableRounds = () => {
+    switch (importType) {
+      case "march":
+      case "cross":
+      case "primes":
+        return true;
+    }
+    return false;
+  };
+
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
+        setSubmitting(true);
         createFromTemplate();
       }}
     >
@@ -501,9 +542,10 @@ function ImportFromTemplate({ openGraph, onClose }) {
           <option value="rainbow_vert">Rainbow (vertical)</option>
           <option value="rainbow_random">Random Colors</option>
           <option value="cross">Recursive cross</option>
+          <option value="primes">Prime numbers</option>
         </select>
       </label>
-      {(importType === "march" || importType === "cross") && (
+      {hasVariableRounds() && (
         <div
           style={{
             display: "flex",
@@ -516,11 +558,11 @@ function ImportFromTemplate({ openGraph, onClose }) {
           <label style={{ display: "flex" }}>
             Rounds:&nbsp;
             <input
-              value={numRounds}
+              value={Math.min(numRounds, getMaxRounds())}
               onChange={(e) => setNumRounds(Number.parseInt(e.target.value))}
               type="range"
               min="1"
-              max={importType === "cross" ? MAX_ROUNDS - 3 : MAX_ROUNDS}
+              max={getMaxRounds()}
             ></input>
             <span style={{ display: "inline-block", minWidth: "2em" }}>
               {numRounds}
@@ -540,12 +582,12 @@ function ImportFromTemplate({ openGraph, onClose }) {
         </div>
       )}
       <div className="buttons">
-        <input
+        {!submitting ? <input
           type="submit"
           style={{ flexGrow: "1" }}
           value="Create"
           autoFocus
-        />
+        /> : <input disabled type="range" min="0" max="100" value={progress*100}/>}
         {onClose && (
           <button style={{ flexGrow: "1" }} onClick={onClose}>
             Cancel

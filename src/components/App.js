@@ -451,6 +451,29 @@ function App() {
     viewport.rendering().setOffscreenHandler(setOffscreen);
   }, [canvasRef, viewport]);
 
+  const openGraph = (graph, selectedNode, roomName, viewportData) => {
+    setSampleName(null);
+    setRoomName(roomName);
+    if (canvasRef.current) {
+      canvasRef.current.focus();
+    }
+
+    graphs.clear();
+    setHasWidget(graphs.hasWidget());
+    resetUndoCounts();
+
+    if (typeof graph === "function") {
+      const step = graph;
+      step(Infinity).then(graph => {
+        graphs.save(graph);
+        refresh(false);
+      });
+    } else {
+      graphs.save(graph, selectedNode, viewportData);
+      refresh(!!viewportData?.cam);
+    }
+  };
+
   return (
     <>
       <div className="App">
@@ -470,17 +493,7 @@ function App() {
             <ImportModal
               sampleName={sampleName}
               onClose={hasWidget ? () => setImportModalOpen(false) : null}
-              openGraph={(graph, selectedNode, roomName, viewportData) => {
-                setSampleName(null);
-                setRoomName(roomName);
-                if (canvasRef.current) {
-                  canvasRef.current.focus();
-                }
-                graphs.clear();
-                graphs.save(graph, selectedNode, viewportData);
-                resetUndoCounts();
-                refresh(!!viewportData?.cam);
-              }}
+              openGraph={openGraph}
             />
           </div>
         )}

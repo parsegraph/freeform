@@ -17,7 +17,7 @@ jobs:
           SSH_TOKEN: ${{ secrets.PARSEGRAPH_SSH_TOKEN }}
     - run: chmod 0400 $HOME/.ssh/id_rsa
     - run: sha1sum $HOME/.ssh/id_rsa
-    - run: echo "$SSH_TOKEN_SHA1SUM *$HOME/.ssh/id_rsa" | sha1sum -c
+    - run: echo "\\$SSH_TOKEN_SHA1SUM *$HOME/.ssh/id_rsa" | sha1sum -c
       env:
           SSH_TOKEN_SHA1SUM: ${{ secrets.PARSEGRAPH_SSH_TOKEN_SHA1SUM }}
     - run: echo -n "$SSH_KNOWN_HOST" | base64 -d >>$HOME/.ssh/known_hosts

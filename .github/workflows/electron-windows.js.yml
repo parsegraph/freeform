@@ -11,6 +11,8 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
+    - run: Get-Command ssh
+    - run: Get-Command scp
     - run: mkdir -p ~/.ssh
     - run: if ($Env:SSH_TOKEN.Length -lt 100) { throw "token too short" }
       env:

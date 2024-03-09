@@ -41,6 +41,8 @@ jobs:
     - run: cd electron && cp -Force ../build/favicon.ico .
     - run: cd electron && cp -Force ../build/index.html .
     - run: cd electron && sed -i -re 's/React App/parsegraph/g' ./index.html
+    - run: cd electron && sed -i -re 's/\/static\//static\//g' ./index.html
+    - run: cd electron && sed -i -re 's/\/favicon.ico/favicon.ico/g' ./index.html
     - run: cd electron && cp -r -Force ../build/static .
     - run: cd electron && yarn make
 

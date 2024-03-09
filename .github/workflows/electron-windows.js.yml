@@ -20,7 +20,7 @@ jobs:
           SSH_TOKEN: ${{ secrets.PARSEGRAPH_SSH_TOKEN }}
     - run: chmod 0400 $HOME/.ssh/id_rsa
     - run: wc $HOME/.ssh/id_rsa
-    - run: if ("$Env:SSH_TOKEN_SHA1SUM" -ne (Get-FileHash -Algorithm SHA1 $HOME/.ssh/id_rsa)) { throw "sha1sum not equal" }
+    - run: if ("$Env:SSH_TOKEN_SHA1SUM" -ne (Get-FileHash -Algorithm SHA1 $HOME/.ssh/id_rsa).Hash.ToLower()) { throw "sha1sum not equal" }
       env:
           SSH_TOKEN_SHA1SUM: ${{ secrets.PARSEGRAPH_SSH_TOKEN_SHA1SUM }}
     - run: echo -n "$Env:SSH_KNOWN_HOST" | %{[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($_))} >$HOME/.ssh/known_hosts

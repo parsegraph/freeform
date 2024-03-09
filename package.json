@@ -2,7 +2,7 @@
   "name": "parsegraph-freeform",
   "version": "1.1.0",
   "proxy": "http://localhost:3001",
-  "main": "./electron/main.js",
+  "main": "./src/index.js",
   "author": "Aaron Faanes",
   "description": "Graph-based editor",
   "private": true,
@@ -15,8 +15,6 @@
     "buffer": "^6.0.3",
     "eslint": "^8.33.0",
     "eslint-config-prettier": "^8.6.0",
-    "electron": "^29.1.0",
-    "electron-squirrel-startup": "^1.0.0",
     "exif-parser": "^0.1.12",
     "exif-reader": "^2.0.1",
     "parsegraph": "^6.2.0",
@@ -36,15 +34,12 @@
     "web-vitals": "^2.1.4"
   },
   "scripts": {
-    "start": "electron-forge start",
+    "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
     "prettier": "prettier --write src",
-    "lint": "yarn prettier && npx eslint --fix ./src/** --ignore-pattern *.spec.js --ignore-pattern *.spec.ts --ignore-pattern *.css",
-    "electron": "cd electron/ && npx electron ./main.js",
-    "package": "electron-forge package",
-    "make": "electron-forge make"
+    "lint": "yarn prettier && npx eslint --fix ./src/** --ignore-pattern *.spec.js --ignore-pattern *.spec.ts --ignore-pattern *.css"
   },
   "browserslist": {
     "production": [
@@ -59,15 +54,6 @@
     ]
   },
   "devDependencies": {
-    "eslint-config-react-app": "^7.0.1",
-    "@electron-forge/cli": "^7.3.0",
-    "@electron-forge/maker-deb": "^7.3.0",
-    "@electron-forge/maker-rpm": "^7.3.0",
-    "@electron-forge/maker-squirrel": "^7.3.0",
-    "@electron-forge/maker-zip": "^7.3.0",
-    "@electron-forge/plugin-auto-unpack-natives": "^7.3.0",
-    "@electron-forge/plugin-fuses": "^7.3.0",
-    "@electron/fuses": "^1.7.0",
-    "electron": "^29.1.0"
+    "eslint-config-react-app": "^7.0.1"
   }
 }

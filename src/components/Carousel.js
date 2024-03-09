@@ -1,5 +1,5 @@
 import { Direction } from "parsegraph";
-import './Carousel.css';
+import "./Carousel.css";
 import { DONT_TOUCH_CAMERA } from "../settings";
 
 export default function Carousel({ viewport }) {
@@ -13,7 +13,9 @@ export default function Carousel({ viewport }) {
           top: "50%",
           transform: "translate(50%, -50%)",
         }}
-        onClick={() => viewport.spawnMove(Direction.INWARD, false, DONT_TOUCH_CAMERA)}
+        onClick={() =>
+          viewport.spawnMove(Direction.INWARD, false, DONT_TOUCH_CAMERA)
+        }
       >
         +
       </button>
@@ -25,7 +27,9 @@ export default function Carousel({ viewport }) {
           top: "50%",
           transform: "translate(0, -50%)",
         }}
-        onClick={() => viewport.spawnMove(Direction.BACKWARD, false, DONT_TOUCH_CAMERA)}
+        onClick={() =>
+          viewport.spawnMove(Direction.BACKWARD, false, DONT_TOUCH_CAMERA)
+        }
       >
         +
       </button>
@@ -37,7 +41,9 @@ export default function Carousel({ viewport }) {
           left: "50%",
           transform: "translate(-50%, 0)",
         }}
-        onClick={() => viewport.spawnMove(Direction.UPWARD, false, DONT_TOUCH_CAMERA)}
+        onClick={() =>
+          viewport.spawnMove(Direction.UPWARD, false, DONT_TOUCH_CAMERA)
+        }
       >
         +
       </button>
@@ -49,7 +55,9 @@ export default function Carousel({ viewport }) {
           top: "100%",
           transform: "translate(-50%, 0)",
         }}
-        onClick={() => viewport.spawnMove(Direction.DOWNWARD, false, DONT_TOUCH_CAMERA)}
+        onClick={() =>
+          viewport.spawnMove(Direction.DOWNWARD, false, DONT_TOUCH_CAMERA)
+        }
       >
         +
       </button>
@@ -61,7 +69,9 @@ export default function Carousel({ viewport }) {
           top: "50%",
           transform: "translate(0, -50%)",
         }}
-        onClick={() => viewport.spawnMove(Direction.FORWARD, false, DONT_TOUCH_CAMERA)}
+        onClick={() =>
+          viewport.spawnMove(Direction.FORWARD, false, DONT_TOUCH_CAMERA)
+        }
       >
         +
       </button>

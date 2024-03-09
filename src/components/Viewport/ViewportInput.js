@@ -102,14 +102,19 @@ export default class ViewportInput {
       if (
         selectedNode &&
         cam.containsAll(boundsRect) &&
-        (clickedOnSelected ||
-          selectedNode.neighbors().hasAncestor(car.node()))
+        (clickedOnSelected || selectedNode.neighbors().hasAncestor(car.node()))
       ) {
-        if (SINGLE_TAP_GESTURES && !clickedOnSelected && cam.containsAll(boundsRect)) {
+        if (
+          SINGLE_TAP_GESTURES &&
+          !clickedOnSelected &&
+          cam.containsAll(boundsRect)
+        ) {
           car.moveTo(selectedNode);
           viewport.refresh();
         }
-        touchingNode = (SINGLE_TAP_GESTURES || clickedOnSelected) && cam.containsAll(boundsRect);
+        touchingNode =
+          (SINGLE_TAP_GESTURES || clickedOnSelected) &&
+          cam.containsAll(boundsRect);
         viewport.refresh();
       }
     });
@@ -161,18 +166,20 @@ export default class ViewportInput {
       const dy = e.clientY - mouseY;
       if (!touchingNode) {
         if (isDown) {
-            cam.adjustOrigin(dx / cam.scale(), dy / cam.scale());
-            viewport.refresh();
+          cam.adjustOrigin(dx / cam.scale(), dy / cam.scale());
+          viewport.refresh();
         } else {
-            const [worldX, worldY] = cam.transform(e.clientX, e.clientY);
-            let hoveredNode = car.root().layout()
-                .nodeUnderCoords(worldX, worldY, 1, size);
-            if (this._hoveredNode !== hoveredNode) {
-                viewport.refresh();
-            }
-            this._hoveredNode = hoveredNode;
+          const [worldX, worldY] = cam.transform(e.clientX, e.clientY);
+          let hoveredNode = car
+            .root()
+            .layout()
+            .nodeUnderCoords(worldX, worldY, 1, size);
+          if (this._hoveredNode !== hoveredNode) {
+            viewport.refresh();
+          }
+          this._hoveredNode = hoveredNode;
         }
-      } 
+      }
       [mouseX, mouseY] = [e.clientX, e.clientY];
     });
 
@@ -397,7 +404,7 @@ export default class ViewportInput {
 
       if (handleKeyDown(viewport, e.key, mouseX, mouseY, e)) {
         if (this.keystrokes()) {
-            this.keystrokes().handleKey(e.key);
+          this.keystrokes().handleKey(e.key);
         }
         e.preventDefault();
       }

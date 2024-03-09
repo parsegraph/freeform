@@ -220,43 +220,45 @@ export default class ViewportRendering {
 
     const showInCamera = () => {
       //this.viewport().logMessage("Explicitly showing node in camera");
-      const [x, y, scale] = [cam.x(), cam.y(), cam.scale()]
+      const [x, y, scale] = [cam.x(), cam.y(), cam.scale()];
       showNodeInCamera(this.viewport().node(), cam);
-      
+
       const FUZZINESS = 1e-3;
-      if (Math.abs(cam.x() - x) < FUZZINESS && Math.abs(cam.y() - y) < FUZZINESS) {
-        let scaleFactor = MIN_VISIBLE_GRAPH_SCREEN*.75;
+      if (
+        Math.abs(cam.x() - x) < FUZZINESS &&
+        Math.abs(cam.y() - y) < FUZZINESS
+      ) {
+        let scaleFactor = MIN_VISIBLE_GRAPH_SCREEN * 0.75;
         const graphSize = [NaN, NaN];
         this.widget().layout().extentSize(graphSize);
-        const scale = Math.min(
-            cam.height(), cam.width()) /
-            scaleFactor /
-            (cam.scale() * Math.max(...graphSize)
-        );
+        const scale =
+          Math.min(cam.height(), cam.width()) /
+          scaleFactor /
+          (cam.scale() * Math.max(...graphSize));
         if (!isNaN(scale)) {
-            let scaleFactor = 1/4;
-            if (Math.abs(1 - scale) < FUZZINESS) {
-                //this.viewport().logMessage("Showing node at max scale")
-                this.node().layout().absoluteSize(graphSize);
-                if (graphSize[0] < graphSize[1]) {
-                    const scale =
-                        (cam.width() * scaleFactor) / (graphSize[0] * cam.scale());
-                    if (!isNaN(scale)) {
-                        //this.viewport().logMessage("Zooming out camera to keep node horizontally within scale");
-                        cam.zoomToPoint(scale, cam.width() / 2, cam.height() / 2);
-                    }
-                } else {
-                    const scale =
-                        (cam.height() * scaleFactor) / (graphSize[1] * cam.scale());
-                    if (!isNaN(scale)) {
-                        //this.viewport().logMessage("Zooming out camera to keep node vertically within scale");
-                        cam.zoomToPoint(scale, cam.width() / 2, cam.height() / 2);
-                    }
-                }
-            } else {
-                //this.viewport().logMessage("Showing graph at min scale")
+          let scaleFactor = 1 / 4;
+          if (Math.abs(1 - scale) < FUZZINESS) {
+            //this.viewport().logMessage("Showing node at max scale")
+            this.node().layout().absoluteSize(graphSize);
+            if (graphSize[0] < graphSize[1]) {
+              const scale =
+                (cam.width() * scaleFactor) / (graphSize[0] * cam.scale());
+              if (!isNaN(scale)) {
+                //this.viewport().logMessage("Zooming out camera to keep node horizontally within scale");
                 cam.zoomToPoint(scale, cam.width() / 2, cam.height() / 2);
+              }
+            } else {
+              const scale =
+                (cam.height() * scaleFactor) / (graphSize[1] * cam.scale());
+              if (!isNaN(scale)) {
+                //this.viewport().logMessage("Zooming out camera to keep node vertically within scale");
+                cam.zoomToPoint(scale, cam.width() / 2, cam.height() / 2);
+              }
             }
+          } else {
+            //this.viewport().logMessage("Showing graph at min scale")
+            cam.zoomToPoint(scale, cam.width() / 2, cam.height() / 2);
+          }
         }
       } else {
         //this.viewport().logMessage("Showing node in camera");
@@ -697,11 +699,12 @@ export default class ViewportRendering {
     }
 
     if (this._offscreenHandler && !needsPaint) {
-        const isOffscreen = renderData.i === 0
-            && renderData.dirtyGroups === 0
-            && renderData.offscreenGroups === renderData.allGroups
-            && renderData.allGroups > 0;
-        this._offscreenHandler(isOffscreen);
+      const isOffscreen =
+        renderData.i === 0 &&
+        renderData.dirtyGroups === 0 &&
+        renderData.offscreenGroups === renderData.allGroups &&
+        renderData.allGroups > 0;
+      this._offscreenHandler(isOffscreen);
     }
 
     return needsPaint;
@@ -720,9 +723,10 @@ export default class ViewportRendering {
       ctx.lineWidth = (BORDER_THICKNESS / 2) * layout.absoluteScale();
       ctx.lineJoin = "round";
       let hovered = this.viewport().input()?.hoveredNode();
-      ctx.strokeStyle = hovered === this.node() ?
-          caretHighlightColor.asRGBA() :
-          caretColor.asRGBA();
+      ctx.strokeStyle =
+        hovered === this.node()
+          ? caretHighlightColor.asRGBA()
+          : caretColor.asRGBA();
       const bodySize = [0, 0];
       layout.size(bodySize);
       if (this.viewport().showingCaret()) {
@@ -801,7 +805,7 @@ export default class ViewportRendering {
 
     let node = this.viewport().input()?.hoveredNode();
     if (!node || this.node() === node) {
-        return;
+      return;
     }
     const layout = node.layout();
     if (layout.needsCommit() || layout.needsAbsolutePos()) {
@@ -817,34 +821,31 @@ export default class ViewportRendering {
     ctx.strokeStyle = highlightColor.asRGBA();
     const bodySize = [0, 0];
     layout.size(bodySize);
-    if (
-        nodeHasValue(node) ||
-        node.neighbors().hasNode(Direction.INWARD)
-    ) {
-        ctx.beginPath();
-        ctx.roundRect(
+    if (nodeHasValue(node) || node.neighbors().hasNode(Direction.INWARD)) {
+      ctx.beginPath();
+      ctx.roundRect(
         layout.absoluteX() -
-            (layout.absoluteScale() * bodySize[0]) / 2 +
-            (BORDER_THICKNESS / 4) * layout.absoluteScale(),
+          (layout.absoluteScale() * bodySize[0]) / 2 +
+          (BORDER_THICKNESS / 4) * layout.absoluteScale(),
         layout.absoluteY() -
-            (layout.absoluteScale() * bodySize[1]) / 2 +
-            (BORDER_THICKNESS / 4) * layout.absoluteScale(),
+          (layout.absoluteScale() * bodySize[1]) / 2 +
+          (BORDER_THICKNESS / 4) * layout.absoluteScale(),
         layout.absoluteScale() * bodySize[0] -
-            (BORDER_THICKNESS / 2) * layout.absoluteScale(),
+          (BORDER_THICKNESS / 2) * layout.absoluteScale(),
         layout.absoluteScale() * bodySize[1] -
-            (BORDER_THICKNESS / 2) * layout.absoluteScale(),
+          (BORDER_THICKNESS / 2) * layout.absoluteScale(),
         (BORDER_ROUNDEDNESS * layout.absoluteScale()) / 2.13
-        );
-        ctx.stroke();
+      );
+      ctx.stroke();
     } else {
       ctx.beginPath();
       ctx.arc(
-      layout.absoluteX(),
-      layout.absoluteY(),
-      (bodySize[0] / 2) * layout.absoluteScale() -
+        layout.absoluteX(),
+        layout.absoluteY(),
+        (bodySize[0] / 2) * layout.absoluteScale() -
           (BORDER_THICKNESS / 4) * layout.absoluteScale(),
-      0,
-      Math.PI * 2
+        0,
+        Math.PI * 2
       );
       ctx.stroke();
     }

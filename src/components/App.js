@@ -460,11 +460,15 @@ function App() {
           ref={canvasRef}
           tabIndex={0}
         />
-        {hasWidget && offscreen && <div className="modal">
-          <OffscreenModal onRecenter={() => {
-            viewport.showInCamera();
-          }}/>
-        </div>}
+        {hasWidget && offscreen && (
+          <div className="modal">
+            <OffscreenModal
+              onRecenter={() => {
+                viewport.showInCamera();
+              }}
+            />
+          </div>
+        )}
         {(!hasWidget || importModalOpen) && (
           <div className="modal">
             <ImportModal

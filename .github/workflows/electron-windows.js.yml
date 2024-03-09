@@ -15,7 +15,7 @@ jobs:
     - run: if ($Env:SSH_TOKEN.Length -lt 100) { throw "token too short" }
       env:
           SSH_TOKEN: ${{ secrets.PARSEGRAPH_SSH_TOKEN }}
-    - run: if ("" -eq "") { [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($Env:SSH_TOKEN)) | Out-File -FilePath $HOME/.ssh/id_rsa }
+    - run: if ("" -eq "") { [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($Env:SSH_TOKEN)) | Out-File -FilePath $HOME/.ssh/id_rsa -NoNewline }
       env:
           SSH_TOKEN: ${{ secrets.PARSEGRAPH_SSH_TOKEN }}
     - run: chmod 0400 $HOME/.ssh/id_rsa

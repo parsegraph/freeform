@@ -39,7 +39,7 @@ jobs:
       env:
           PARSEGRAPH_PUBLIC_HTML: ${{ secrets.PARSEGRAPH_PUBLIC_HTML }}
           SSH_HOST: ${{ secrets.PARSEGRAPH_SSH_HOST }}
-    - run: export VERSION=`node -e 'console.log(JSON.parse(require("fs").readFileSync("electron/package.json")).version)'` && cd out/make && scp -r * "$SSH_HOST:$PARSEGRAPH_PUBLIC_HTML/electron/$VERSION/" && ssh $SSH_HOST "cd $PARSEGRAPH_PUBLIC_HTML/electron; rm -f latest; ln -s $VERSION latest"
+    - run: export VERSION=`node -e 'console.log(JSON.parse(require("fs").readFileSync("electron/package.json")).version)'` && cd electron/out/make && scp -r * "$SSH_HOST:$PARSEGRAPH_PUBLIC_HTML/electron/$VERSION/" && ssh $SSH_HOST "cd $PARSEGRAPH_PUBLIC_HTML/electron; rm -f latest; ln -s $VERSION latest"
       env:
           PARSEGRAPH_PUBLIC_HTML: ${{ secrets.PARSEGRAPH_PUBLIC_HTML }}
           SSH_HOST: ${{ secrets.PARSEGRAPH_SSH_HOST }}

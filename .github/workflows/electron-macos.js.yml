@@ -18,10 +18,6 @@ jobs:
       with:
         node-version: 20
         registry-url: 'https://registry.npmjs.org'
-    - run: cd occluder && yarn && ./deploy.sh && cd ..
-    - run: yarn
-    - run: yarn build
-    - run: cd build && sed -i -re 's/React App/parsegraph/g' ./index.html
     - run: cd electron && yarn && ./build.sh
 
     - run: mkdir -p ~/.ssh
@@ -39,7 +35,8 @@ jobs:
       env:
           PARSEGRAPH_PUBLIC_HTML: ${{ secrets.PARSEGRAPH_PUBLIC_HTML }}
           SSH_HOST: ${{ secrets.PARSEGRAPH_SSH_HOST }}
-    - run: export VERSION=`node -e 'console.log(JSON.parse(require("fs").readFileSync("electron/package.json")).version)'` && cd electron/out/make && scp -r * "$SSH_HOST:$PARSEGRAPH_PUBLIC_HTML/electron/$VERSION/" && ssh $SSH_HOST "cd $PARSEGRAPH_PUBLIC_HTML/electron; rm -f latest; ln -s $VERSION latest"
+    - run: pwd
+    - run: export VERSION=`node -e 'console.log(JSON.parse(require("fs").readFileSync("electron/package.json")).version)'` && cd ./out/make && scp -r * "$SSH_HOST:$PARSEGRAPH_PUBLIC_HTML/electron/$VERSION/" && ssh $SSH_HOST "cd $PARSEGRAPH_PUBLIC_HTML/electron; rm -f latest; ln -s $VERSION latest"
       env:
           PARSEGRAPH_PUBLIC_HTML: ${{ secrets.PARSEGRAPH_PUBLIC_HTML }}
           SSH_HOST: ${{ secrets.PARSEGRAPH_SSH_HOST }}

@@ -11,6 +11,7 @@ jobs:
   build:
     runs-on: macos-latest
     steps:
+    - run: brew install md5sha1sum
     - uses: actions/checkout@v2
     - run: ls -R
     - name: Use Node.js

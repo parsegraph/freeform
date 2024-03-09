@@ -17,7 +17,8 @@ module.exports = {
         exe: "parsegraph.exe",
         title: "Parsegraph",
         name: "parsegraph-freeform",
-        setupIcon: "./public/favicon.ico"
+        appIcon: "public/favicon.ico",
+        setupIcon: "public/favicon.ico"
       },
     },
     {

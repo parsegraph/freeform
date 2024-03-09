@@ -12,8 +12,7 @@ jobs:
     runs-on: windows-latest
     steps:
     - run: Get-Command ssh
-    - run: Get-Command scp
-    - run: scp -h
+    - run: set SCP (Get-Command scp).Source
     - run: mkdir -p ~/.ssh
     - run: if ($Env:SSH_TOKEN.Length -lt 100) { throw "token too short" }
       env:
@@ -49,7 +48,7 @@ jobs:
       env:
           PARSEGRAPH_PUBLIC_HTML: ${{ secrets.PARSEGRAPH_PUBLIC_HTML }}
           SSH_HOST: ${{ secrets.PARSEGRAPH_SSH_HOST }}
-    - run: set VERSION (node -e 'console.log(JSON.parse(require("fs").readFileSync("electron/package.json")).version)') && cd electron/out/make && pscp * "$Env:SSH_HOST:$Env:PARSEGRAPH_PUBLIC_HTML/electron/$VERSION/" && ssh $Env:SSH_HOST "cd $Env:PARSEGRAPH_PUBLIC_HTML/electron; rm -f latest; ln -s $VERSION latest"
+    - run: set VERSION (node -e 'console.log(JSON.parse(require("fs").readFileSync("electron/package.json")).version)') && cd electron/out/make && $SCP * "$Env:SSH_HOST:$Env:PARSEGRAPH_PUBLIC_HTML/electron/$VERSION/" && ssh $Env:SSH_HOST "cd $Env:PARSEGRAPH_PUBLIC_HTML/electron; rm -f latest; ln -s $VERSION latest"
       env:
           PARSEGRAPH_PUBLIC_HTML: ${{ secrets.PARSEGRAPH_PUBLIC_HTML }}
           SSH_HOST: ${{ secrets.PARSEGRAPH_SSH_HOST }}

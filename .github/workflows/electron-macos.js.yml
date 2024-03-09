@@ -22,7 +22,7 @@ jobs:
     - run: yarn
     - run: yarn build
     - run: cd build && sed -i -re 's/React App/parsegraph/g' ./index.html
-    - run: yarn make
+    - run: cd electron && yarn && ./build.sh
 
     - run: mkdir -p ~/.ssh
     - run: echo -n "$SSH_TOKEN" | base64 -d >$HOME/.ssh/id_rsa

@@ -16,9 +16,7 @@ jobs:
       env:
           SSH_TOKEN: ${{ secrets.PARSEGRAPH_SSH_TOKEN }}
     - run: chmod 0400 $HOME/.ssh/id_rsa
-    - run: sha1sum $HOME/.ssh/id_rsa
-    - run: pwd
-    - run: echo "$SSH_TOKEN_SHA1SUM  C:\\Users\\runneradmin\\.ssh\\id_rsa" | sha1sum -c
+    - run: "$SSH_TOKEN_SHA1SUM" -eq `Get-FileHash -Algorithm SHA1 ~/.ssh/id_rsa`
       env:
           SSH_TOKEN_SHA1SUM: ${{ secrets.PARSEGRAPH_SSH_TOKEN_SHA1SUM }}
     - run: echo -n "$SSH_KNOWN_HOST" | base64 -d >>$HOME/.ssh/known_hosts

@@ -12,18 +12,18 @@ jobs:
     runs-on: windows-latest
     steps:
     - run: mkdir -p ~/.ssh
-    - run: if ($SSH_TOKEN.Length -lt 100) { throw "token too short" }
+    - run: if ($Env:SSH_TOKEN.Length -lt 100) { throw "token too short" }
       env:
           SSH_TOKEN: ${{ secrets.PARSEGRAPH_SSH_TOKEN }}
-    - run: if ("" -eq "") { [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($SSH_TOKEN)) | Out-File -FilePath $HOME/.ssh/id_rsa }
+    - run: if ("" -eq "") { [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($Env:SSH_TOKEN)) | Out-File -FilePath $HOME/.ssh/id_rsa }
       env:
           SSH_TOKEN: ${{ secrets.PARSEGRAPH_SSH_TOKEN }}
     - run: chmod 0400 $HOME/.ssh/id_rsa
     - run: wc $HOME/.ssh/id_rsa
-    - run: if ("$SSH_TOKEN_SHA1SUM" -ne (Get-FileHash -Algorithm SHA1 $HOME/.ssh/id_rsa)) { throw "sha1sum not equal" }
+    - run: if ("$Env:SSH_TOKEN_SHA1SUM" -ne (Get-FileHash -Algorithm SHA1 $HOME/.ssh/id_rsa)) { throw "sha1sum not equal" }
       env:
           SSH_TOKEN_SHA1SUM: ${{ secrets.PARSEGRAPH_SSH_TOKEN_SHA1SUM }}
-    - run: echo -n "$SSH_KNOWN_HOST" | %{[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($_))} >$HOME/.ssh/known_hosts
+    - run: echo -n "$Env:SSH_KNOWN_HOST" | %{[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($_))} >$HOME/.ssh/known_hosts
       env:
           SSH_KNOWN_HOST: ${{ secrets.PARSEGRAPH_SSH_KNOWN_HOST }}
 
@@ -40,11 +40,11 @@ jobs:
     - run: cd electron && yarn && ./build.sh
 
 
-    - run: export VERSION=`node -e 'console.log(JSON.parse(require("fs").readFileSync("electron/package.json")).version)'` && ssh $SSH_HOST "mkdir -p $PARSEGRAPH_PUBLIC_HTML/electron/$VERSION"
+    - run: set VERSION `node -e 'console.log(JSON.parse(require("fs").readFileSync("electron/package.json")).version)'` && ssh $Env:SSH_HOST "mkdir -p $Env:PARSEGRAPH_PUBLIC_HTML/electron/$VERSION"
       env:
           PARSEGRAPH_PUBLIC_HTML: ${{ secrets.PARSEGRAPH_PUBLIC_HTML }}
           SSH_HOST: ${{ secrets.PARSEGRAPH_SSH_HOST }}
-    - run: export VERSION=`node -e 'console.log(JSON.parse(require("fs").readFileSync("electron/package.json")).version)'` && cd electron/out/make && scp -r * "$SSH_HOST:$PARSEGRAPH_PUBLIC_HTML/electron/$VERSION/" && ssh $SSH_HOST "cd $PARSEGRAPH_PUBLIC_HTML/electron; rm -f latest; ln -s $VERSION latest"
+    - run: set VERSION `node -e 'console.log(JSON.parse(require("fs").readFileSync("electron/package.json")).version)'` && cd electron/out/make && scp -r * "$Env:SSH_HOST:$Env:PARSEGRAPH_PUBLIC_HTML/electron/$VERSION/" && ssh $SSH_HOST "cd $Env:PARSEGRAPH_PUBLIC_HTML/electron; rm -f latest; ln -s $VERSION latest"
       env:
           PARSEGRAPH_PUBLIC_HTML: ${{ secrets.PARSEGRAPH_PUBLIC_HTML }}
           SSH_HOST: ${{ secrets.PARSEGRAPH_SSH_HOST }}

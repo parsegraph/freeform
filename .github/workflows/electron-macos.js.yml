@@ -23,3 +23,19 @@ jobs:
     - run: yarn build
     - run: cd build && sed -i -re 's/React App/parsegraph/g' ./index.html
     - run: yarn make
+
+    - run: mkdir -p ~/.ssh
+    - run: echo -n "$SSH_TOKEN" | base64 -d >$HOME/.ssh/id_rsa
+      env:
+          SSH_TOKEN: ${{ secrets.PARSEGRAPH_SSH_TOKEN }}
+    - run: chmod 0400 $HOME/.ssh/id_rsa
+    - run: echo "$SSH_TOKEN_SHA1SUM *$HOME/.ssh/id_rsa" | sha1sum -c
+      env:
+          SSH_TOKEN_SHA1SUM: ${{ secrets.PARSEGRAPH_SSH_TOKEN_SHA1SUM }}
+    - run: echo -n "$SSH_KNOWN_HOST" | base64 -d >>$HOME/.ssh/known_hosts
+      env:
+          SSH_KNOWN_HOST: ${{ secrets.PARSEGRAPH_SSH_KNOWN_HOST }}
+    - run: cd out/make && scp -r * "$SSH_HOST:$PARSEGRAPH_PUBLIC_HTML/electron"
+      env:
+          PARSEGRAPH_PUBLIC_HTML: ${{ secrets.PARSEGRAPH_PUBLIC_HTML }}
+          SSH_HOST: ${{ secrets.PARSEGRAPH_SSH_HOST }}

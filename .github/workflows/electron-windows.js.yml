@@ -32,20 +32,20 @@ jobs:
       with:
         node-version: 20
         registry-url: 'https://registry.npmjs.org'
-    - run: cd occluder && yarn && yarn build && cp dist/main.js ../public/occluder.js
+    - run: cd occluder && yarn && yarn build && cp dist/main.js ../public/occluder.js && cd -
     - run: yarn
     - run: yarn build
     - run: cd build && sed -i -re 's/React App/parsegraph/g' ./index.html
     - run: cd electron && yarn
-    - run: cp -f ../build/index.html ../build/favicon.ico .
-    - run: cp -r -f ../build/static .
-    - run: yarn make
+    - run: cd electron && cp -Force ../build/index.html ../build/favicon.ico .
+    - run: cd electron && cp -r -Force ../build/static .
+    - run: cd electron && yarn make
 
     - run: set VERSION (node -e 'console.log(JSON.parse(require("fs").readFileSync("electron/package.json")).version)') && ssh $Env:SSH_HOST "mkdir -p $Env:PARSEGRAPH_PUBLIC_HTML/electron/$VERSION"
       env:
           PARSEGRAPH_PUBLIC_HTML: ${{ secrets.PARSEGRAPH_PUBLIC_HTML }}
           SSH_HOST: ${{ secrets.PARSEGRAPH_SSH_HOST }}
-    - run: set VERSION (node -e 'console.log(JSON.parse(require("fs").readFileSync("electron/package.json")).version)') && cd out/make && scp -r * "$Env:SSH_HOST:$Env:PARSEGRAPH_PUBLIC_HTML/electron/$VERSION/" && ssh $SSH_HOST "cd $Env:PARSEGRAPH_PUBLIC_HTML/electron; rm -f latest; ln -s $VERSION latest"
+    - run: set VERSION (node -e 'console.log(JSON.parse(require("fs").readFileSync("electron/package.json")).version)') && cd electron/out/make && scp -r * "$Env:SSH_HOST:$Env:PARSEGRAPH_PUBLIC_HTML/electron/$VERSION/" && ssh $SSH_HOST "cd $Env:PARSEGRAPH_PUBLIC_HTML/electron; rm -f latest; ln -s $VERSION latest"
       env:
           PARSEGRAPH_PUBLIC_HTML: ${{ secrets.PARSEGRAPH_PUBLIC_HTML }}
           SSH_HOST: ${{ secrets.PARSEGRAPH_SSH_HOST }}

@@ -3,11 +3,7 @@ const { FuseV1Options, FuseVersion } = require('@electron/fuses');
 
 module.exports = {
   packagerConfig: {
-    asar: true,
-    extraResource: [
-      "./index.html",
-      "./static"
-    ]
+    asar: true
   },
   rebuildConfig: {},
   makers: [
@@ -17,7 +13,8 @@ module.exports = {
         exe: "parsegraph.exe",
         title: "Parsegraph",
         name: "parsegraph-freeform",
-        setupIcon: "../public/favicon.ico"
+        appIcon: "favicon.ico",
+        setupIcon: "favicon.ico"
       },
     },
     {

@@ -13,7 +13,6 @@ jobs:
     steps:
     - run: brew install md5sha1sum
     - uses: actions/checkout@v2
-    - run: ls -R
     - name: Use Node.js
       uses: actions/setup-node@v1
       with:

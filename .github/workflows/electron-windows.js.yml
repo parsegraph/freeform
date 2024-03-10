@@ -34,7 +34,20 @@ jobs:
       with:
         node-version: 20
         registry-url: 'https://registry.npmjs.org'
+    - name: Restore cached deps
+      id: cache-deps-restore
+      uses: actions/cache/restore@v4
+      with:
+        path: node_modules
+        key: cache-main-${{ hashFiles('yarn.lock') }}
     - run: yarn
+    - name: Save deps
+      id: cache-deps-save
+      uses: actions/cache/save@v4
+      with:
+        path: node_modules
+        key: cache-main-${{ hashFiles('yarn.lock') }}
+
     - run: yarn build
     - run: cd occluder && yarn && yarn build && cp dist/main.js ../public/occluder.js && cd -
     - run: cd electron && yarn

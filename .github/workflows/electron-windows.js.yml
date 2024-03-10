@@ -45,7 +45,7 @@ jobs:
       id: cache-deps-save
       uses: actions/cache/save@v4
       with:
-        path: node_modules
+        path: electron/node_modules
         key: cache-main-${{ hashFiles('yarn.lock') }}
 
     - run: yarn build
@@ -54,15 +54,15 @@ jobs:
       id: cache-electron-deps-restore
       uses: actions/cache/restore@v4
       with:
-        path: node_modules
-        key: cache-electron-${{ hashFiles('electron/yarn.lock') }}
+        path: electron/node_modules
+        key: cache-electron-deps-${{ hashFiles('electron/yarn.lock') }}
     - run: cd electron && yarn
       if: steps.cache-electron-deps-restore.outputs.cache-hit != 'true'
     - name: Save deps
       uses: actions/cache/save@v4
       with:
-        path: node_modules
-        key: cache-electron-${{ hashFiles('electron/yarn.lock') }}
+        path: electron/node_modules
+        key: cache-electron-deps-${{ hashFiles('electron/yarn.lock') }}
 
     - run: cd electron && cp -Force ../build/favicon.ico .
     - run: cd electron && cp -Force ../build/index.html .

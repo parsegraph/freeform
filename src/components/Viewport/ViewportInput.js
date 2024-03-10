@@ -289,6 +289,20 @@ export default class ViewportInput {
       return false;
     };
 
+    canvas.addEventListener("touchcancel", (e) => {
+      if (!this.viewport().hasWidget()) {
+        return;
+      }
+      for (let i = 0; i < e.changedTouches.length; ++i) {
+        const touch = e.changedTouches[i];
+        const touchData = ongoingTouches.get(touch.identifier);
+        if (!touchData) {
+          continue;
+        }
+        ongoingTouches.delete(touch.identifier);
+      }
+    });
+
     canvas.addEventListener("touchend", (e) => {
       if (!this.viewport().hasWidget()) {
         return;

@@ -45,9 +45,11 @@ jobs:
       with:
         path: node_modules
         key: cache-main-${{ hashFiles('yarn.lock') }}
+      if: steps.cache-deps-restore.outputs.cache-hit != 'true'
 
     - run: yarn build
     - run: cd occluder && yarn && yarn build && cp dist/main.js ../public/occluder.js && cd -
+
     - name: Restore Electron deps
       id: cache-electron-deps-restore
       uses: actions/cache/restore@v4
@@ -61,6 +63,7 @@ jobs:
       with:
         path: electron/node_modules
         key: cache-electron-deps-${{ hashFiles('electron/yarn.lock') }}
+      if: steps.cache-electron-deps-restore.outputs.cache-hit != 'true'
 
     - run: cd electron && cp -Force ../build/favicon.ico .
     - run: cd electron && cp -Force ../build/index.html .
@@ -83,6 +86,7 @@ jobs:
       with:
         path: electron/out
         key: cache-electron-build-${{ hashFiles('electron/yarn.lock', 'electron/index.html', 'electron/static/**', 'electron/favicon.ico', 'electron/*.js', 'electron/package.json') }}
+      if: steps.cache-electron-build-restore.outputs.cache-hit != 'true'
 
     - run: set VERSION (node -e 'console.log(JSON.parse(require("fs").readFileSync("electron/package.json")).version)') && ssh $Env:SSH_HOST "mkdir -p $Env:PARSEGRAPH_PUBLIC_HTML/electron/$VERSION"
       env:

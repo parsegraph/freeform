@@ -43,7 +43,7 @@ jobs:
       id: cache-deps-save
       uses: actions/cache/save@v4
       with:
-        path: electron/node_modules
+        path: node_modules
         key: cache-main-${{ hashFiles('yarn.lock') }}
 
     - run: yarn build

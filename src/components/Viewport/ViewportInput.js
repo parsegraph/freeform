@@ -191,6 +191,16 @@ export default class ViewportInput {
     };
 
     let touchingNode = false;
+
+    document.body.addEventListener("focusout", () => {
+      ongoingTouches.clear();
+      touchingNode = false;
+      isDown = false;
+      [mouseX, mouseY] = [NaN, NaN];
+      mouseDownPos[0] = 0;
+      mouseDownPos[1] = 0;
+    });
+
     canvas.addEventListener("touchstart", (e) => {
       this._hoveredNode = null;
       if (!this.viewport().hasWidget()) {

@@ -66,6 +66,7 @@ jobs:
       if: steps.cache-electron-deps-restore.outputs.cache-hit != 'true'
 
     - run: cd electron && cp -Force ../build/favicon.ico .
+    - run: cd electron && cp -Force ../public/parsegraph-freeform-anim.gif .
     - run: cd electron && cp -Force ../build/index.html .
     - run: cd electron && sed -i -re 's/React App/parsegraph/g' ./index.html
     - run: cd electron && sed -i -re 's/\/static\//static\//g' ./index.html

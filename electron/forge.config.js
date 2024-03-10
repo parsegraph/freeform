@@ -5,7 +5,8 @@ module.exports = {
   packagerConfig: {
     asar: true,
     extraResources: [
-      "./static"
+      "./static",
+      "./parsegraph-freeform-anim.gif"
     ]
   },
   rebuildConfig: {},
@@ -16,7 +17,8 @@ module.exports = {
         title: "Parsegraph",
         name: "parsegraph-freeform",
         appIcon: "favicon.ico",
-        setupIcon: "favicon.ico"
+        setupIcon: "favicon.ico",
+        loadingGif: "parsegraph-freeform-anim.gif"
       },
     },
     {

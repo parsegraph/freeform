@@ -60,7 +60,6 @@ jobs:
     - run: yarn
       if: steps.cache-electron-deps-restore.outputs.cache-hit != 'true'
     - name: Save deps
-      id: cache-deps-save
       uses: actions/cache/save@v4
       with:
         path: node_modules

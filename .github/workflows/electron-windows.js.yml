@@ -72,6 +72,20 @@ jobs:
     - run: cd electron && cp -r -Force ../build/static .
     - run: cd electron && yarn make
 
+    - name: Restore Electron build
+      id: cache-electron-build-restore
+      uses: actions/cache/restore@v4
+      with:
+        path: electron/out
+        key: cache-electron-build-${{ hashFiles('electron/yarn.lock', 'electron/index.html', 'electron/static/**', 'electron/favicon.ico', 'electron/*.js', 'electron/package.json') }}
+    - run: cd electron && yarn
+      if: steps.cache-electron-build-restore.outputs.cache-hit != 'true'
+    - name: Save deps
+      uses: actions/cache/save@v4
+      with:
+        path: electron/out
+        key: cache-electron-build-${{ hashFiles('electron/yarn.lock', 'electron/index.html', 'electron/static/**', 'electron/favicon.ico', 'electron/*.js', 'electron/package.json') }}
+
     - run: set VERSION (node -e 'console.log(JSON.parse(require("fs").readFileSync("electron/package.json")).version)') && ssh $Env:SSH_HOST "mkdir -p $Env:PARSEGRAPH_PUBLIC_HTML/electron/$VERSION"
       env:
           PARSEGRAPH_PUBLIC_HTML: ${{ secrets.PARSEGRAPH_PUBLIC_HTML }}

@@ -71,7 +71,6 @@ jobs:
     - run: cd electron && sed -i -re 's/\/static\//static\//g' ./index.html
     - run: cd electron && sed -i -re 's/\/favicon.ico/favicon.ico/g' ./index.html
     - run: cd electron && cp -r -Force ../build/static .
-    - run: cd electron && yarn make
 
     - name: Restore Electron build
       id: cache-electron-build-restore
@@ -79,9 +78,9 @@ jobs:
       with:
         path: electron/out
         key: cache-electron-build-${{ hashFiles('electron/yarn.lock', 'electron/index.html', 'electron/static/**', 'electron/favicon.ico', 'electron/*.js', 'electron/package.json') }}
-    - run: cd electron && yarn
+    - run: cd electron && yarn make
       if: steps.cache-electron-build-restore.outputs.cache-hit != 'true'
-    - name: Save deps
+    - name: Save Electron build
       uses: actions/cache/save@v4
       with:
         path: electron/out

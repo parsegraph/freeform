@@ -1,0 +1,41 @@
+# This workflow will do a clean install of node dependencies, build the source code and run tests across different versions of node
+# For more information see: https://help.github.com/actions/language-and-framework-guides/using-nodejs-with-github-actions
+
+name: Deploy Electron app for Linux
+
+on:
+  push:
+    branches: freeform
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Use Node.js
+      uses: actions/setup-node@v1
+      with:
+        node-version: 20
+        registry-url: 'https://registry.npmjs.org'
+    - run: cd electron && yarn && ./build.sh
+
+    - run: mkdir -p ~/.ssh
+    - run: echo -n "$SSH_TOKEN" | base64 -d >$HOME/.ssh/id_rsa
+      env:
+          SSH_TOKEN: ${{ secrets.PARSEGRAPH_SSH_TOKEN }}
+    - run: chmod 0400 $HOME/.ssh/id_rsa
+    - run: echo "$SSH_TOKEN_SHA1SUM *$HOME/.ssh/id_rsa" | sha1sum -c
+      env:
+          SSH_TOKEN_SHA1SUM: ${{ secrets.PARSEGRAPH_SSH_TOKEN_SHA1SUM }}
+    - run: echo -n "$SSH_KNOWN_HOST" | base64 -d >>$HOME/.ssh/known_hosts
+      env:
+          SSH_KNOWN_HOST: ${{ secrets.PARSEGRAPH_SSH_KNOWN_HOST }}
+    - run: export VERSION=`node -e 'console.log(JSON.parse(require("fs").readFileSync("package.json")).version)'` && ssh $SSH_HOST "mkdir -p $PARSEGRAPH_PUBLIC_HTML/electron/$VERSION"
+      env:
+          PARSEGRAPH_PUBLIC_HTML: ${{ secrets.PARSEGRAPH_PUBLIC_HTML }}
+          SSH_HOST: ${{ secrets.PARSEGRAPH_SSH_HOST }}
+    - run: pwd
+    - run: export VERSION=`node -e 'console.log(JSON.parse(require("fs").readFileSync("package.json")).version)'` && cd ./electron/out/make && scp -r * "$SSH_HOST:$PARSEGRAPH_PUBLIC_HTML/electron/$VERSION/" && ssh $SSH_HOST "cd $PARSEGRAPH_PUBLIC_HTML/electron; rm -f latest; ln -s $VERSION latest"
+      env:
+          PARSEGRAPH_PUBLIC_HTML: ${{ secrets.PARSEGRAPH_PUBLIC_HTML }}
+          SSH_HOST: ${{ secrets.PARSEGRAPH_SSH_HOST }}

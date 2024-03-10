@@ -1,0 +1,98 @@
+# This workflow will do a clean install of node dependencies, build the source code and run tests across different versions of node
+# For more information see: https://help.github.com/actions/language-and-framework-guides/using-nodejs-with-github-actions
+
+name: Deploy Electron app for Windows
+
+on:
+  push:
+    branches: freeform
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+    - run: mkdir -p ~/.ssh
+    - run: if ($Env:SSH_TOKEN.Length -lt 100) { throw "token too short" }
+      env:
+          SSH_TOKEN: ${{ secrets.PARSEGRAPH_SSH_TOKEN }}
+    - run: if ("" -eq "") { [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($Env:SSH_TOKEN)) | Out-File -FilePath $HOME/.ssh/id_rsa -NoNewline }
+      env:
+          SSH_TOKEN: ${{ secrets.PARSEGRAPH_SSH_TOKEN }}
+    - run: chmod 0400 $HOME/.ssh/id_rsa
+    - run: if ("$Env:SSH_TOKEN_SHA1SUM" -ne (Get-FileHash -Algorithm SHA1 $HOME/.ssh/id_rsa).Hash.ToLower()) { throw "sha1sum not equal" }
+      env:
+          SSH_TOKEN_SHA1SUM: ${{ secrets.PARSEGRAPH_SSH_TOKEN_SHA1SUM }}
+    - run: if ("" -eq "") { [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($Env:SSH_KNOWN_HOST)) | Out-File -FilePath $HOME/.ssh/known_hosts }
+      env:
+          SSH_KNOWN_HOST: ${{ secrets.PARSEGRAPH_SSH_KNOWN_HOST }}
+
+    - uses: actions/checkout@v2
+    - name: Use Node.js
+      uses: actions/setup-node@v1
+      with:
+        node-version: 20
+        registry-url: 'https://registry.npmjs.org'
+    - name: Restore cached deps
+      id: cache-deps-restore
+      uses: actions/cache/restore@v4
+      with:
+        path: node_modules
+        key: cache-main-${{ hashFiles('yarn.lock') }}
+    - run: yarn
+    - name: Save deps
+      id: cache-deps-save
+      uses: actions/cache/save@v4
+      with:
+        path: node_modules
+        key: cache-main-${{ hashFiles('yarn.lock') }}
+      if: steps.cache-deps-restore.outputs.cache-hit != 'true'
+
+    - run: yarn build
+    - run: cd occluder && yarn && yarn build && cp dist/main.js ../public/occluder.js && cd -
+
+    - name: Restore Electron deps
+      id: cache-electron-deps-restore
+      uses: actions/cache/restore@v4
+      with:
+        path: electron/node_modules
+        key: cache-electron-deps-${{ hashFiles('electron/yarn.lock') }}
+    - run: cd electron && yarn
+      if: steps.cache-electron-deps-restore.outputs.cache-hit != 'true'
+    - name: Save deps
+      uses: actions/cache/save@v4
+      with:
+        path: electron/node_modules
+        key: cache-electron-deps-${{ hashFiles('electron/yarn.lock') }}
+      if: steps.cache-electron-deps-restore.outputs.cache-hit != 'true'
+
+    - run: cd electron && cp -Force ../build/favicon.ico .
+    - run: cd electron && cp -Force ../build/index.html .
+    - run: cd electron && sed -i -re 's/React App/parsegraph/g' ./index.html
+    - run: cd electron && sed -i -re 's/\/static\//static\//g' ./index.html
+    - run: cd electron && sed -i -re 's/\/favicon.ico/favicon.ico/g' ./index.html
+    - run: cd electron && cp -r -Force ../build/static .
+
+    - name: Restore Electron build
+      id: cache-electron-build-restore
+      uses: actions/cache/restore@v4
+      with:
+        path: electron/out
+        key: cache-electron-build-${{ hashFiles('electron/yarn.lock', 'electron/index.html', 'electron/static/**', 'electron/favicon.ico', 'electron/*.js', 'electron/package.json') }}
+    - run: cd electron && yarn make
+      if: steps.cache-electron-build-restore.outputs.cache-hit != 'true'
+    - name: Save Electron build
+      uses: actions/cache/save@v4
+      with:
+        path: electron/out
+        key: cache-electron-build-${{ hashFiles('electron/yarn.lock', 'electron/index.html', 'electron/static/**', 'electron/favicon.ico', 'electron/*.js', 'electron/package.json') }}
+      if: steps.cache-electron-build-restore.outputs.cache-hit != 'true'
+
+    - run: set VERSION (node -e 'console.log(JSON.parse(require("fs").readFileSync("package.json")).version)') && ssh $Env:SSH_HOST "mkdir -p ${Env:PARSEGRAPH_PUBLIC_HTML}/electron/$VERSION"
+      env:
+          PARSEGRAPH_PUBLIC_HTML: ${{ secrets.PARSEGRAPH_PUBLIC_HTML }}
+          SSH_HOST: ${{ secrets.PARSEGRAPH_SSH_HOST }}
+    - run: Get-Command scp
+    - run: set VERSION (node -e 'console.log(JSON.parse(require("fs").readFileSync("package.json")).version)') && (C:\Windows\System32\OpenSSH\scp.exe -r electron/out/make/* "${Env:SSH_HOST}:${Env:PARSEGRAPH_PUBLIC_HTML}/electron/$VERSION/") && (ssh $Env:SSH_HOST "cd ${Env:PARSEGRAPH_PUBLIC_HTML}/electron; rm -f latest; ln -s $VERSION latest")
+      env:
+          PARSEGRAPH_PUBLIC_HTML: ${{ secrets.PARSEGRAPH_PUBLIC_HTML }}
+          SSH_HOST: ${{ secrets.PARSEGRAPH_SSH_HOST }}

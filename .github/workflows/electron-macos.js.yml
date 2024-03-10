@@ -31,12 +31,9 @@ jobs:
     - run: echo -n "$SSH_KNOWN_HOST" | base64 -d >>$HOME/.ssh/known_hosts
       env:
           SSH_KNOWN_HOST: ${{ secrets.PARSEGRAPH_SSH_KNOWN_HOST }}
-    - run: export VERSION=`node -e 'console.log(JSON.parse(require("fs").readFileSync("package.json")).version)'` && ssh $SSH_HOST "mkdir -p $PARSEGRAPH_PUBLIC_HTML/electron/$VERSION"
+    - run: export VERSION=`node -e 'console.log(JSON.parse(require("fs").readFileSync("package.json")).version)'` && ssh $SSH_HOST "mkdir -p ~/electron/$VERSION"
       env:
-          PARSEGRAPH_PUBLIC_HTML: ${{ secrets.PARSEGRAPH_PUBLIC_HTML }}
           SSH_HOST: ${{ secrets.PARSEGRAPH_SSH_HOST }}
-    - run: pwd
-    - run: export VERSION=`node -e 'console.log(JSON.parse(require("fs").readFileSync("package.json")).version)'` && cd ./electron/out/make && scp -r * "$SSH_HOST:$PARSEGRAPH_PUBLIC_HTML/electron/$VERSION/" && ssh $SSH_HOST "cd $PARSEGRAPH_PUBLIC_HTML/electron; rm -f latest; ln -s $VERSION latest"
+    - run: export VERSION=`node -e 'console.log(JSON.parse(require("fs").readFileSync("package.json")).version)'` && cd ./electron/out/make && scp -r * "$SSH_HOST:electron/$VERSION/" && ssh $SSH_HOST "cd electron; rm -f latest; ln -s $VERSION latest"
       env:
-          PARSEGRAPH_PUBLIC_HTML: ${{ secrets.PARSEGRAPH_PUBLIC_HTML }}
           SSH_HOST: ${{ secrets.PARSEGRAPH_SSH_HOST }}

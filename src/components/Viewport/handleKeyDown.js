@@ -66,6 +66,7 @@ const handleKeyDown = (viewport, key, mouseX, mouseY, modifiers) => {
       if (modifiers.ctrlKey) {
         return false;
       }
+    // eslint-disable-next-line no-fallthrough
     case "Escape":
       viewport.showInCamera();
       break;

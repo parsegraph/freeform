@@ -1,5 +1,4 @@
 import {
-  Alignment,
   Direction,
   DirectionCaret,
   DirectionNode,

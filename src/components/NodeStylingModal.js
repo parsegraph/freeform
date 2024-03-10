@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
 import "./modal.css";
-import { DEFAULT_NODE_STYLE } from "../settings";
 
 const ColorField = ({ name, label, style, setStyle }) => {
   const boxRef = useRef();

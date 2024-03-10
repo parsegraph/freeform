@@ -1,15 +1,12 @@
-import React from "react";
 import { Direction } from "parsegraph";
 import {
   DONT_TOUCH_CAMERA,
   MAX_CLICK_DELAY_MS,
-  SHOW_KEY_STROKES,
   SINGLE_TAP_GESTURES,
 } from "../../settings";
 import { midPoint } from "parsegraph-matrix";
 import { handleKeyDown } from "./handleKeyDown";
 import ViewportKeystrokes from "./ViewportKeystrokes";
-import Carousel from "../Carousel";
 import Rect from "parsegraph-rect";
 
 const distance = (x1, y1, x2, y2) => {
@@ -328,7 +325,6 @@ export default class ViewportInput {
       if (!this.viewport().hasWidget()) {
         return;
       }
-      const car = viewport.caret();
       const cam = viewport.camera();
       e.preventDefault();
 

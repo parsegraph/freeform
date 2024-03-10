@@ -220,7 +220,7 @@ export default class ViewportRendering {
 
     const showInCamera = () => {
       //this.viewport().logMessage("Explicitly showing node in camera");
-      const [x, y, scale] = [cam.x(), cam.y(), cam.scale()];
+      const [x, y] = [cam.x(), cam.y(), cam.scale()];
       showNodeInCamera(this.viewport().node(), cam);
 
       const FUZZINESS = 1e-3;

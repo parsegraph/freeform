@@ -3,8 +3,6 @@ import { useState } from "react";
 import * as exporters from "../exporters";
 import { serializeParsegraph } from "parsegraph";
 
-import SettingsForm from "./SettingsForm";
-
 import "./modal.css";
 import { PUBLIC_SERVERS } from "../settings";
 
@@ -153,7 +151,7 @@ function ExportForm({ viewport, graph, onExport, onClose }) {
 }
 
 export default function ExportModal({ onExport, onClose, graph, viewport }) {
-  const [activeTab, setActiveTab] = useState("export");
+  const [activeTab] = useState("export");
 
   return (
     <div

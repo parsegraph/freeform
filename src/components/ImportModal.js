@@ -7,7 +7,6 @@ import {
   deserializeParsegraph,
   forEachCardinalDirection,
   turnLeft,
-  turnNegative,
   turnRight,
 } from "parsegraph";
 

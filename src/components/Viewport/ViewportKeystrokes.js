@@ -47,8 +47,8 @@ export default class ViewportKeystrokes {
     } else {
       if (text.endsWith(" " + key) || text === key) {
         text += "(x2)";
-      } else if (text.match(/\(x([^\)]+)\)$/)) {
-        const m = text.match(/\(x([^\)]+)\)$/);
+      } else if (text.match(/\(x([^)]+)\)$/)) {
+        const m = text.match(/\(x([^)]+)\)$/);
         const textPart = text.substring(0, text.length - m[0].length);
         if (textPart.endsWith(key)) {
           const times = Number.parseInt(m[1]);

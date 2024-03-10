@@ -1,10 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import "./App.css";
 
-import { createRoot } from "react-dom/client";
-
 import {
-  Direction,
   deserializeParsegraph,
   serializeParsegraph,
 } from "parsegraph";
@@ -259,10 +256,10 @@ function App() {
   const [undoSize, setUndoSize] = useState(0);
   const [redoSize, setRedoSize] = useState(0);
 
-  const refreshUndoCounts = () => {
+  const refreshUndoCounts = useCallback(() => {
     setUndoSize(graphs.undoCount());
     setRedoSize(graphs.redoCount());
-  };
+  }, [setUndoSize, setRedoSize, graphs]);
 
   const resetUndoCounts = () => {
     setUndoSize(0);
@@ -276,7 +273,7 @@ function App() {
       publish();
     }
     refresh(true);
-  }, [autopublish, publish, graphs, refresh]);
+  }, [autopublish, publish, graphs, refresh, refreshUndoCounts]);
 
   const redo = useCallback(() => {
     graphs.redo();
@@ -285,7 +282,7 @@ function App() {
       publish();
     }
     refresh(true);
-  }, [autopublish, publish, graphs, refresh]);
+  }, [autopublish, publish, graphs, refresh, refreshUndoCounts]);
 
   useEffect(() => {
     if (!graphs) {
@@ -329,7 +326,7 @@ function App() {
       return;
     }
     viewport.show(graphs.widget(), graphs.viewportData());
-  }, [graphs, viewport, refresh, autopublish, publish, undo, redo]);
+  }, [graphs, viewport, refresh, autopublish, publish, undo, redo, refreshUndoCounts]);
 
   useEffect(() => {
     if (autopublish) {
@@ -365,7 +362,7 @@ function App() {
       }
       setNodeStylingModalOpen(showingStyling);
     });
-  }, [viewport, setNodeStylingModalOpen, setNodeStyling]);
+  }, [viewport, setNodeStylingModalOpen, setNodeStyling, graphs, refreshUndoCounts]);
 
   const updateNodeStyling = (newStyling) => {
     if (newStyling.pageBackgroundColor) {

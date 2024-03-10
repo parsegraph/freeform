@@ -1,7 +1,6 @@
 import {
   Alignment,
   Axis,
-  CommitLayout,
   Direction,
   paintNodeBounds,
   paintNodeLines,

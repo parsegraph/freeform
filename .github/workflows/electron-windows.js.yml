@@ -87,12 +87,12 @@ jobs:
         key: cache-electron-build-${{ hashFiles('electron/yarn.lock', 'electron/index.html', 'electron/static/**', 'electron/favicon.ico', 'electron/*.js', 'electron/package.json') }}
       if: steps.cache-electron-build-restore.outputs.cache-hit != 'true'
 
-    - run: set VERSION (node -e 'console.log(JSON.parse(require("fs").readFileSync("electron/package.json")).version)') && ssh $Env:SSH_HOST "mkdir -p $Env:PARSEGRAPH_PUBLIC_HTML/electron/$VERSION"
+    - run: set VERSION (node -e 'console.log(JSON.parse(require("fs").readFileSync("electron/package.json")).version)') && ssh $Env:SSH_HOST "mkdir -p ${Env:PARSEGRAPH_PUBLIC_HTML}/electron/$VERSION"
       env:
           PARSEGRAPH_PUBLIC_HTML: ${{ secrets.PARSEGRAPH_PUBLIC_HTML }}
           SSH_HOST: ${{ secrets.PARSEGRAPH_SSH_HOST }}
     - run: Get-Command scp
-    - run: set VERSION (node -e 'console.log(JSON.parse(require("fs").readFileSync("electron/package.json")).version)') && (C:\Windows\System32\OpenSSH\scp.exe -r electron/out/make/* "$Env:SSH_HOST:$Env:PARSEGRAPH_PUBLIC_HTML/electron/$VERSION/") && (ssh $Env:SSH_HOST "cd $Env:PARSEGRAPH_PUBLIC_HTML/electron; rm -f latest; ln -s $VERSION latest")
+    - run: set VERSION (node -e 'console.log(JSON.parse(require("fs").readFileSync("electron/package.json")).version)') && (C:\Windows\System32\OpenSSH\scp.exe -r electron/out/make/* "${Env:SSH_HOST}:${Env:PARSEGRAPH_PUBLIC_HTML}/electron/$VERSION/") && (ssh $Env:SSH_HOST "cd ${Env:PARSEGRAPH_PUBLIC_HTML}/electron; rm -f latest; ln -s $VERSION latest")
       env:
           PARSEGRAPH_PUBLIC_HTML: ${{ secrets.PARSEGRAPH_PUBLIC_HTML }}
           SSH_HOST: ${{ secrets.PARSEGRAPH_SSH_HOST }}

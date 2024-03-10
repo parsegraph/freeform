@@ -51,6 +51,21 @@ jobs:
     - run: yarn build
     - run: cd occluder && yarn && yarn build && cp dist/main.js ../public/occluder.js && cd -
     - run: cd electron && yarn
+    - name: Restore Electron deps
+      id: cache-electron-deps-restore
+      uses: actions/cache/restore@v4
+      with:
+        path: node_modules
+        key: cache-electron-${{ hashFiles('yarn.lock') }}
+    - run: yarn
+      if: steps.cache-electron-deps-restore.outputs.cache-hit != 'true'
+    - name: Save deps
+      id: cache-deps-save
+      uses: actions/cache/save@v4
+      with:
+        path: node_modules
+        key: cache-electron-${{ hashFiles('yarn.lock') }}
+
     - run: cd electron && cp -Force ../build/favicon.ico .
     - run: cd electron && cp -Force ../build/index.html .
     - run: cd electron && sed -i -re 's/React App/parsegraph/g' ./index.html

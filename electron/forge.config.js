@@ -14,7 +14,7 @@ module.exports = {
     {
       name: '@electron-forge/maker-squirrel',
       config: {
-        title: "Parsegraph",
+        title: "Parsegraph Freeform",
         name: "parsegraph-freeform",
         appIcon: "favicon.ico",
         setupIcon: "favicon.ico",

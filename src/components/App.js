@@ -338,9 +338,10 @@ function App() {
     }
 
     window.onbeforeunload = () => {
+      setExportModalOpen(true);
       return "Are you sure you want to lose your unexported changes?";
     };
-  }, [needsSave, autopublish]);
+  }, [needsSave, autopublish, setExportModalOpen]);
 
   const [nodeStyling, setNodeStyling] = useState(null);
 

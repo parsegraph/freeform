@@ -369,7 +369,8 @@ export default class Viewport {
   };
 
   movePaintGroup(reverse) {
-    if (!reverse) {
+    const car = this.caret();
+    if (reverse) {
       car.moveTo(car.node().paintGroup().next());
     } else {
       car.moveTo(car.node().paintGroup().prev());
@@ -395,7 +396,9 @@ export default class Viewport {
       }
       this.repaint();
     } else {
+      const curStyle = this.getNodeStyle();
       this.caret().spawnMove(dir);
+      this.updateNodeStyle(curStyle);
       if (!dontTouchCamera) {
         this.showInCamera();
       }
@@ -935,6 +938,12 @@ export default class Viewport {
 
   defaultNodeStyle() {
     return this._defaultNodeStyle;
+  }
+
+  hasNodeStyle(node) {
+    node = node ?? this.node();
+    let curStyle = this._nodeStyles.get(node);
+    return curStyle !== undefined;
   }
 
   getNodeStyle(node) {

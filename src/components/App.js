@@ -530,11 +530,20 @@ function App() {
                 }}
               >
                 <div className="buttons" style={{ paddingTop: "0" }}>
-                  {hasWidget && (
+                  {hasWidget && <>
                     <button onClick={() => viewport.toggleNodeStyling()}>
                       Style
                     </button>
-                  )}
+                    <button onClick={() => viewport.rendering().toggleSpotlights()}>
+                      Spotlights
+                    </button>
+                    <button onClick={() => {
+                      viewport.rendering().toggleStats();
+                      viewport.refresh();
+                    }}>
+                      Metrics 
+                    </button>
+                  </>}
                   {!showNodeActions && hasWidget && (
                     <>
                       <button onClick={() => viewport.showInCamera()}>

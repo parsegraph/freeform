@@ -18,6 +18,7 @@ import {
 import { WebGLBlockPainter } from "parsegraph-blockpainter";
 import Color from "parsegraph-color";
 import SpotlightPainter from "parsegraph-spotlightpainter";
+import Rect from "parsegraph-rect";
 
 const getNodeSize = (node, size, ctx) => {
   size[0] = FONT_SIZE;
@@ -103,9 +104,7 @@ const paint = (pg, painters, bounds, glProvider, getNodeStyle) => {
     spotlightPainter.clear();
   }
 
-  if (bounds && bounds.has(pg)) {
-    bounds.get(pg).dirty = true;
-  }
+  const b = new Rect();
 
   let numBlocks = 0;
   pg.siblings().forEach((node) => {
@@ -121,7 +120,9 @@ const paint = (pg, painters, bounds, glProvider, getNodeStyle) => {
 
   pg.siblings().forEach((node) => {
     const style = getNodeStyle(node);
+
     paintNodeLines(node, LINE_THICKNESS / 2, (x, y, w, h) => {
+      b.include(x, y, w, h);
       painter.setBorderColor(
         Color.fromHex(style.lineColor).setA(style.lineAlpha)
       );
@@ -131,6 +132,7 @@ const paint = (pg, painters, bounds, glProvider, getNodeStyle) => {
       painter.drawBlock(x, y, w, h, 0, 0);
     });
     paintNodeBounds(node, (x, y, w, h) => {
+      b.include(x, y, w, h);
       painter.setBackgroundColor(
         Color.fromHex(style.backgroundColor).setA(style.backgroundAlpha)
       );
@@ -151,9 +153,13 @@ const paint = (pg, painters, bounds, glProvider, getNodeStyle) => {
         painter.drawBlock(x, y, w, h, w, BORDER_THICKNESS * scale);
       }
       const radius = (w + h) / 2 / 2;
-      spotlightPainter.drawSpotlight(x, y, 10*radius, new Color(1, 1, 1, 0.1));
+      spotlightPainter.drawSpotlight(x, y, 5*radius, painter.backgroundColor());
     });
   });
+
+  if (bounds) {
+    bounds.set(pg, {dirty: false, bounds: b});
+  }
 };
 
 const createLayoutPainter = (

@@ -34,6 +34,8 @@ import {
   FONT_SIZE,
   SHOW_WORLD_LABELS,
   LINE_THICKNESS,
+  SHOW_NODE_SPOTLIGHTS,
+  MAX_PAINT_TIME_MS,
 } from "../../settings";
 import { WorldLabels } from "../WorldLabel";
 import { createLayoutPainter } from "./createLayoutPainter";
@@ -41,6 +43,10 @@ import { createLayoutPainter } from "./createLayoutPainter";
 const minVisibleTextScale = 1;
 const initialScale = 8;
 const MIN_VISIBLE_GRAPH_SCREEN = 4;
+const WALL_TIMES = 400;
+const WALL_TIME_WIDTH = 1;
+
+const WALL_TIME_SCALE = 4;
 
 const caretColor = new Color(0.95, 0.9, 0, 1);
 const caretHighlightColor = new Color(1, 1, 0, 1);
@@ -55,14 +61,17 @@ export default class ViewportRendering {
       ["Painting graph", () => this.paint(), () => this.allNodeCount()],
       ["Focusing camera", () => this.focusCamera(), () => 3],
       ["Clearing background", () => this.clearBackground(), () => 1],
-      ["Rendering graph", () => this.render(), () => this.allPaintGroupCount()],
+      ["Rendering blocks", () => this.render(), () => this.allPaintGroupCount()],
+      ["Rendering text", () => this.renderText(), () => this.allNodeCount()],
       [
         "Rendering extents",
         () => this.renderExtents(this.camera().project()),
         () => 1,
       ],
+      ["Rendering UI", () => this.renderUI(), () => 1],
       ["Post-rendering", () => this.postRender(), () => 1],
       ["Persisting graph", () => this.persist(), () => 1],
+      ["Rendering metrics", () => this.renderMetrics(), () => 1],
     ];
 
     this._phase = 0;
@@ -91,6 +100,9 @@ export default class ViewportRendering {
 
     this._ctx = textCanvas.getContext("2d");
     const glProvider = new BasicGLProvider();
+    glProvider.canvas().getContext("webgl", {
+      preserveDrawingBuffer: true
+    });
     glProvider.container();
     glProvider.container().className = "viewport-webgl-container";
     glProvider.canvas().className = "viewport-webgl-canvas";
@@ -118,8 +130,11 @@ export default class ViewportRendering {
     this._bounds = new WeakMap();
 
     this._showWorldLabels = SHOW_WORLD_LABELS;
+    this._renderingSpotlights = SHOW_NODE_SPOTLIGHTS;
 
     this._showingStats = PRINT_PAINT_STATS;
+
+    this.resetCounts();
   }
 
   resetSettings() {
@@ -138,6 +153,7 @@ export default class ViewportRendering {
     this._nodeCount = NaN;
     this._paintGroupCount = NaN;
     this._cranks = 0;
+    this._startTime = NaN;
   }
 
   runCount() {
@@ -412,7 +428,17 @@ export default class ViewportRendering {
   }
 
   reset() {
+    this.pushPastCrank(!this.isDone());
     this._phase = 0;
+    this._currentPaintGroup = null;
+    this._renderData = {
+      i: 0,
+      j: 0,
+      k: 0,
+      allGroups: 0,
+      dirtyGroups: 0,
+      offscreenGroups: 0,
+    };
     this.resetCounts();
 
     this._layout = null;
@@ -425,6 +451,9 @@ export default class ViewportRendering {
   }
 
   crank() {
+    if (isNaN(this._startTime)) {
+      this._startTime = Date.now();
+    }
     this._cranks++;
 
     const step = this._steps[this.phase()];
@@ -489,32 +518,16 @@ export default class ViewportRendering {
     return this._layout.crank();
   }
 
-  renderPaintGroup(paintGroup, worldMatrix, renderData) {
+  renderPaintGroupText(paintGroup, renderData) {
     const pg = paintGroup;
     const ctx = this.ctx();
 
-    const { painter, spotlightPainter } = this._painters.get(pg);
     if (pg.layout().needsCommit() || pg.layout().needsAbsolutePos()) {
-      renderData.dirtyGroups++;
-      return true;
-    }
-    if (!painter || !spotlightPainter) {
-      renderData.dirtyGroups++;
+      pg.neighbors().root().invalidate();
       return true;
     }
 
-    let bounds;
-    if (this._bounds.has(pg) && !this._bounds.get(pg).dirty) {
-      bounds = this._bounds.get(pg).bounds;
-    } else {
-      bounds = this.bounds(pg);
-      if (bounds.isNaN()) {
-        renderData.dirtyGroups++;
-        return true;
-      } else {
-        this._bounds.set({ dirty: false, bounds });
-      }
-    }
+    let bounds = this._bounds.get(pg).bounds;
     if (bounds.isNaN()) {
       throw new Error("bounds must not be NaN");
     }
@@ -525,27 +538,17 @@ export default class ViewportRendering {
 
     const cam = this.camera();
     if (!cam.containsAny(b)) {
-      renderData.offscreenGroups++;
       return false;
     }
-    ++renderData.i;
-
-    const pgMatrix = matrixMultiply3x3(
-      makeScale3x3(pg.layout().absoluteScale()),
-      makeTranslation3x3(pg.layout().absoluteX(), pg.layout().absoluteY()),
-      worldMatrix
-    );
-    spotlightPainter.render(pgMatrix);
-    painter.render(pgMatrix);
 
     ctx.save();
     ctx.translate(pg.layout().absoluteX(), pg.layout().absoluteY());
     ctx.scale(pg.layout().absoluteScale(), pg.layout().absoluteScale());
     // eslint-disable-next-line no-loop-func
-    let needsPaint = false;
+    let dirty = false;
     pg.siblings().forEach((node) => {
       if (node.layout().needsAbsolutePos()) {
-        needsPaint = true;
+        dirty = true;
         return;
       }
       if (!nodeHasValue(node)) {
@@ -641,7 +644,50 @@ export default class ViewportRendering {
     });
     ctx.restore();
 
-    return needsPaint;
+    return dirty;
+  }
+
+  renderPaintGroup(paintGroup, worldMatrix, renderData) {
+    const pg = paintGroup;
+
+    const { painter, spotlightPainter } = this._painters.get(pg);
+    if (pg.layout().needsCommit() || pg.layout().needsAbsolutePos()) {
+      renderData.dirtyGroups++;
+      pg.neighbors().root().invalidate();
+      return true;
+    }
+    if (!painter || !spotlightPainter) {
+      renderData.dirtyGroups++;
+      return true;
+    }
+
+    let bounds = this._bounds.get(pg).bounds;
+    if (bounds.isNaN()) {
+      throw new Error("bounds must not be NaN");
+    }
+
+    const b = bounds.clone();
+    b.scale(pg.scale());
+    b.translate(pg.layout().absoluteX(), pg.layout().absoluteY());
+
+    const cam = this.camera();
+    if (!cam.containsAny(b)) {
+      renderData.offscreenGroups++;
+      return false;
+    }
+    ++renderData.i;
+
+    const pgMatrix = matrixMultiply3x3(
+      makeScale3x3(pg.layout().absoluteScale()),
+      makeTranslation3x3(pg.layout().absoluteX(), pg.layout().absoluteY()),
+      worldMatrix
+    );
+    if (this.renderingSpotlights()) {
+      spotlightPainter.render(pgMatrix);
+    }
+    painter.render(pgMatrix);
+
+    return false;
   }
 
   render() {
@@ -653,28 +699,38 @@ export default class ViewportRendering {
     const worldMatrix = cam.project();
     const ctx = this.ctx();
 
+    ctx.resetTransform();
     ctx.scale(cam.scale(), cam.scale());
     ctx.translate(cam.x(), cam.y());
 
-    let pg = this.widget();
-    let needsPaint = false;
+    if (!this._currentPaintGroup) {
+      this._currentPaintGroup = this.widget();
+    }
+    let pg = this._currentPaintGroup;
 
-    let renderData = {
-      i: 0,
-      j: 0,
-      k: 0,
-      allGroups: 0,
-      dirtyGroups: 0,
-      offscreenGroups: 0,
-    };
-    do {
-      ++renderData.allGroups;
-      if (this.renderPaintGroup(pg, worldMatrix, renderData)) {
-        needsPaint = true;
-      }
-      pg = pg.paintGroup().next();
-    } while (pg !== this.widget());
+    const renderData = this._renderData;
+    if (this.renderPaintGroup(pg, worldMatrix, renderData)) {
+      this.viewport().refresh();
+      return false;
+    }
 
+    ++renderData.allGroups;
+    this._currentPaintGroup = pg.paintGroup().next();
+    if (this._currentPaintGroup !== this.widget()) {
+      return true;
+    }
+    this._currentPaintGroup = null;
+
+    return false;
+  }
+
+  renderUI() {
+    const ctx = this.ctx();
+    const cam = this.camera();
+    const renderData = this._renderData;
+    if (!cam.canProject()) {
+      return false;
+    }
     ctx.resetTransform();
     ctx.scale(cam.scale(), cam.scale());
     ctx.translate(cam.x(), cam.y());
@@ -682,23 +738,7 @@ export default class ViewportRendering {
     this.renderHovered();
     this.renderCaret();
 
-    if (this._showingStats) {
-      const { i, j, k, dirtyGroups, offscreenGroups, allGroups } = renderData;
-      ctx.resetTransform();
-      ctx.font = "18px sans-serif";
-      ctx.textBaseline = "bottom";
-      ctx.textAlign = "left";
-      ctx.fillStyle = "white";
-      ctx.fillText(
-        `groups=${i}/${allGroups} (dirty=${dirtyGroups}, offscreen=${offscreenGroups}), text=${j}, labels=${k}`,
-        0,
-        cam.height()
-      );
-      ctx.textAlign = "right";
-      ctx.fillText(cam.toString(), cam.width(), cam.height());
-    }
-
-    if (this._offscreenHandler && !needsPaint) {
+    if (this._offscreenHandler) {
       const isOffscreen =
         renderData.i === 0 &&
         renderData.dirtyGroups === 0 &&
@@ -707,7 +747,127 @@ export default class ViewportRendering {
       this._offscreenHandler(isOffscreen);
     }
 
-    return needsPaint;
+    return false;
+  }
+
+  renderMetrics() {
+    if (!this._showingStats) {
+      return false;
+    }
+    const ctx = this.ctx();
+    const cam = this.camera();
+    const { i, j, k, dirtyGroups, offscreenGroups, allGroups } = this._renderData;
+    ctx.resetTransform();
+    ctx.font = "18px sans-serif";
+    ctx.textBaseline = "bottom";
+    ctx.textAlign = "left";
+    ctx.fillStyle = "white";
+    const wallTime = Date.now() - this._startTime
+    ctx.fillText(
+      `${wallTime}ms wall, ${this._cranks} cranks, ${i}/${allGroups} groups (${dirtyGroups} dirty, ${offscreenGroups} offscreen), ${j} text, ${k} labels`,
+      0,
+      cam.height()
+    );
+    ctx.textAlign = "right";
+    ctx.fillText(cam.toString(), cam.width(), cam.height());
+
+    if (!this._wallTimes) {
+      this._wallTimes = [];
+    }
+    this._wallTimes.push(wallTime);
+    if (this._wallTimes.length > WALL_TIMES) {
+      this._wallTimes.shift();
+    }
+
+    ctx.translate(0, cam.height());
+    ctx.translate(0, - 18*1.5);
+    ctx.save();
+    let maxTime = 0;
+    this._pastCranks.forEach(t => {
+      maxTime = Math.max(Math.abs(t), maxTime);
+    });
+    const CRANK_HEIGHT = 25;
+    this._pastCranks.forEach(t => {
+      ctx.fillStyle = t < 0 ? 'rgba(255, 0, 0, 0.5)' : 'rgba(0, 255, 0, 0.5)';
+      t = Math.abs(t);
+      const h = CRANK_HEIGHT * (t / maxTime)
+      ctx.fillRect(WALL_TIME_WIDTH/2, -h, WALL_TIME_WIDTH, h);
+      ctx.translate(WALL_TIME_WIDTH, 0);
+    });
+    ctx.restore();
+    ctx.translate(0, -CRANK_HEIGHT - 1);
+
+    ctx.scale(1, WALL_TIME_SCALE);
+    ctx.save();
+    ctx.fillStyle = 'grey';
+    ctx.fillRect(0, 0, WALL_TIME_WIDTH*WALL_TIMES, 1/WALL_TIME_SCALE);
+    ctx.fillRect(0, -MAX_PAINT_TIME_MS/2, WALL_TIME_WIDTH*WALL_TIMES, 1/WALL_TIME_SCALE);
+    ctx.fillRect(0, -MAX_PAINT_TIME_MS, WALL_TIME_WIDTH*WALL_TIMES, 1/WALL_TIME_SCALE);
+
+    ctx.strokeStyle = 'white';
+    this._wallTimes.forEach(t => {
+      if (t < MAX_PAINT_TIME_MS/2) {
+        ctx.fillStyle = 'rgba(0, 255, 0, 0.5)';
+      } else if (t < MAX_PAINT_TIME_MS) {
+        ctx.fillStyle = 'rgba(255, 255, 0, 0.5)';
+      } else {
+        ctx.fillStyle = 'rgba(255, 0, 0, 0.5)';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'baseline';
+        ctx.save();
+        ctx.translate(0, -t);
+        ctx.scale(1, 1/WALL_TIME_SCALE);
+        ctx.fillText(t + "ms", WALL_TIME_WIDTH, 0)
+        ctx.restore();
+      }
+      ctx.fillRect(WALL_TIME_WIDTH/2, -t, WALL_TIME_WIDTH, t);
+      ctx.translate(WALL_TIME_WIDTH, 0);
+    });
+    ctx.restore();
+
+    return false;
+  }
+
+  pushPastCrank(interrupted) {
+    if (!this._pastCranks) {
+      this._pastCranks = [];
+    }
+    this._pastCranks.push(this._cranks * (interrupted ? -1 : 1));
+    if (this._pastCranks.length > WALL_TIMES) {
+      this._pastCranks.shift();
+    }
+  }
+
+  renderText() {
+    const cam = this.camera();
+    if (!this.glProvider().canProject() || !cam.canProject()) {
+      return false;
+    }
+
+    const worldMatrix = cam.project();
+    const ctx = this.ctx();
+
+    ctx.resetTransform();
+    ctx.scale(cam.scale(), cam.scale());
+    ctx.translate(cam.x(), cam.y());
+
+    if (!this._currentPaintGroup) {
+      this._currentPaintGroup = this.widget();
+    }
+    let pg = this._currentPaintGroup;
+
+    const renderData = this._renderData;
+    if (this.renderPaintGroupText(pg, renderData)) {
+      this.viewport().refresh();
+      return false;
+    }
+
+    ++renderData.allGroups;
+    this._currentPaintGroup = pg.paintGroup().next();
+    if (this._currentPaintGroup !== this.widget()) {
+      return true;
+    }
+    this._currentPaintGroup = null;
   }
 
   setOffscreenHandler(offscreenHandler) {
@@ -1126,5 +1286,14 @@ export default class ViewportRendering {
       });
     });
     return b;
+  }
+
+  toggleSpotlights() {
+    this._renderingSpotlights = !this._renderingSpotlights;
+    this.viewport().refresh();
+  }
+
+  renderingSpotlights() {
+    return this._renderingSpotlights;
   }
 }

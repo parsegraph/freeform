@@ -22,30 +22,12 @@ const handleKeyDown = (viewport, key, mouseX, mouseY, modifiers) => {
     return;
   };
 
-  const tab = () => {
-    if (modifiers.shiftKey) {
-      car.moveTo(car.node().siblings().next());
-    } else {
-      car.moveTo(car.node().siblings().prev());
-    }
-    viewport.repaint();
-  };
-
-  const movePaintGroup = (next) => {
-    if (next) {
-      car.moveTo(car.node().paintGroup().next());
-    } else {
-      car.moveTo(car.node().paintGroup().prev());
-    }
-    viewport.repaint();
-  };
-
   switch (key) {
     case "PageUp":
-      movePaintGroup(true);
+      viewport.movePaintGroup(false);
       break;
     case "PageDown":
-      movePaintGroup(false);
+      viewport.movePaintGroup(true);
       break;
     case "-":
       if (!isNaN(mouseX)) {
@@ -135,7 +117,7 @@ const handleKeyDown = (viewport, key, mouseX, mouseY, modifiers) => {
       viewport.refresh();
       break;
     case "Tab":
-      tab();
+      viewport.tab();
       break;
     case "ArrowUp":
       cam.adjustOrigin(0, MOVE_SPEED / cam.scale());

@@ -358,6 +358,25 @@ export default class Viewport {
     this.repaint();
   }
 
+  tab(reverse) {
+    const car = this.caret();
+    if (reverse) {
+      car.moveTo(car.node().siblings().next());
+    } else {
+      car.moveTo(car.node().siblings().prev());
+    }
+    this.repaint();
+  };
+
+  movePaintGroup(reverse) {
+    if (!reverse) {
+      car.moveTo(car.node().paintGroup().next());
+    } else {
+      car.moveTo(car.node().paintGroup().prev());
+    }
+    this.repaint();
+  };
+
   spawnMove(dir, pullIfOccupied, dontTouchCamera) {
     if (this.node().neighbors().hasNode(dir)) {
       if (pullIfOccupied && !this.node().neighbors().isRoot()) {

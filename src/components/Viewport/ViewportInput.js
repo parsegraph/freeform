@@ -4,10 +4,13 @@ import {
   MAX_CLICK_DELAY_MS,
   SINGLE_TAP_GESTURES,
 } from "../../settings";
-import { midPoint } from "parsegraph-matrix";
+import { matrixTransform2D, midPoint } from "parsegraph-matrix";
 import { handleKeyDown } from "./handleKeyDown";
 import ViewportKeystrokes from "./ViewportKeystrokes";
 import Rect from "parsegraph-rect";
+
+const INACTION_THROTTLE_MS = 15 * 1000;
+const INACTION_CHECK_MS = 1000;
 
 const distance = (x1, y1, x2, y2) => {
   return Math.sqrt(Math.pow(y2 - y1, 2) + Math.pow(x2 - x1, 2));
@@ -27,6 +30,180 @@ const absoluteSizeRect = (node) => {
   boundsRect.setHeight(absSize[1]);
   return boundsRect;
 };
+
+class ViewportGamepad {
+  constructor(viewport, gamepad) {
+    if (!viewport) {
+      throw new Error("A viewport must be provided");
+    }
+    if (!gamepad) {
+      throw new Error("A gamepad must be provided");
+    }
+    this._viewport = viewport;
+    this._gamepad = gamepad;
+
+    this._axes = [];
+    gamepad.axes.forEach(axis => {
+      this._axes.push(axis);
+    });
+
+    this._buttons = [];
+    gamepad.buttons.forEach(button => {
+      this._buttons.push(button.pressed);
+    });
+
+    this._lastChange = Date.now();
+    this._lastTick = NaN;
+    this.schedule();
+  }
+
+  viewport() { 
+    return this._viewport;
+  }
+
+  schedule() {
+    if (this._timer) {
+      return;
+    }
+    if (Date.now() - this._lastChange > INACTION_THROTTLE_MS) {
+      let id = setTimeout(() => {
+        id = null;
+        this._timer = null;
+        this.tick();
+      }, INACTION_CHECK_MS);
+      this._timer = () => {
+        if (id) {
+          clearTimeout(id);
+          id = null;
+        }
+      }
+    } else {
+      let id = requestAnimationFrame(() => {
+        id = null;
+        this._timer = null;
+        this.tick();
+      });
+      this._timer = () => {
+        if (id) {
+          cancelAnimationFrame(id);
+          id = null;
+        }
+      }
+    }
+  }
+
+  cancel() {
+    if (!this._timer) {
+      return;
+    }
+    this._timer();
+    this._timer = null;
+  }
+
+  gamepad() {
+    return this._gamepad;
+  }
+
+  buttonDown(index, buttons) {
+    const viewport = this.viewport();
+    const pullIfOccupied = buttons[1].pressed;
+    switch (index) {
+      case 3:
+        viewport.showInCamera();
+        break;
+      case 12:
+        viewport.spawnMove(Direction.UPWARD, pullIfOccupied, false);
+        break;
+      case 13:
+        viewport.spawnMove(Direction.DOWNWARD, pullIfOccupied, false);
+        break;
+      case 14:
+        viewport.spawnMove(Direction.BACKWARD, pullIfOccupied, false);
+        break;
+      case 15:
+        viewport.spawnMove(Direction.FORWARD, pullIfOccupied, false);
+        break;
+      case 4:
+        viewport.tab(false);
+        break;
+      case 5:
+        viewport.tab(true);
+        break;
+    }
+    this.viewport().logMessage("Down " + index);
+  }
+
+  buttonUp(index) {
+    this.viewport().logMessage("Up " + index);
+  }
+
+  tick() {
+    console.log("Tick");
+    const gamepad = navigator.getGamepads()[this.gamepad().index];
+    if (!gamepad) {
+      return false;
+    }
+
+    const car = this.viewport().caret();
+
+    let changed = false;
+
+    gamepad.buttons.forEach((button, index) => {
+      if (this._buttons[index] === button.pressed) {
+        return;
+      }
+      changed = true;
+      console.log("changed", index, button, this._buttons[index], button.pressed);
+      this._buttons[index] = button.pressed;
+      if (button.pressed) {
+        this.buttonDown(index, gamepad.buttons);
+      } else {
+        this.buttonUp(index, gamepad.buttons);
+      }
+    });
+
+    if (!isNaN(this._lastTick)) {
+      const elapsedMs = Date.now() - this._lastTick;
+      const cam = this.viewport().camera();
+      const layout = car.node().layout();
+      const MOVE_SPEED = 10;
+      const ZOOM_SPEED = 1/10;
+      gamepad.axes.forEach((axis, index) => {
+        const delta = this._axes[index] - axis;
+        if (Math.abs(delta) > 1e-3) {
+          let [dx, dy] = [0, 0];
+          switch (index) {
+          case 0:
+            dx = delta;
+            break;
+          case 1:
+            dy = delta;
+            break;
+          }
+          if (dy && gamepad.buttons[1].pressed) {
+            const [x, y] = matrixTransform2D(cam.project(), layout.absoluteX(), layout.absoluteY());
+            cam.zoomToPoint(Math.pow(1.1, elapsedMs*delta*ZOOM_SPEED), x + cam.width()/2, y+cam.height()/2);
+            this.viewport().checkScale();
+            this.viewport().refresh();
+            changed = true;
+            return;
+          }
+
+          this.viewport().camera().adjustOrigin(MOVE_SPEED * (elapsedMs/1000) * dx, MOVE_SPEED * (elapsedMs/1000) * dy);
+          this.viewport().refresh();
+          console.log("Changed");
+          changed = true;
+        }
+        this._axes[index] = axis;
+      });
+    }
+    this._lastTick = Date.now();
+    if (changed) {
+      this._lastChange = Date.now();
+    }
+    this.schedule();
+  }
+}
 
 export default class ViewportInput {
   viewport() {
@@ -51,6 +228,21 @@ export default class ViewportInput {
     return this._attached;
   }
 
+  unmount() {
+    this._uninstallers.forEach(uninstaller=>uninstaller());
+    this._uninstallers = [];
+  }
+
+  findControllerForGamepad(index) {
+    for (let i = 0; i < this._gamepads.length; ++i) {
+      const controller = this._gamepads[i];
+      if (controller.gamepad().index === index) {
+        return controller;
+      }
+    }
+    return null;
+  }
+
   constructor(viewport) {
     this._viewport = viewport;
     this._mousePos = [NaN, NaN];
@@ -62,9 +254,40 @@ export default class ViewportInput {
     }
     this._attached = this.viewport().container();
 
+    this._uninstallers = [];
+
     // Input event callbacks
     //container.addEventListener('dragover', e => e.preventDefault());
     //container.addEventListener('drop', drop)
+
+    this._gamepads = [];
+    this._uninstallers.push(() => {
+      this._gamepads.forEach(controller => controller.cancel());
+      this._gamepads = [];
+    });
+
+    const connected = (e) => {
+      if (!e.gamepad) {
+        return;
+      }
+      console.log("connected");
+      this._gamepads.push(new ViewportGamepad(viewport, e.gamepad));
+    };
+    const disconnected = (e) => {
+      if (!e.gamepad) {
+        return;
+      }
+      console.log("disconnected");
+      const controller = this.findControllerForGamepad(e.gamepad.index);
+      controller.cancel();
+      this._gamepads = this._gamepads.filter(cand => cand !== controller);
+    };
+    window.addEventListener('gamepadconnected', connected);
+    window.addEventListener('gamepaddisconnected', disconnected);
+    this._uninstallers.push(() => {
+      window.removeEventListener('gamepadconnected', connected);
+      window.removeEventListener('gamepaddisconnected', disconnected);
+    });
 
     let isDown = null;
     let [mouseX, mouseY] = [NaN, NaN];

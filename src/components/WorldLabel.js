@@ -65,19 +65,6 @@ export class WorldLabels {
     this._lineWidth = 2;
     this._scaleMultiplier = scaleMultiplier;
     this._font = "sans-serif";
-
-    this._worker = new Worker("occluder.js");
-    this._worker.onmessage = (e) => {
-      if (typeof e.data === "number") {
-        return;
-      }
-      if (e.data.key !== this._workerKey) {
-        return;
-      }
-      if (this._workerCallback) {
-        this._workerCallback(e.data.labels);
-      }
-    };
   }
 
   scaleMultiplier() {
@@ -158,6 +145,21 @@ export class WorldLabels {
       this._drawnLabels = data.map((index) => filteredLabels[index]);
       onFinish();
     };
+
+    if (!this._worker) {
+      this._worker = new Worker("occluder.js");
+      this._worker.onmessage = (e) => {
+        if (typeof e.data === "number") {
+          return;
+        }
+        if (e.data.key !== this._workerKey) {
+          return;
+        }
+        if (this._workerCallback) {
+          this._workerCallback(e.data.labels);
+        }
+      };
+    }
 
     this._worker.postMessage([
       worldX,

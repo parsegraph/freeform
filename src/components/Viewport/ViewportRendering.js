@@ -493,12 +493,12 @@ export default class ViewportRendering {
     const pg = paintGroup;
     const ctx = this.ctx();
 
-    const painter = this._painters.get(pg);
+    const { painter, spotlightPainter } = this._painters.get(pg);
     if (pg.layout().needsCommit() || pg.layout().needsAbsolutePos()) {
       renderData.dirtyGroups++;
       return true;
     }
-    if (!painter) {
+    if (!painter || !spotlightPainter) {
       renderData.dirtyGroups++;
       return true;
     }
@@ -530,13 +530,13 @@ export default class ViewportRendering {
     }
     ++renderData.i;
 
-    painter.render(
-      matrixMultiply3x3(
-        makeScale3x3(pg.layout().absoluteScale()),
-        makeTranslation3x3(pg.layout().absoluteX(), pg.layout().absoluteY()),
-        worldMatrix
-      )
+    const pgMatrix = matrixMultiply3x3(
+      makeScale3x3(pg.layout().absoluteScale()),
+      makeTranslation3x3(pg.layout().absoluteX(), pg.layout().absoluteY()),
+      worldMatrix
     );
+    spotlightPainter.render(pgMatrix);
+    painter.render(pgMatrix);
 
     ctx.save();
     ctx.translate(pg.layout().absoluteX(), pg.layout().absoluteY());

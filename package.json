@@ -26,6 +26,7 @@
     "parsegraph-log": "^1.9.3",
     "parsegraph-rect": "^1.5.5",
     "parsegraph-showincamera": "2.0.2",
+    "parsegraph-spotlightpainter": "^2.3.19",
     "png-chunks-extract": "^1.0.0",
     "prettier": "^2.8.3",
     "react": "^18.2.0",

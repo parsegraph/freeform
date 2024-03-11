@@ -7147,7 +7147,7 @@ parsegraph-color@^1.4.13:
   resolved "https://registry.yarnpkg.com/parsegraph-color/-/parsegraph-color-1.4.13.tgz#fa94a783c42616ddb5405eb5e6b0d529fc212d35"
   integrity sha512-frZvZTTaJgbTMhcs5jsXZ6Gyla4ms76/Y37+vB1Oc5FyTD1kRhAIGJs3YJvZ++/ss6AsC/HlHVqqP98mvdcxSA==
 
-parsegraph-compileprogram@^2.2.22:
+parsegraph-compileprogram@^2.2.22, parsegraph-compileprogram@^2.2.23:
   version "2.2.23"
   resolved "https://registry.yarnpkg.com/parsegraph-compileprogram/-/parsegraph-compileprogram-2.2.23.tgz#ff5e31e9118caa19dc96096ff5037572ce065dc5"
   integrity sha512-IdG4OzIdUIUEkNcUQ4Kgtbk2UCPcrHDNEWbE2C3Vyz2hHM0BmIQZQFqqAxEo+rKYKwAIb8BOJlkzQqeEEdEFeg==
@@ -7172,6 +7172,11 @@ parsegraph-method@^1.4.26:
   resolved "https://registry.yarnpkg.com/parsegraph-method/-/parsegraph-method-1.4.26.tgz#ce3cd94f916817f433328769bf66fe04465ae5ae"
   integrity sha512-ybmHDWgoEfzTT0vSTJLfKsqv2Ug/QBkVm+Qz81wwraEZJ8bPxTgdYIVYxdFZv1tpAB3j5OTlnMEQKPBB7XR/bQ==
 
+parsegraph-pagingbuffer@^2.1.9:
+  version "2.1.9"
+  resolved "https://registry.yarnpkg.com/parsegraph-pagingbuffer/-/parsegraph-pagingbuffer-2.1.9.tgz#4d07ea47367ede2d7d8b3b23e022f2e50249fbc2"
+  integrity sha512-+pxq6HAvyCubQ0Tq8DdsXQnfi2MHkcEvDaBQQOV3BL5643CSpylgiHh4sdT8PzxV6hgUVA4OLQxoLy88JXAjvg==
+
 parsegraph-rect@^1.5.5:
   version "1.5.5"
   resolved "https://registry.yarnpkg.com/parsegraph-rect/-/parsegraph-rect-1.5.5.tgz#88d7b837829237f3ec668e2eb59bd607d64c070c"
@@ -7189,6 +7194,16 @@ parsegraph-showincamera@2.0.2:
   dependencies:
     parsegraph "^6.1.4"
     parsegraph-camera "^1.4.24"
+
+parsegraph-spotlightpainter@^2.3.19:
+  version "2.3.19"
+  resolved "https://registry.yarnpkg.com/parsegraph-spotlightpainter/-/parsegraph-spotlightpainter-2.3.19.tgz#bc2c90d8483eba748362f1274a0bf62c8aebb2b6"
+  integrity sha512-ejVh2+r3IDcOEtW4T44vez+p+6jZkYdcPDU7NZC8LCF9fRSYn3hobEUMxYNfwwLPxmCSMCQ0zXNq+olRdNP4fg==
+  dependencies:
+    parsegraph-color "^1.4.13"
+    parsegraph-compileprogram "^2.2.23"
+    parsegraph-matrix "^1.4.16"
+    parsegraph-pagingbuffer "^2.1.9"
 
 parsegraph@^6.1.4:
   version "6.1.4"

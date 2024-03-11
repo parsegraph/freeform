@@ -17,6 +17,7 @@ import {
 } from "../../settings";
 import { WebGLBlockPainter } from "parsegraph-blockpainter";
 import Color from "parsegraph-color";
+import SpotlightPainter from "parsegraph-spotlightpainter";
 
 const getNodeSize = (node, size, ctx) => {
   size[0] = FONT_SIZE;
@@ -84,12 +85,22 @@ const getSeparation = (node, axis) => {
 };
 
 const paint = (pg, painters, bounds, glProvider, getNodeStyle) => {
-  let painter = painters.get(pg);
+  if (!painters.has(pg)) {
+    painters.set(pg, {});
+  }
+  let painterData = painters.get(pg);
+  let { painter, spotlightPainter } = painterData;
   if (!painter || painter.glProvider() !== glProvider) {
     painter = new WebGLBlockPainter(glProvider);
-    painters.set(pg, painter);
+    painterData.painter = painter;
   } else {
     painter.clear();
+  }
+  if (!spotlightPainter || spotlightPainter._window !== glProvider) {
+    spotlightPainter = new SpotlightPainter(glProvider);
+    painterData.spotlightPainter = spotlightPainter;
+  } else {
+    spotlightPainter.clear();
   }
 
   if (bounds && bounds.has(pg)) {
@@ -139,6 +150,8 @@ const paint = (pg, painters, bounds, glProvider, getNodeStyle) => {
       } else {
         painter.drawBlock(x, y, w, h, w, BORDER_THICKNESS * scale);
       }
+      const radius = (w + h) / 2 / 2;
+      spotlightPainter.drawSpotlight(x, y, 10*radius, new Color(1, 1, 1, 0.1));
     });
   });
 };

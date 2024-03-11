@@ -446,6 +446,7 @@ export default class Viewport {
       return;
     }
     if (this._input) {
+      this._input.unmount();
       this._input = null;
     }
 

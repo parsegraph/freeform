@@ -862,7 +862,6 @@ export default class ViewportRendering {
       return false;
     }
 
-    ++renderData.allGroups;
     this._currentPaintGroup = pg.paintGroup().next();
     if (this._currentPaintGroup !== this.widget()) {
       return true;

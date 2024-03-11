@@ -295,6 +295,9 @@ const buildRandomRainbow = () => {
   for (let col = 0; col < 2 * size; ++col) {
     car.spawnMove("d");
     car.push();
+    if (col % CREASE_ROUNDS === 0) {
+      car.crease();
+    }
 
     const a = Color.random();
     const b = Color.random();
@@ -324,7 +327,9 @@ const buildRainbow = (vert) => {
   for (let l = 0; l < size; ++l) {
     car.spawnMove(vert ? "d" : "f");
     car.push();
-    car.crease();
+    if (l % CREASE_ROUNDS === 0) {
+      car.crease();
+    }
 
     const llerp = l / (size - 1);
     for (let col = 0; col < size; ++col) {

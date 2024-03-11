@@ -68,7 +68,7 @@ const buildRandom = (steps) => {
 };
 
 const buildGrid = (sizeStr) => {
-  let size = SIZE;
+  let size = 5*SIZE;
   if (sizeStr) {
     try {
       if (typeof sizeStr === "string") {
@@ -84,8 +84,14 @@ const buildGrid = (sizeStr) => {
   for (let col = 0; col < size; ++col) {
     car.spawnMove("d");
     car.push();
+    if (col % CREASE_ROUNDS === 0) {
+      car.crease();
+    }
     for (let row = 0; row < size; ++row) {
       car.spawnMove("f", row);
+      if (row % CREASE_ROUNDS === 0) {
+        car.crease();
+      }
     }
     car.pop();
   }
@@ -95,14 +101,14 @@ const buildGrid = (sizeStr) => {
 const buildAlternatingColumns = () => {
   const styles = {};
   const car = new DirectionCaret();
-  for (let col = 0; col < 10 * SIZE; ++col) {
+  for (let col = 0; col < 5 * SIZE; ++col) {
     car.spawnMove("f");
     car.push();
     if (col % CREASE_ROUNDS === 0) {
       car.crease();
     }
     const c = Color.random();
-    for (let row = 0; row < 10 * SIZE; ++row) {
+    for (let row = 0; row < 5 * SIZE; ++row) {
       car.spawnMove(col % 2 !== 0 ? "u" : "d", row);
       styles[car.node().id()] = {
         backgroundColor: c.asHex(),
@@ -135,6 +141,7 @@ const buildPlanner = (inc = 15) => {
       str += " " + (hour >= 12 ? "PM" : "AM");
       car.spawnMove("d", str);
     }
+    car.crease();
   }
   return car.root();
 };

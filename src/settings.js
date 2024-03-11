@@ -18,7 +18,7 @@ const PAGE_BACKGROUND_COLOR = new Color(0.2, 0.2, 0.9, 1);
 const PRINT_PAINT_STATS = false;
 const ENABLE_EXTENT_VIEWING = true;
 
-const CREASE_ROUNDS = 4;
+const CREASE_ROUNDS = 8;
 
 const MAX_ROUNDS = 14;
 

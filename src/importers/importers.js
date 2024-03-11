@@ -30,6 +30,7 @@ function graphWords(input) {
 function graphJsonObject(data) {
   const car = new DirectionCaret();
   car.spawnMove("i");
+  car.crease();
   let hasKeys = false;
   Object.keys(data).forEach((key) => {
     hasKeys = true;
@@ -49,6 +50,9 @@ function graphJsonArray(data) {
   const car = new DirectionCaret();
   data.forEach((elem, index) => {
     car.connectMove(index === 0 ? "i" : "f", graphJson(elem));
+    if (index === 0) {
+      car.crease();
+    }
   });
   return car.root();
 }
@@ -78,6 +82,7 @@ function graphLispTokens(tokens, given) {
     const car = new DirectionCaret();
     car.spawnMove("i");
     car.shrink();
+    car.crease();
     let newLined = false;
     car.push();
     let first = true;

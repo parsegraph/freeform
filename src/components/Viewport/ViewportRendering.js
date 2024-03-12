@@ -591,15 +591,8 @@ export default class ViewportRendering {
           ctx.textBaseline = "top";
           ctx.translate(
             node.layout().groupX(),
-            node.layout().groupY() - (scale * nodeSize[1]) / 2 + scale * 3
+            node.layout().groupY() - (scale * nodeSize[1]) / 2 + BORDER_THICKNESS * 3
           );
-          if (lines.length > 1) {
-            ctx.translate(
-              0,
-              node.layout().groupScale() *
-                ((-(lines.length - 1) * LINE_HEIGHT) / 2 + LINE_HEIGHT) / 2
-            );
-          }
         } else {
           ctx.textAlign = "left";
           ctx.textBaseline = "middle";
@@ -612,9 +605,7 @@ export default class ViewportRendering {
           if (lines.length > 1) {
             ctx.translate(
               0,
-              (-(lines.length - 1) *
-                (node.layout().groupScale() * LINE_HEIGHT)) /
-                2
+              (-(lines.length - 1) * (scale * LINE_HEIGHT)) / 2
             );
           }
         }

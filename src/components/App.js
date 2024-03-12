@@ -538,6 +538,12 @@ function App() {
                       Spotlights
                     </button>
                     <button onClick={() => {
+                      viewport.rendering().toggleWorldLabels();
+                      viewport.refresh();
+                    }}>
+                      Labels
+                    </button>
+                    <button onClick={() => {
                       viewport.rendering().toggleStats();
                       viewport.refresh();
                     }}>

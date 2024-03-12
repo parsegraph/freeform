@@ -597,7 +597,7 @@ export default class ViewportRendering {
             ctx.translate(
               0,
               node.layout().groupScale() *
-                ((-(lines.length - 1) * LINE_HEIGHT) / 2 + LINE_HEIGHT / 2)
+                ((-(lines.length - 1) * LINE_HEIGHT) / 2 + LINE_HEIGHT) / 2
             );
           }
         } else {

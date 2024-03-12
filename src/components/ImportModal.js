@@ -62,6 +62,12 @@ function ImportFromFile({ openGraph, onClose }) {
           case "json":
             openGraph(importers.graphJson(JSON.parse(importData)));
             break;
+          case "javascript":
+            openGraph(importers.graphJavascript(importData));
+            break;
+          case "typescript":
+            openGraph(importers.graphTypescript(importData));
+            break;
           case "parsegraph":
             const data = JSON.parse(importData);
             openGraph(
@@ -124,6 +130,14 @@ function ImportFromFile({ openGraph, onClose }) {
         case "ini":
           setImportType("lines");
           break;
+        case "js":
+        case "jsx":
+          setImportType("javascript");
+          break;
+        case "tsx":
+        case "ts":
+          setImportType("typescript");
+          break;
         default:
           setImportType("words");
           break;
@@ -177,6 +191,8 @@ function ImportFromFile({ openGraph, onClose }) {
         >
           <option value="words">Words</option>
           <option value="parsegraph">Parsegraph</option>
+          <option value="javascript">Javascript</option>
+          <option value="typescript">Typescript</option>
           <option value="lines">Lines</option>
           <option value="lisp">Lisp</option>
           <option value="json">JSON</option>

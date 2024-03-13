@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import "./App.css";
 
 import {
   deserializeParsegraph,
   serializeParsegraph,
 } from "parsegraph";
+import "./App.css";
 import Viewport from "./Viewport/Viewport";
 import ImportModal from "./ImportModal";
 import ExportModal from "./ExportModal";

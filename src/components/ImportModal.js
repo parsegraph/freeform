@@ -13,15 +13,7 @@ import {
 import * as importers from "../importers";
 
 import "./modal.css";
-import {
-  buildAlternatingColumns,
-  buildGrid,
-  buildPlanner,
-  buildRandom,
-  buildMarchMadness,
-  buildFootballPlayoffs,
-  buildTournament,
-} from "../builders";
+import * as builders from "../builders";
 import {
   CREASE_ROUNDS,
   HIDE_PUBLIC_SERVERS_TAB,
@@ -287,112 +279,6 @@ const openSampleJson = (openGraph) => {
     });
 };
 
-const buildRandomRainbow = () => {
-  const car = new DirectionCaret();
-  const styles = {};
-
-  const size = 50;
-  for (let col = 0; col < 2 * size; ++col) {
-    car.spawnMove("d");
-    car.push();
-    if (col % CREASE_ROUNDS === 0) {
-      car.crease();
-    }
-
-    const a = Color.random();
-    const b = Color.random();
-    for (let row = 0; row < size; ++row) {
-      styles[car.node().id()] = {
-        backgroundColor: a.interpolate(b, row / (size - 1)).asHex(),
-        backgroundAlpha: 1,
-      };
-      car.spawnMove("f");
-    }
-    car.pop();
-  }
-
-  return [
-    car.root(),
-    null,
-    null,
-    { styles, pageBackgroundColor: Color.random().asRGBA() },
-  ];
-};
-
-const buildRainbow = (vert) => {
-  const car = new DirectionCaret();
-  const styles = {};
-
-  const size = 20;
-  for (let l = 0; l < size; ++l) {
-    car.spawnMove(vert ? "d" : "f");
-    car.push();
-    if (l % CREASE_ROUNDS === 0) {
-      car.crease();
-    }
-
-    const llerp = l / (size - 1);
-    for (let col = 0; col < size; ++col) {
-      car.spawnMove(vert ? "f" : "d");
-      car.push();
-      const collerp = col / (size - 1);
-      const a = Color.fromLCH(100 * 0, 360 * collerp, llerp * 360);
-      const b = Color.fromLCH(100 * 1, 360 * collerp, llerp * 360);
-      for (let row = 0; row < size; ++row) {
-        styles[car.node().id()] = {
-          backgroundColor: a.interpolate(b, row / (size - 1)).asHex(),
-          backgroundAlpha: 1,
-        };
-        car.spawnMove(vert ? "d" : "f");
-      }
-      car.pop();
-    }
-    car.pop();
-  }
-
-  return [
-    car.root(),
-    null,
-    null,
-    {
-      styles,
-      pageBackgroundColor: new Color(56 / 255, 56 / 255, 56 / 255, 1).asRGBA(),
-    },
-  ];
-};
-
-const buildCross = (numRounds) => {
-  const car = new DirectionCaret();
-
-  const cross = (car, dir, numRounds) => {
-    car.push();
-    if (numRounds % CREASE_ROUNDS === 0) {
-      car.crease();
-    }
-    car.spawnMove(dir);
-    if (numRounds % 2 === 0) {
-      car.shrink();
-    }
-    car.push();
-    if (numRounds >= 0) {
-      cross(car, turnLeft(dir), numRounds - 1);
-    }
-    car.pop();
-    car.push();
-    if (numRounds >= 0) {
-      cross(car, turnRight(dir), numRounds - 1);
-    }
-    car.pop();
-    car.pop();
-  };
-
-  forEachCardinalDirection((dir) => {
-    cross(car, dir, numRounds);
-  });
-
-  return car.root();
-};
-
 function ImportFromTemplate({ openGraph, onClose }) {
   const [importType, setImportType] = useState("blank");
   const [numRounds, setNumRounds] = useState(5);
@@ -410,57 +296,57 @@ function ImportFromTemplate({ openGraph, onClose }) {
         openSampleJson(openGraph);
         break;
       case "grid":
-        openGraph(buildGrid());
+        openGraph(builders.buildGrid());
         break;
       case "daily_planner_5":
-        openGraph(buildPlanner(5));
+        openGraph(builders.buildPlanner(5));
         break;
       case "daily_planner_10":
-        openGraph(buildPlanner(10));
+        openGraph(builders.buildPlanner(10));
         break;
       case "daily_planner_15":
-        openGraph(buildPlanner(15));
+        openGraph(builders.buildPlanner(15));
         break;
       case "daily_planner_30":
-        openGraph(buildPlanner(30));
+        openGraph(builders.buildPlanner(30));
         break;
       case "daily_planner_60":
-        openGraph(buildPlanner(60));
+        openGraph(builders.buildPlanner(60));
         break;
       case "random":
-        openGraph(buildRandom(250));
+        openGraph(builders.buildRandom(250));
         break;
       case "alt_columns":
-        openGraph(...buildAlternatingColumns());
+        openGraph(...builders.buildAlternatingColumns());
         break;
       case "march_madness":
-        openGraph(buildMarchMadness(false));
+        openGraph(builders.buildMarchMadness(false));
         break;
       case "march_madness_vert":
-        openGraph(buildMarchMadness(true));
+        openGraph(builders.buildMarchMadness(true));
         break;
       case "playoffs":
-        openGraph(buildFootballPlayoffs(false));
+        openGraph(builders.buildFootballPlayoffs(false));
         break;
       case "playoffs_vert":
-        openGraph(buildFootballPlayoffs(true));
+        openGraph(builders.buildFootballPlayoffs(true));
         break;
       case "march":
         openGraph(
-          buildTournament(vertical, ...createTournamentRounds(numRounds))
+          builders.buildTournament(vertical, ...createTournamentRounds(numRounds))
         );
         break;
       case "rainbow":
-        openGraph(...buildRainbow());
+        openGraph(...builders.buildRainbow());
         break;
       case "rainbow_vert":
-        openGraph(...buildRainbow(true));
+        openGraph(...builders.buildRainbow(true));
         break;
       case "rainbow_random":
-        openGraph(...buildRandomRainbow());
+        openGraph(...builders.buildRandomRainbow());
         break;
       case "cross":
-        openGraph(buildCross(numRounds));
+        openGraph(builders.buildCross(numRounds));
         break;
       default:
         openGraph(new DirectionNode("Unknown import type: " + importType));

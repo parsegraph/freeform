@@ -221,6 +221,112 @@ const buildFootballPlayoffs = (vertical) => {
   );
 };
 
+const buildRandomRainbow = () => {
+  const car = new DirectionCaret();
+  const styles = {};
+
+  const size = 50;
+  for (let col = 0; col < 2 * size; ++col) {
+    car.spawnMove("d");
+    car.push();
+    if (col % CREASE_ROUNDS === 0) {
+      car.crease();
+    }
+
+    const a = Color.random();
+    const b = Color.random();
+    for (let row = 0; row < size; ++row) {
+      styles[car.node().id()] = {
+        backgroundColor: a.interpolate(b, row / (size - 1)).asHex(),
+        backgroundAlpha: 1,
+      };
+      car.spawnMove("f");
+    }
+    car.pop();
+  }
+
+  return [
+    car.root(),
+    null,
+    null,
+    { styles, pageBackgroundColor: Color.random().asRGBA() },
+  ];
+};
+
+const buildRainbow = (vert) => {
+  const car = new DirectionCaret();
+  const styles = {};
+
+  const size = 20;
+  for (let l = 0; l < size; ++l) {
+    car.spawnMove(vert ? "d" : "f");
+    car.push();
+    if (l % CREASE_ROUNDS === 0) {
+      car.crease();
+    }
+
+    const llerp = l / (size - 1);
+    for (let col = 0; col < size; ++col) {
+      car.spawnMove(vert ? "f" : "d");
+      car.push();
+      const collerp = col / (size - 1);
+      const a = Color.fromLCH(100 * 0, 360 * collerp, llerp * 360);
+      const b = Color.fromLCH(100 * 1, 360 * collerp, llerp * 360);
+      for (let row = 0; row < size; ++row) {
+        styles[car.node().id()] = {
+          backgroundColor: a.interpolate(b, row / (size - 1)).asHex(),
+          backgroundAlpha: 1,
+        };
+        car.spawnMove(vert ? "d" : "f");
+      }
+      car.pop();
+    }
+    car.pop();
+  }
+
+  return [
+    car.root(),
+    null,
+    null,
+    {
+      styles,
+      pageBackgroundColor: new Color(56 / 255, 56 / 255, 56 / 255, 1).asRGBA(),
+    },
+  ];
+};
+
+const buildCross = (numRounds) => {
+  const car = new DirectionCaret();
+
+  const cross = (car, dir, numRounds) => {
+    car.push();
+    if (numRounds % CREASE_ROUNDS === 0) {
+      car.crease();
+    }
+    car.spawnMove(dir);
+    if (numRounds % 2 === 0) {
+      car.shrink();
+    }
+    car.push();
+    if (numRounds >= 0) {
+      cross(car, turnLeft(dir), numRounds - 1);
+    }
+    car.pop();
+    car.push();
+    if (numRounds >= 0) {
+      cross(car, turnRight(dir), numRounds - 1);
+    }
+    car.pop();
+    car.pop();
+  };
+
+  forEachCardinalDirection((dir) => {
+    cross(car, dir, numRounds);
+  });
+
+  return car.root();
+};
+
 export {
   buildMarchMadness,
   buildFootballPlayoffs,
@@ -229,4 +335,7 @@ export {
   buildGrid,
   buildPlanner,
   buildRandom,
+  buildRandomRainbow,
+  buildRainbow,
+  buildCross
 };

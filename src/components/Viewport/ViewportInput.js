@@ -243,6 +243,10 @@ export default class ViewportInput {
     return null;
   }
 
+  canInteract() {
+    return this.viewport().hasWidget() && this.viewport().rendering().showingUI();
+  }
+
   constructor(viewport) {
     this._viewport = viewport;
     this._mousePos = [NaN, NaN];
@@ -313,10 +317,13 @@ export default class ViewportInput {
       const [worldX, worldY] = cam.transform(mouseX, mouseY);
       mouseDownPos[0] = worldX;
       mouseDownPos[1] = worldY;
+      isDown = Date.now();
+      if (!this.canInteract()) {
+        return;
+      }
       let selectedNode = widget
         .layout()
         .nodeUnderCoords(worldX, worldY, 1, size);
-      isDown = Date.now();
       clickedOnSelected = car.node() === selectedNode;
       const boundsRect = absoluteSizeRect(selectedNode);
       if (
@@ -340,9 +347,6 @@ export default class ViewportInput {
     });
 
     canvas.addEventListener("mouseup", (e) => {
-      if (!this.viewport().hasWidget()) {
-        return;
-      }
       let hadGesture = false;
       if (touchingNode) {
         hadGesture = gesture(mouseX, mouseY);
@@ -354,7 +358,7 @@ export default class ViewportInput {
       const car = viewport.caret();
       const cam = viewport.camera();
 
-      if (!isNaN(isDown) && Date.now() - isDown < MAX_CLICK_DELAY_MS) {
+      if (this.canInteract() && !isNaN(isDown) && Date.now() - isDown < MAX_CLICK_DELAY_MS) {
         const [worldX, worldY] = cam.transform(mouseX, mouseY);
         let selectedNode = car
           .root()
@@ -445,6 +449,9 @@ export default class ViewportInput {
           mouseX: touch.clientX,
           mouseY: touch.clientY,
         });
+        if (!this.canInteract()) {
+          continue;
+        }
         const [worldX, worldY] = cam.transform(mouseX, mouseY);
         const size = [0, 0];
         let selectedNode = car
@@ -638,10 +645,7 @@ export default class ViewportInput {
     canvas.addEventListener("keydown", (e) => {
       this._hoveredNode = null;
 
-      if (!this.viewport().hasWidget()) {
-        return;
-      }
-      if (viewport.showingEditor()) {
+      if (!this.canInteract() || viewport.showingEditor()) {
         return;
       }
 

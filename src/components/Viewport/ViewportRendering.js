@@ -77,6 +77,8 @@ export default class ViewportRendering {
     this._phase = 0;
     this._scheduledPostRender = null;
 
+    this._showingUI = true;
+
     const container = viewport.container();
 
     this.resetSettings();
@@ -716,20 +718,21 @@ export default class ViewportRendering {
   }
 
   renderUI() {
-    const ctx = this.ctx();
-    const cam = this.camera();
-    const renderData = this._renderData;
-    if (!cam.canProject()) {
-      return false;
-    }
-    ctx.resetTransform();
-    ctx.scale(cam.scale(), cam.scale());
-    ctx.translate(cam.x(), cam.y());
+    if (this.showingUI()) {
+      const ctx = this.ctx();
+      const cam = this.camera();
+      if (cam.canProject()) {
+        ctx.resetTransform();
+        ctx.scale(cam.scale(), cam.scale());
+        ctx.translate(cam.x(), cam.y());
 
-    this.renderHovered();
-    this.renderCaret();
+        this.renderHovered();
+        this.renderCaret();
+      }
+    }
 
     if (this._offscreenHandler) {
+      const renderData = this._renderData;
       const isOffscreen =
         renderData.i === 0 &&
         renderData.dirtyGroups === 0 &&
@@ -1285,5 +1288,39 @@ export default class ViewportRendering {
 
   renderingSpotlights() {
     return this._renderingSpotlights;
+  }
+
+  showingUI() {
+    return this._showingUI;
+  }
+
+  onUIChanged() {
+    this._onUI?.(this.showingUI());
+    this.viewport().refresh();
+  }
+
+  showUI() {
+    if (this._showingUI) {
+      return;
+    }
+    this._showingUI = true;
+    this.onUIChanged();
+  }
+
+  toggleUI() {
+    this._showingUI = !this._showingUI;
+    this.onUIChanged();
+  }
+
+  hideUI() {
+    if (!this._showingUI) {
+      return;
+    }
+    this._showingUI = false;
+    this.onUIChanged();
+  }
+
+  setOnUI(cb) {
+    this._onUI = cb;
   }
 }

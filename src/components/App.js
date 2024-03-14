@@ -8,7 +8,7 @@ import "./App.css";
 import Viewport from "./Viewport/Viewport";
 import ImportModal from "./ImportModal";
 import ExportModal from "./ExportModal";
-import { PUBLIC_SERVERS, USE_LOCAL_STORAGE } from "../settings";
+import { PRINT_PAINT_STATS, PUBLIC_SERVERS, SHOW_WORLD_LABELS, USE_LOCAL_STORAGE } from "../settings";
 import NodeStylingModal from "./NodeStylingModal";
 import Color from "parsegraph-color";
 import OffscreenModal from "./Viewport/OffscreenModal";
@@ -449,6 +449,26 @@ function App() {
     viewport.rendering().setOffscreenHandler(setOffscreen);
   }, [canvasRef, viewport]);
 
+  const [showingUI, setShowingUI] = useState(true);
+
+  useEffect(() => {
+    if (!viewport) {
+      return;
+    }
+    viewport.rendering().setOnUI((shown) => {
+      console.log(shown);
+      setShowingUI(shown);
+    });
+  }, [viewport, setShowingUI]);
+
+  const goBack = useCallback(() => {
+    if (showingUI) {
+      window.location.href = "/";
+    } else {
+      viewport.rendering().showUI();
+    }
+  }, [showingUI]);
+
   return (
     <>
       <div className="App">
@@ -513,15 +533,15 @@ function App() {
         )}
         <div className="AppMenu">
           <div style={{ flexGrow: "1", display: "flex", gap: "5px" }}>
-            <button onClick={(e) => (window.location.href = "/")}>
+            <button onClick={goBack}>
               &lt;&lt;
             </button>
-            {hasWidget && !showNodeActions && (
+            {(hasWidget && showingUI) && !showNodeActions && (
               <button tabIndex={0} onClick={openImportModal}>
                 Open
               </button>
             )}
-            {hasWidget && (
+            {(hasWidget && showingUI) && (
               <div
                 style={{
                   flexGrow: "1",
@@ -534,21 +554,27 @@ function App() {
                     <button onClick={() => viewport.toggleNodeStyling()}>
                       Style
                     </button>
+                    <button onClick={() => {
+                      viewport.rendering().toggleUI();
+                      viewport.refresh();
+                    }}>
+                      {viewport.rendering().showingUI() ? "View": "Edit" }
+                    </button>
                     <button onClick={() => viewport.rendering().toggleSpotlights()}>
                       Spotlights
                     </button>
-                    <button onClick={() => {
+                    {SHOW_WORLD_LABELS && <button onClick={() => {
                       viewport.rendering().toggleWorldLabels();
                       viewport.refresh();
                     }}>
                       Labels
-                    </button>
-                    <button onClick={() => {
+                    </button>}
+                    {PRINT_PAINT_STATS && <button onClick={() => {
                       viewport.rendering().toggleStats();
                       viewport.refresh();
                     }}>
                       Metrics 
-                    </button>
+                    </button>}
                   </>}
                   {!showNodeActions && hasWidget && (
                     <>
@@ -559,7 +585,7 @@ function App() {
                         Outward
                       </button>
                       <button onClick={() => viewport.toggleEditor()}>
-                        Edit
+                        Node
                       </button>
                     </>
                   )}
@@ -596,16 +622,21 @@ function App() {
                 <ParsegraphEditor viewport={viewport} />
               </div>
             )}
-            {hasWidget && !showNodeActions && (
+            {(hasWidget && showingUI) && !showNodeActions && (
               <button onClick={openExportModal}>Save</button>
             )}
-            {PUBLIC_SERVERS && roomName && (
+            {(hasWidget && showingUI) && PUBLIC_SERVERS && roomName && (
               <button onClick={() => publish()}>Publish to {roomName}</button>
             )}
           </div>
+          {showingUI && <>
           <ParsegraphLog viewport={viewport} />
           <ParsegraphStatus viewport={viewport} />
+          </>}
         </div>
+        {!showingUI && <div>
+          <button style={{position: 'fixed', bottom: '3px', right: '3px'}} onClick={() => viewport.rendering().toggleUI()}>Edit</button>
+        </div>}
       </div>
     </>
   );

@@ -3,8 +3,11 @@ import {
   DirectionCaret,
   DirectionNode,
   PreferredAxis,
+  forEachCardinalDirection,
   reverseDirection,
   turnPositive,
+  turnLeft,
+  turnRight
 } from "parsegraph";
 import Color from "parsegraph-color";
 import { CREASE_ROUNDS, MAX_ROUNDS } from "../settings";

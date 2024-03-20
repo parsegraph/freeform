@@ -543,6 +543,22 @@ export default class ViewportRendering {
       return false;
     }
 
+    const gl = this.glProvider().gl();
+    const { glyphPainter } = this._painters.get(pg);
+    if (!glyphPainter) {
+      return false;
+    }
+
+    const layout = paintGroup.layout();
+    glyphPainter.render(
+      matrixMultiply3x3(
+        makeScale3x3(layout.absoluteScale()),
+        makeTranslation3x3(layout.absoluteX(), layout.absoluteY()),
+        cam.project()
+      )
+    );
+    return false;
+
     ctx.save();
     ctx.translate(pg.layout().absoluteX(), pg.layout().absoluteY());
     ctx.scale(pg.layout().absoluteScale(), pg.layout().absoluteScale());
@@ -839,11 +855,10 @@ export default class ViewportRendering {
     }
 
     const worldMatrix = cam.project();
-    const ctx = this.ctx();
-
+    /*const ctx = this.ctx();
     ctx.resetTransform();
     ctx.scale(cam.scale(), cam.scale());
-    ctx.translate(cam.x(), cam.y());
+    ctx.translate(cam.x(), cam.y());*/
 
     if (!this._currentPaintGroup) {
       this._currentPaintGroup = this.widget();

@@ -30,6 +30,7 @@ const nodeHasValue = (node) =>
   typeof node.value() === "string" || typeof node.value() === "number";
 
 const FONT_SIZE = 10;
+const FONT_UPSCALE = 6;
 const LINE_HEIGHT = FONT_SIZE;
 const BORDER_THICKNESS = 1;
 const LINE_THICKNESS = 3;
@@ -58,6 +59,7 @@ export {
   CRANK_SPEED_MS,
   MAX_PAINT_TIME_MS,
   FONT_SIZE,
+  FONT_UPSCALE,
   LINE_HEIGHT,
   LINE_THICKNESS,
   BORDER_ROUNDEDNESS,

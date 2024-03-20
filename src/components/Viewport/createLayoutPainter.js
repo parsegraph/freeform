@@ -10,6 +10,7 @@ import {
   BORDER_THICKNESS,
   BUD_SIZE,
   FONT_SIZE,
+  FONT_UPSCALE,
   INWARD_SEPARATION,
   LINE_HEIGHT,
   LINE_THICKNESS,
@@ -19,6 +20,7 @@ import { WebGLBlockPainter } from "parsegraph-blockpainter";
 import Color from "parsegraph-color";
 import SpotlightPainter from "parsegraph-spotlightpainter";
 import Rect from "parsegraph-rect";
+import { Font, Label, GlyphPainter } from 'parsegraph-glyphpainter';
 
 const getNodeSize = (node, size, ctx) => {
   size[0] = FONT_SIZE;
@@ -90,7 +92,7 @@ const paint = (pg, painters, bounds, glProvider, getNodeStyle) => {
     painters.set(pg, {});
   }
   let painterData = painters.get(pg);
-  let { painter, spotlightPainter } = painterData;
+  let { painter, spotlightPainter, glyphPainter } = painterData;
   if (!painter || painter.glProvider() !== glProvider) {
     painter = new WebGLBlockPainter(glProvider);
     painterData.painter = painter;
@@ -103,20 +105,33 @@ const paint = (pg, painters, bounds, glProvider, getNodeStyle) => {
   } else {
     spotlightPainter.clear();
   }
+  if (!glyphPainter || glyphPainter._window !== glProvider) {
+    glyphPainter = new GlyphPainter(glProvider, new Font(FONT_UPSCALE * FONT_SIZE, "sans-serif", "normal"));
+    painterData.glyphPainter = glyphPainter;
+  } else {
+    glyphPainter.clear();
+  }
 
   const b = new Rect();
 
   let numBlocks = 0;
+  const glyphCounts = {};
+  const label = new Label(glyphPainter.font());
   pg.siblings().forEach((node) => {
     paintNodeLines(node, BORDER_THICKNESS, () => {
       ++numBlocks;
     });
     paintNodeBounds(node, () => {
       ++numBlocks;
+      if (nodeHasValue(node)) {
+        label.setText("" + node.value());
+        label.glyphCount(glyphCounts, 1);
+      }
     });
   });
 
   painter.initBuffer(numBlocks);
+  glyphPainter.initBuffer(glyphCounts);
 
   pg.siblings().forEach((node) => {
     const style = getNodeStyle(node);
@@ -149,6 +164,17 @@ const paint = (pg, painters, bounds, glProvider, getNodeStyle) => {
           BORDER_ROUNDEDNESS * scale,
           BORDER_THICKNESS * scale
         );
+        if (nodeHasValue(node)) {
+          label.setText("" + node.value());
+          let maxAscent = 0;
+          const scale = node.layout().groupScale();
+          let maxDescent = scale*12;
+          label.lineAt(0).glyphs().forEach(({ascent, descent}) => {
+            maxAscent = Math.max(ascent, maxAscent);
+            maxDescent = Math.max(descent, maxDescent);
+          });
+          label.paint(glyphPainter, x - scale*label.width()/(2*FONT_UPSCALE), y - maxAscent + maxDescent/FONT_UPSCALE, scale/FONT_UPSCALE);
+        }
       } else {
         painter.drawBlock(x, y, w, h, w, BORDER_THICKNESS * scale);
       }

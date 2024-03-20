@@ -557,102 +557,44 @@ export default class ViewportRendering {
         cam.project()
       )
     );
-    return false;
 
-    ctx.save();
-    ctx.translate(pg.layout().absoluteX(), pg.layout().absoluteY());
-    ctx.scale(pg.layout().absoluteScale(), pg.layout().absoluteScale());
+    if (!this._showWorldLabels) {
+      return false;
+    }
+
     // eslint-disable-next-line no-loop-func
     let dirty = false;
     pg.siblings().forEach((node) => {
-      if (node.layout().needsAbsolutePos()) {
-        dirty = true;
-        return;
-      }
-      if (!nodeHasValue(node)) {
-        return;
-      }
-      const lines = node.value().toString().split("\n");
-      if (
-        node.layout().absoluteScale() * cam.scale() <
-        LABEL_IS_VISIBLE_SCALE
-      ) {
         if (!this._worldLabels) {
           this._worldLabels = new WorldLabels(minVisibleTextScale);
         }
-        ++renderData.k;
-        this._worldLabels.draw(
-          lines[0],
-          node.layout().absoluteX(),
-          node.layout().absoluteY(),
-          1.5 * FONT_SIZE,
-          node.layout().absoluteScale(),
-          new Color(1, 1, 1, 1),
-          new Color(0, 0, 0, 1)
-        );
-      }
-      if (node.layout().absoluteScale() * cam.scale() < TEXT_IS_VISIBLE_SCALE) {
-        return;
-      }
-      ++renderData.j;
-      ctx.fillStyle = borderColor.asRGBA();
-      ctx.save();
-      if (node.neighbors().hasNode(Direction.INWARD)) {
-        const nodeSize = [0, 0];
-        node.layout().size(nodeSize);
-        const scale = node.layout().groupScale();
+        if (node.layout().needsAbsolutePos()) {
+          dirty = true;
+          return;
+        }
+        if (!nodeHasValue(node)) {
+          return;
+        }
+        const lines = node.value().toString().split("\n");
         if (
-          node.neighbors().getAlignment(Direction.INWARD) ===
-          Alignment.INWARD_VERTICAL
+          node.layout().absoluteScale() * cam.scale() <
+          LABEL_IS_VISIBLE_SCALE
         ) {
-          ctx.textAlign = "center";
-          ctx.textBaseline = "top";
-          ctx.translate(
-            node.layout().groupX(),
-            node.layout().groupY() - (scale * nodeSize[1]) / 2 + BORDER_THICKNESS * 3
-          );
-        } else {
-          ctx.textAlign = "left";
-          ctx.textBaseline = "middle";
-          ctx.translate(
-            node.layout().groupX() -
-              (scale * nodeSize[0]) / 2 +
-              3 * BORDER_THICKNESS,
-            node.layout().groupY()
-          );
-          if (lines.length > 1) {
-            ctx.translate(
-              0,
-              (-(lines.length - 1) * (scale * LINE_HEIGHT)) / 2
-            );
+          if (!this._worldLabels) {
+            this._worldLabels = new WorldLabels(minVisibleTextScale);
           }
-        }
-      } else {
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.translate(node.layout().groupX(), node.layout().groupY());
-        if (lines.length > 1) {
-          ctx.translate(
-            0,
-            (-(lines.length - 1) * (node.layout().groupScale() * LINE_HEIGHT)) /
-              2
+          ++renderData.k;
+          this._worldLabels.draw(
+            lines[0],
+            node.layout().absoluteX(),
+            node.layout().absoluteY(),
+            1.5 * FONT_SIZE,
+            node.layout().absoluteScale(),
+            new Color(1, 1, 1, 1),
+            new Color(0, 0, 0, 1)
           );
         }
-      }
-      ctx.font = `${FONT_SIZE}px sans-serif`;
-      const style = this.viewport().getNodeStyle(node);
-      ctx.scale(node.layout().groupScale(), node.layout().groupScale());
-      ctx.fillStyle = Color.fromHex(style.textColor)
-        .setA(style.textAlpha)
-        .asRGBA();
-      lines.forEach((line) => {
-        ctx.fillText(line, 0, 0);
-        ctx.translate(0, LINE_HEIGHT);
-      });
-      ctx.restore();
     });
-    ctx.restore();
-
     return dirty;
   }
 

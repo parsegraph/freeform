@@ -173,7 +173,8 @@ const paint = (pg, painters, bounds, glProvider, getNodeStyle) => {
             maxAscent = Math.max(ascent, maxAscent);
             maxDescent = Math.max(descent, maxDescent);
           });
-          label.paint(glyphPainter, x - scale*label.width()/(2*FONT_UPSCALE), y - maxAscent + maxDescent/FONT_UPSCALE, scale/FONT_UPSCALE);
+          glyphPainter.setColor(Color.fromHex(style.textColor).setA(style.textAlpha));
+          label.paint(glyphPainter, x - scale*label.width()/(2*FONT_UPSCALE), y - maxAscent + maxDescent/FONT_UPSCALE - Math.max(0, scale*label.height() - maxAscent - maxDescent)/(2*FONT_UPSCALE), scale/FONT_UPSCALE);
         }
       } else {
         painter.drawBlock(x, y, w, h, w, BORDER_THICKNESS * scale);

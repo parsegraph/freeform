@@ -107,6 +107,7 @@ const paint = (pg, painters, bounds, glProvider, getNodeStyle) => {
   }
   if (!glyphPainter || glyphPainter._window !== glProvider) {
     glyphPainter = new GlyphPainter(glProvider, new Font(FONT_UPSCALE * FONT_SIZE, "sans-serif", "normal"));
+    glyphPainter.setThreshold(1.5);
     painterData.glyphPainter = glyphPainter;
   } else {
     glyphPainter.clear();

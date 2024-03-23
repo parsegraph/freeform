@@ -7164,15 +7164,14 @@ parsegraph-compileprogram@^2.2.22, parsegraph-compileprogram@^2.2.23:
     parsegraph-rect "^1.5.5"
     parsegraph-shader "^1.5.11"
 
-parsegraph-glyphpainter@2.0.3:
-  version "2.0.3"
-  resolved "https://registry.yarnpkg.com/parsegraph-glyphpainter/-/parsegraph-glyphpainter-2.0.3.tgz#07d5f90c161521a6dd013f6181b315f3f35b9449"
-  integrity sha512-FTYTA5EMhhynJJ22VcyyoXc4i87SL7SrjJBatNYVJtUGgCbTXn9SzD6o+ZeJE7O/ceGSeRTNVVKpmvshpBx4pA==
+parsegraph-glyphpainter@2.0.4:
+  version "2.0.4"
+  resolved "https://registry.yarnpkg.com/parsegraph-glyphpainter/-/parsegraph-glyphpainter-2.0.4.tgz#a4b9fef4ab6eb8256265fbf7f4b935f8497ead78"
+  integrity sha512-zETAowcUrll/KeQUwiMdWAaO127FVKfsZdseWkzKtiOWzn5e5CsjJeoHPkMTTI6GgwVCTDMLaUHOvS/mdOHqwA==
   dependencies:
     parsegraph-color "^1.5.1"
     parsegraph-compileprogram "^2.2.23"
     parsegraph-matrix "^1.4.16"
-    parsegraph-sdf "^1.5.9"
     parsegraph-unicode "^1.6.5"
 
 parsegraph-log@^1.9.3:
@@ -7199,11 +7198,6 @@ parsegraph-rect@^1.5.5:
   version "1.5.5"
   resolved "https://registry.yarnpkg.com/parsegraph-rect/-/parsegraph-rect-1.5.5.tgz#88d7b837829237f3ec668e2eb59bd607d64c070c"
   integrity sha512-azp7JM7XRIqAvSgZyrb9apLOs9o7LvTNc1cl/b7R1ZvZJ8BHoyTYxyRcq43/QoRwthqg73li9B4smE3uPa8mPw==
-
-parsegraph-sdf@^1.5.9:
-  version "1.5.9"
-  resolved "https://registry.yarnpkg.com/parsegraph-sdf/-/parsegraph-sdf-1.5.9.tgz#0ced9d2bdee879c5cea1f07b855634f5d6c9dc3e"
-  integrity sha512-T+VFGiUOd08F8ZOxN3YepPIEYSdXXgmIDk0aZ0rjiJjRsUlU92iq7EV/KI7fcF7BB06bewLPrzyB4xoxKfxphw==
 
 parsegraph-shader@^1.5.11:
   version "1.5.11"

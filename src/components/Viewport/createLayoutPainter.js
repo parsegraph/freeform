@@ -20,7 +20,7 @@ import { WebGLBlockPainter } from "parsegraph-blockpainter";
 import Color from "parsegraph-color";
 import SpotlightPainter from "parsegraph-spotlightpainter";
 import Rect from "parsegraph-rect";
-import { Font, Label, GlyphPainter } from 'parsegraph-glyphpainter';
+import { Font, Label, GlyphPainter, GL_TEXTURE_SIZE } from 'parsegraph-glyphpainter';
 
 const getNodeSize = (node, size, ctx) => {
   size[0] = FONT_SIZE;
@@ -107,7 +107,6 @@ const paint = (pg, painters, bounds, glProvider, getNodeStyle) => {
   }
   if (!glyphPainter || glyphPainter._window !== glProvider) {
     glyphPainter = new GlyphPainter(glProvider, new Font(FONT_UPSCALE * FONT_SIZE, "sans-serif", "normal"));
-    glyphPainter.setThreshold(1.5);
     painterData.glyphPainter = glyphPainter;
   } else {
     glyphPainter.clear();
@@ -126,7 +125,7 @@ const paint = (pg, painters, bounds, glProvider, getNodeStyle) => {
       ++numBlocks;
       if (nodeHasValue(node)) {
         label.setText("" + node.value());
-        label.glyphCount(glyphCounts, 1);
+        label.glyphCount(glyphCounts, Math.pow(GL_TEXTURE_SIZE / glyphPainter.font().pageTextureSize(), 2));
       }
     });
   });

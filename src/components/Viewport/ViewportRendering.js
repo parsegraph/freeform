@@ -555,7 +555,8 @@ export default class ViewportRendering {
         makeScale3x3(layout.absoluteScale()),
         makeTranslation3x3(layout.absoluteX(), layout.absoluteY()),
         cam.project()
-      )
+      ),
+      cam.scale()
     );
 
     if (!this._showWorldLabels) {

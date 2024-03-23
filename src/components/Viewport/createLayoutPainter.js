@@ -21,6 +21,7 @@ import Color from "parsegraph-color";
 import SpotlightPainter from "parsegraph-spotlightpainter";
 import Rect from "parsegraph-rect";
 import { Font, Label, GlyphPainter } from 'parsegraph-glyphpainter';
+import paintNodeText from "../../paintNodeText";
 
 const getNodeSize = (node, size, ctx) => {
   size[0] = FONT_SIZE;
@@ -107,7 +108,7 @@ const paint = (pg, painters, bounds, glProvider, getNodeStyle) => {
   }
   if (!glyphPainter || glyphPainter._window !== glProvider) {
     glyphPainter = new GlyphPainter(glProvider, new Font(FONT_UPSCALE * FONT_SIZE, "sans-serif", "normal"));
-    glyphPainter.setThreshold(1.5);
+    glyphPainter.setThreshold(1);
     painterData.glyphPainter = glyphPainter;
   } else {
     glyphPainter.clear();
@@ -175,7 +176,12 @@ const paint = (pg, painters, bounds, glProvider, getNodeStyle) => {
             maxDescent = Math.max(descent, maxDescent);
           });
           glyphPainter.setColor(Color.fromHex(style.textColor).setA(style.textAlpha));
-          label.paint(glyphPainter, x - scale*label.width()/(2*FONT_UPSCALE), y - maxAscent + maxDescent/FONT_UPSCALE - Math.max(0, scale*label.height() - maxAscent - maxDescent)/(2*FONT_UPSCALE), scale/FONT_UPSCALE);
+          paintNodeText(node, (text, textX, textY) => {
+            label.setText(text);
+            label.paint(
+              glyphPainter,
+              textX - scale*label.width()/(2*FONT_UPSCALE), textY- maxAscent + maxDescent/FONT_UPSCALE - Math.max(0, scale*label.height() - maxAscent - maxDescent)/(2*FONT_UPSCALE), scale/FONT_UPSCALE);
+          });
         }
       } else {
         painter.drawBlock(x, y, w, h, w, BORDER_THICKNESS * scale);

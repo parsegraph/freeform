@@ -62,6 +62,7 @@ export default class ViewportRendering {
       ["Focusing camera", () => this.focusCamera(), () => 3],
       ["Clearing background", () => this.clearBackground(), () => 1],
       ["Rendering blocks", () => this.render(), () => this.allPaintGroupCount()],
+      ["Initializing text", () => this.initializeText(), () => 1],
       ["Rendering text", () => this.renderText(), () => this.allNodeCount()],
       [
         "Rendering extents",
@@ -70,6 +71,7 @@ export default class ViewportRendering {
       ],
       ["Rendering UI", () => this.renderUI(), () => 1],
       ["Post-rendering", () => this.postRender(), () => 1],
+      ["Post-rendering text", () => this.postRenderText(), () => 1],
       ["Persisting graph", () => this.persist(), () => 1],
       ["Rendering metrics", () => this.renderMetrics(), () => 1],
     ];
@@ -136,7 +138,32 @@ export default class ViewportRendering {
 
     this._showingStats = PRINT_PAINT_STATS;
 
+    this._textRenderer = null;
+
     this.resetCounts();
+  }
+
+  initializeText() {
+    if (!this._textRenderer) {
+      this._textRenderer = new Worker("textrenderer.js");
+      this._textRenderer.addEventListener("message", (e) => {
+        if (e.data.key !== this._renderTextKey) {
+          return;
+        }
+        this._renderedTextImage = e.data.image;
+        this.viewport().scheduleRender();
+      });
+    }
+    if (this._renderedTextImage && this.camera().changeVersion() === this._renderedTextVersion) {
+      // Already ready
+      return false;
+    }
+    this._renderedTextVersion = this.camera().changeVersion();
+    this._textRenderer.postMessage({
+      event: "init",
+      camera: this.camera().toJSON()
+    });
+    return false;
   }
 
   resetSettings() {
@@ -429,9 +456,17 @@ export default class ViewportRendering {
     this._phase = this.phase() + 1;
   }
 
-  reset() {
+  resetText() {
+    this._renderTextKey = NaN;
+    this._renderedTextImage = null;
+    this._renderedTextVersion = NaN;
+  }
+
+  restart() {
     this.pushPastCrank(!this.isDone());
     this._phase = 0;
+    this.resetCounts();
+    this._layout = null;
     this._currentPaintGroup = null;
     this._renderData = {
       i: 0,
@@ -441,9 +476,11 @@ export default class ViewportRendering {
       dirtyGroups: 0,
       offscreenGroups: 0,
     };
-    this.resetCounts();
+  }
 
-    this._layout = null;
+  reset() {
+    this.restart();
+    this.resetText();
     if (this._worldLabels) {
       this._worldLabels.clear();
     }
@@ -593,9 +630,45 @@ export default class ViewportRendering {
             new Color(1, 1, 1, 1),
             new Color(0, 0, 0, 1)
           );
+        } else if (!this._renderedTextImage) {
+          const style = this.viewport().getNodeStyle(node);
+          const nodeSize = [0, 0];
+          node.layout().size(nodeSize);
+          this.drawText(
+            node.value(),
+            node.layout().absoluteX(),
+            node.layout().absoluteY(),
+            node.layout().absoluteScale(),
+            `${FONT_SIZE}px sans-serif`,
+            Color.fromHex(style.textColor)
+              .setA(style.textAlpha)
+              .asRGBA(),
+            node.neighbors().hasNode(Direction.INWARD),
+            nodeSize,
+            node.neighbors().getAlignment(Direction.INWARD) === Alignment.INWARD_VERTICAL
+          );
         }
     });
     return dirty;
+  }
+
+  drawText(text, worldX, worldY, worldScale, font, fillStyle, hasInward, nodeSize, inwardVertical)
+  {
+    if (!this._textRenderer) {
+      return;
+    }
+    this._textRenderer.postMessage({
+      event: "text",
+      text,
+      worldX,
+      worldY,
+      worldScale,
+      font,
+      fillStyle,
+      hasInward,
+      nodeSize,
+      inwardVertical
+    });
   }
 
   renderPaintGroup(paintGroup, worldMatrix, renderData) {
@@ -796,11 +869,12 @@ export default class ViewportRendering {
       return false;
     }
 
-    const worldMatrix = cam.project();
-    /*const ctx = this.ctx();
-    ctx.resetTransform();
-    ctx.scale(cam.scale(), cam.scale());
-    ctx.translate(cam.x(), cam.y());*/
+    if (this._renderedTextImage) {
+      const ctx = this.ctx();
+      ctx.resetTransform();
+      ctx.drawImage(this._renderedTextImage, 0, 0);
+      return false;
+    }
 
     if (!this._currentPaintGroup) {
       this._currentPaintGroup = this.widget();
@@ -1007,6 +1081,14 @@ export default class ViewportRendering {
           cam.scale()
         );
       }
+    }
+    return false;
+  }
+
+  postRenderText() {
+    if (this._textRenderer && !this._renderedTextImage) {
+      this._renderTextKey = Math.random() + " " + Date.now();
+      this._textRenderer.postMessage({event: "render", key: this._renderTextKey});
     }
     return false;
   }

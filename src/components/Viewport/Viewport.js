@@ -606,6 +606,7 @@ export default class Viewport {
     if (this._scheduledRender) {
       return;
     }
+    this.rendering()?.restart();
     if (SLOW_RENDER) {
       this.scheduleSlowRender();
     } else {

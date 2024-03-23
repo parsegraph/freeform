@@ -1,38 +1,95 @@
-let ctx;
+const { LINE_HEIGHT, BORDER_THICKNESS } = require('../../src/settings');
+
+const Camera = require('parsegraph-camera').default;
+
+let ctx, cam, canvas;
 
 onmessage = (e) => {
     switch(e.data.event) {
     case "init":
-        init(e.data);
+        init(e.data.camera);
         break;
     case "text":
         text(e.data)
         break;
     case "render":
-        render(e.data);
+        render(e.data.key);
         break;
     }
 };
 
-function init({width, height}) {
-    const canvas = new OffscreenCanvas(width, height);
+function init(camData) {
+    cam = new Camera();
+    cam.restore(camData);
+    cam.setSize(camData.width, camData.height);
+    if (!cam.canProject()) {
+        throw new Error("Camera cannot project");
+    }
+    canvas = new OffscreenCanvas(cam.width(), cam.height());
     ctx = canvas.getContext("2d");
+    ctx.scale(cam.scale(), cam.scale());
+    ctx.translate(cam.x(), cam.y());
 }
 
-function text({x, y, text, font, fillStyle}) {
+function text({worldX, worldY, worldScale, text, font, fillStyle, hasInward, nodeSize, inwardVertical}) {
     if (!ctx) {
         throw new Error("Not initialized");
     }
+    const lines = text.split(/\n/g);
     ctx.font = font;
     ctx.fillStyle = fillStyle;
-    ctx.fillText(text, x, y);
+    ctx.save();
+    if (hasInward) {
+        if (inwardVertical) {
+          ctx.textAlign = "center";
+          ctx.textBaseline = "top";
+          ctx.translate(
+            worldX, worldY - (worldScale * nodeSize[1]) / 2 + BORDER_THICKNESS * 3
+          );
+        } else {
+          ctx.textAlign = "left";
+          ctx.textBaseline = "middle";
+          ctx.translate(
+            worldX -
+              (worldScale * nodeSize[0]) / 2 +
+              3 * BORDER_THICKNESS,
+            worldY
+          );
+          if (lines.length > 1) {
+            ctx.translate(
+              0,
+              (-(lines.length - 1) * (worldScale * LINE_HEIGHT)) / 2
+            );
+          }
+        }
+    } else {
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.translate(worldX, worldY);
+        if (lines.length > 1) {
+          ctx.translate(
+            0,
+            (-(lines.length - 1) * (worldScale * LINE_HEIGHT)) /
+              2
+          );
+        }
+    }
+    ctx.scale(worldScale, worldScale);
+    lines.forEach((line) => {
+        ctx.fillText(line, 0, 0);
+        ctx.translate(0, LINE_HEIGHT);
+    });
+    ctx.restore();
 }
 
-function render() {
+function render(key) {
     if (!canvas) {
         throw new Error("Not initialized");
     }
-    postMessage(ctx.transferToImageBitmap());
+    postMessage({
+        key, 
+        image: canvas.transferToImageBitmap()
+    });
 }
 
 /*function renderText()

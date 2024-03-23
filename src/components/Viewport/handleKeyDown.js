@@ -56,11 +56,11 @@ const handleKeyDown = (viewport, key, mouseX, mouseY, modifiers) => {
     case "Backspace":
       viewport.removeNode();
       break;
-    case "e":
+    case "q":
     case "o":
       viewport.moveOutward(DONT_TOUCH_CAMERA);
       break;
-    case "q":
+    case "e":
     case "i":
       viewport.spawnMove(Direction.INWARD, false, DONT_TOUCH_CAMERA);
       break;
@@ -117,21 +117,21 @@ const handleKeyDown = (viewport, key, mouseX, mouseY, modifiers) => {
       viewport.refresh();
       break;
     case "Tab":
-      viewport.tab();
+      viewport.tab(modifiers.shiftKey);
       break;
-    case "ArrowUp":
+    case "ArrowDown":
       cam.adjustOrigin(0, MOVE_SPEED / cam.scale());
       viewport.refresh();
       break;
-    case "ArrowDown":
+    case "ArrowUp":
       cam.adjustOrigin(0, -MOVE_SPEED / cam.scale());
       viewport.refresh();
       break;
-    case "ArrowRight":
+    case "ArrowLeft":
       cam.adjustOrigin(-MOVE_SPEED / cam.scale(), 0);
       viewport.refresh();
       break;
-    case "ArrowLeft":
+    case "ArrowRight":
       cam.adjustOrigin(MOVE_SPEED / cam.scale(), 0);
       viewport.refresh();
       break;

@@ -36,6 +36,7 @@ import {
   LINE_THICKNESS,
   SHOW_NODE_SPOTLIGHTS,
   MAX_PAINT_TIME_MS,
+  WORLD_LABEL_SIZE,
 } from "../../settings";
 import { WorldLabels } from "../WorldLabel";
 import { createLayoutPainter } from "./createLayoutPainter";
@@ -623,7 +624,7 @@ export default class ViewportRendering {
             lines[0],
             node.layout().absoluteX(),
             node.layout().absoluteY(),
-            1.5 * FONT_SIZE,
+            WORLD_LABEL_SIZE,
             node.layout().absoluteScale(),
             new Color(1, 1, 1, 1),
             new Color(0, 0, 0, 1)

@@ -1,4 +1,4 @@
-const { LINE_HEIGHT, BORDER_THICKNESS } = require('../../src/settings');
+const { LINE_HEIGHT, BORDER_THICKNESS, INWARD_SEPARATION, LINE_SPACING, FONT_UPSCALE } = require('../../src/settings');
 
 const Camera = require('parsegraph-camera').default;
 
@@ -35,49 +35,57 @@ function text({worldX, worldY, worldScale, text, font, fillStyle, hasInward, nod
     if (!ctx) {
         throw new Error("Not initialized");
     }
-    const lines = text.split(/\n/g);
+    const lines = text.toString().split(/\n/g);
     ctx.font = font;
     ctx.fillStyle = fillStyle;
     ctx.save();
+    let textWidth = 0;
+    const textHeight = lines.reduce((total, line) => {
+      const metrics = ctx.measureText(line);
+      textWidth += metrics.width;
+      return total + 
+        metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
+    }, 0);
+
     if (hasInward) {
         if (inwardVertical) {
           ctx.textAlign = "center";
           ctx.textBaseline = "top";
           ctx.translate(
-            worldX, worldY - (worldScale * nodeSize[1]) / 2 + BORDER_THICKNESS * 3
+            worldX, worldY - (worldScale * nodeSize[1]) / 2 + worldScale*INWARD_SEPARATION/4
           );
         } else {
           ctx.textAlign = "left";
-          ctx.textBaseline = "middle";
+          ctx.textBaseline = "top";
           ctx.translate(
-            worldX -
-              (worldScale * nodeSize[0]) / 2 +
-              3 * BORDER_THICKNESS,
+            worldX - (worldScale * nodeSize[0]) / 2 + worldScale*INWARD_SEPARATION/4,
             worldY
           );
-          if (lines.length > 1) {
-            ctx.translate(
-              0,
-              (-(lines.length - 1) * (worldScale * LINE_HEIGHT)) / 2
-            );
-          }
+          ctx.translate(
+            0,
+            -textHeight*worldScale/2
+          );
         }
     } else {
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.translate(worldX, worldY);
+        ctx.textAlign = "left";
+        ctx.textBaseline = "hanging";
+        ctx.translate(
+          worldX - (worldScale * nodeSize[0]) / 2 + worldScale*INWARD_SEPARATION/4,
+          worldY - worldScale * textHeight/2
+        );
         if (lines.length > 1) {
           ctx.translate(
             0,
-            (-(lines.length - 1) * (worldScale * LINE_HEIGHT)) /
-              2
+            -(lines.length - 1) * (16/FONT_UPSCALE) / 2
           );
         }
     }
     ctx.scale(worldScale, worldScale);
     lines.forEach((line) => {
         ctx.fillText(line, 0, 0);
-        ctx.translate(0, LINE_HEIGHT);
+        const metrics = ctx.measureText(line);
+        const height = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
+        ctx.translate(0, height*worldScale + 16/worldScale/FONT_UPSCALE);
     });
     ctx.restore();
 }

@@ -5,7 +5,7 @@
   "main": "src/index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "webpack --mode=production ./src/index.js"
+    "build": "webpack --mode=production ./src/index.js -o ../public --output-filename=textrenderer.js"
   },
   "author": "",
   "license": "ISC",

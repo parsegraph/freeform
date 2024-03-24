@@ -14,6 +14,7 @@ import {
   INWARD_SEPARATION,
   LINE_HEIGHT,
   LINE_THICKNESS,
+  NODE_SEPARATION,
   nodeHasValue,
 } from "../../settings";
 import { WebGLBlockPainter } from "parsegraph-blockpainter";
@@ -84,7 +85,7 @@ const getSeparation = (node, axis) => {
   if (axis === Axis.Z) {
     return INWARD_SEPARATION / 2;
   }
-  return FONT_SIZE / 2;
+  return NODE_SEPARATION;
 };
 
 const paint = (pg, painters, bounds, glProvider, getNodeStyle) => {

@@ -30,15 +30,18 @@ const nodeHasValue = (node) =>
   typeof node.value() === "string" || typeof node.value() === "number";
 
 const FONT_SIZE = 10;
+const WORLD_LABEL_SIZE = 15;
 const FONT_UPSCALE = 8;
 const LINE_HEIGHT = FONT_SIZE;
-const BORDER_THICKNESS = 1;
-const LINE_THICKNESS = 3;
-const BORDER_ROUNDEDNESS = 5;
+const BORDER_THICKNESS = FONT_SIZE/10;
+const LINE_THICKNESS = (FONT_SIZE/10)*3;
+const BORDER_ROUNDEDNESS = (FONT_SIZE/10)*5;
 const MAX_CLICK_DELAY_MS = 1000;
 const MOVE_SPEED = FONT_SIZE;
 const BUD_SIZE = 0.75;
-const INWARD_SEPARATION = LINE_THICKNESS * 4;
+const NODE_SEPARATION = FONT_SIZE/2;
+const INWARD_SEPARATION = 2*BORDER_ROUNDEDNESS;
+const LINE_SPACING = 2;
 const MAX_PAINT_TIME_MS = 1000 / 60 * .9;
 
 const CRANK_SPEED_MS = 500;
@@ -50,6 +53,9 @@ const SHOW_WORLD_LABELS = true;
 const SHOW_NODE_SPOTLIGHTS = true;
 
 export {
+  LINE_SPACING,
+  WORLD_LABEL_SIZE,
+  NODE_SEPARATION,
   SHOW_NODE_SPOTLIGHTS,
   DONT_TOUCH_CAMERA,
   SHOW_WORLD_LABELS,

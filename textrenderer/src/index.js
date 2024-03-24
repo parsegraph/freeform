@@ -73,19 +73,13 @@ function text({worldX, worldY, worldScale, text, font, fillStyle, hasInward, nod
           worldX - (worldScale * nodeSize[0]) / 2 + worldScale*INWARD_SEPARATION/4,
           worldY - worldScale * textHeight/2
         );
-        if (lines.length > 1) {
-          ctx.translate(
-            0,
-            -(lines.length - 1) * (16/FONT_UPSCALE) / 2 / 2
-          );
-        }
     }
     ctx.scale(worldScale, worldScale);
     lines.forEach((line) => {
         ctx.fillText(line, 0, 0);
         const metrics = ctx.measureText(line);
         const height = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
-        ctx.translate(0, height*worldScale + 16/worldScale/FONT_UPSCALE/2);
+        ctx.translate(0, height + worldScale*16/FONT_UPSCALE);
     });
     ctx.restore();
 }

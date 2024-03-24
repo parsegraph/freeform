@@ -40,9 +40,11 @@ function text({worldX, worldY, worldScale, text, font, fillStyle, hasInward, nod
     ctx.fillStyle = fillStyle;
     ctx.save();
     let textWidth = 0;
+    let lastDescent;
     const textHeight = lines.reduce((total, line) => {
       const metrics = ctx.measureText(line);
       textWidth += metrics.width;
+      lastDescent = metrics.actualBoundingBoxDescent;
       return total + 
         metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
     }, 0);
@@ -79,7 +81,7 @@ function text({worldX, worldY, worldScale, text, font, fillStyle, hasInward, nod
         ctx.fillText(line, 0, 0);
         const metrics = ctx.measureText(line);
         const height = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
-        ctx.translate(0, height + worldScale*16/FONT_UPSCALE);
+        ctx.translate(0, height + worldScale * Math.min((nodeSize[1] - (textHeight - lastDescent) - INWARD_SEPARATION) / lines.length, 16/FONT_UPSCALE));
     });
     ctx.restore();
 }

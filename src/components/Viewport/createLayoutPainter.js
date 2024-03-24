@@ -174,13 +174,31 @@ const paint = (pg, painters, bounds, glProvider, getNodeStyle) => {
             maxDescent = Math.max(descent, maxDescent);
           });
           glyphPainter.setColor(Color.fromHex(style.textColor).setA(style.textAlpha));
-          label.paint(
-            x - (scale/FONT_UPSCALE)*label.width()/2,
-            y - (scale/FONT_UPSCALE)*label.height()/2,
-            scale/FONT_UPSCALE,
-            (glyph, x, y, scale) => {
-              glyphPainter.drawGlyph(glyph, x, y, scale);
-          });
+          if (!node.neighbors().hasNode(Direction.INWARD)) {
+            label.paint(
+              x - (scale/FONT_UPSCALE)*label.width()/2,
+              y - (scale/FONT_UPSCALE)*label.height()/2,
+              scale/FONT_UPSCALE,
+              (glyph, x, y, scale) => {
+                glyphPainter.drawGlyph(glyph, x, y, scale);
+            });
+          } else if (node.neighbors().getAlignment(Direction.INWARD) === Alignment.INWARD_VERTICAL) {
+            label.paint(
+              x - (scale/FONT_UPSCALE)*label.width()/2,
+              y - h/2 + INWARD_SEPARATION/4,
+              scale/FONT_UPSCALE,
+              (glyph, x, y, scale) => {
+                glyphPainter.drawGlyph(glyph, x, y, scale);
+            });
+          } else {
+            label.paint(
+              x - w/2 + INWARD_SEPARATION/4,
+              y - (scale/FONT_UPSCALE)*label.height()/2,
+              scale/FONT_UPSCALE,
+              (glyph, x, y, scale) => {
+                glyphPainter.drawGlyph(glyph, x, y, scale);
+            });
+          }
         }
       } else {
         painter.drawBlock(x, y, w, h, w, BORDER_THICKNESS * scale);

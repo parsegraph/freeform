@@ -185,14 +185,14 @@ const paint = (pg, painters, bounds, glProvider, getNodeStyle) => {
           } else if (node.neighbors().getAlignment(Direction.INWARD) === Alignment.INWARD_VERTICAL) {
             label.paint(
               x - (scale/FONT_UPSCALE)*label.width()/2,
-              y - h/2 + INWARD_SEPARATION/4,
+              y - h/2 + scale*INWARD_SEPARATION/4,
               scale/FONT_UPSCALE,
               (glyph, x, y, scale) => {
                 glyphPainter.drawGlyph(glyph, x, y, scale);
             });
           } else {
             label.paint(
-              x - w/2 + INWARD_SEPARATION/4,
+              x - w/2 + scale*INWARD_SEPARATION/4,
               y - (scale/FONT_UPSCALE)*label.height()/2,
               scale/FONT_UPSCALE,
               (glyph, x, y, scale) => {

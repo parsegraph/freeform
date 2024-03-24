@@ -19,6 +19,7 @@ jobs:
         node-version: 20
         registry-url: 'https://registry.npmjs.org'
     - run: cd occluder && yarn && ./deploy.sh && cd ..
+    - run: cd textrenderer && yarn && ./deploy.sh && cd ..
     - run: yarn
     - run: yarn build
     - run: cd build && sed -i -re 's/React App/parsegraph/g' ./index.html

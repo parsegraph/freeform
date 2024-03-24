@@ -49,6 +49,7 @@ jobs:
 
     - run: yarn build
     - run: cd occluder && yarn && yarn build && cp dist/main.js ../public/occluder.js && cd -
+    - run: cd textrenderer && yarn && yarn build && cd -
 
     - name: Restore Electron deps
       id: cache-electron-deps-restore

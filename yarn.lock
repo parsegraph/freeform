@@ -7164,10 +7164,10 @@ parsegraph-compileprogram@^2.2.22, parsegraph-compileprogram@^2.2.23:
     parsegraph-rect "^1.5.5"
     parsegraph-shader "^1.5.11"
 
-parsegraph-glyphpainter@3.0.0:
-  version "3.0.0"
-  resolved "https://registry.yarnpkg.com/parsegraph-glyphpainter/-/parsegraph-glyphpainter-3.0.0.tgz#72103156241c2bfdabfe02f72dc52c9fb037a602"
-  integrity sha512-Ejoc8vm9SiSpZ+FwND8CqJu1of5mlnjbJf+RGaLl3OcAoTgz5M6kQzfAeSgSlz6QK4CAdoRL2FCVNnCU7lz0OA==
+parsegraph-glyphpainter@3.0.2:
+  version "3.0.2"
+  resolved "https://registry.yarnpkg.com/parsegraph-glyphpainter/-/parsegraph-glyphpainter-3.0.2.tgz#35849c06981c5b13a2e4e78e508934f79cd4936b"
+  integrity sha512-oZkFkV+hMiVrAOb75t1vJ9+YTXp7LBVBpC3bLeokRBHNXCzqwezh6jY9ye5jN+s/jfCRwEwg6wJlF9cPYqSaSQ==
   dependencies:
     parsegraph-color "^1.5.1"
     parsegraph-compileprogram "^2.2.23"

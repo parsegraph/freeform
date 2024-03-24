@@ -23,7 +23,7 @@
     "parsegraph-camera": "^1.4.24",
     "parsegraph-checkglerror": "^1.5.8",
     "parsegraph-color": "1.5.1",
-    "parsegraph-glyphpainter": "3.0.0",
+    "parsegraph-glyphpainter": "3.0.2",
     "parsegraph-log": "^1.9.3",
     "parsegraph-rect": "^1.5.5",
     "parsegraph-showincamera": "2.0.2",

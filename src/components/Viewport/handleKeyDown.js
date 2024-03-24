@@ -56,11 +56,11 @@ const handleKeyDown = (viewport, key, mouseX, mouseY, modifiers) => {
     case "Backspace":
       viewport.removeNode();
       break;
-    case "e":
+    case "q":
     case "o":
       viewport.moveOutward(DONT_TOUCH_CAMERA);
       break;
-    case "q":
+    case "e":
     case "i":
       viewport.spawnMove(Direction.INWARD, false, DONT_TOUCH_CAMERA);
       break;

@@ -596,10 +596,6 @@ export default class ViewportRendering {
       cam.scale()
     );
 
-    if (!this._showWorldLabels) {
-      return false;
-    }
-
     // eslint-disable-next-line no-loop-func
     let dirty = false;
     pg.siblings().forEach((node) => {
@@ -615,6 +611,7 @@ export default class ViewportRendering {
         }
         const lines = node.value().toString().split("\n");
         if (
+          this._showWorldLabels &&
           node.layout().absoluteScale() * cam.scale() <
           LABEL_IS_VISIBLE_SCALE
         ) {

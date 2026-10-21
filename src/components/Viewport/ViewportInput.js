@@ -7,6 +7,7 @@ import {
 import { matrixTransform2D, midPoint } from "parsegraph-matrix";
 import { handleKeyDown } from "./handleKeyDown";
 import ViewportKeystrokes from "./ViewportKeystrokes";
+import ViewportPan from "./ViewportPan";
 import Rect from "parsegraph-rect";
 
 const INACTION_THROTTLE_MS = 15 * 1000;
@@ -304,13 +305,21 @@ export default class ViewportInput {
     const size = [0, 0];
 
     let clickedOnSelected = false;
-    canvas.addEventListener("mousedown", (e) => {
-      if (!this.viewport().hasWidget()) {
+    let dragged = false;
+    let dragDistance = 0;
+    const pan = new ViewportPan(viewport);
+    this._uninstallers.push(() => pan.stop());
+    const onMouseDown = (e) => {
+      if (e.button !== 0 || !this.viewport().hasWidget()) {
         return;
       }
       if (this.carouselContainer().contains(e.target)) {
         return;
       }
+      pan.beginDrag();
+      dragged = false;
+      dragDistance = 0;
+      touchingNode = false;
       const car = viewport.caret();
       const cam = viewport.camera();
       const widget = car.root();
@@ -347,9 +356,13 @@ export default class ViewportInput {
           cam.containsAll(boundsRect);
         viewport.refresh();
       }
-    });
+    };
+    canvas.addEventListener("mousedown", onMouseDown);
 
-    canvas.addEventListener("mouseup", (e) => {
+    const onMouseUp = (e) => {
+      if (e.button !== 0 || !isDown) {
+        return;
+      }
       let hadGesture = false;
       if (touchingNode) {
         hadGesture = gesture(mouseX, mouseY);
@@ -361,7 +374,11 @@ export default class ViewportInput {
       const car = viewport.caret();
       const cam = viewport.camera();
 
-      if (this.canInteract() && !isNaN(isDown) && Date.now() - isDown < MAX_CLICK_DELAY_MS) {
+      if (
+        !dragged && !hadGesture && canvas.contains(e.target) &&
+        this.canInteract() && !isNaN(isDown) &&
+        Date.now() - isDown < MAX_CLICK_DELAY_MS
+      ) {
         const [worldX, worldY] = cam.transform(mouseX, mouseY);
         let selectedNode = car
           .root()
@@ -378,13 +395,27 @@ export default class ViewportInput {
         }
       }
 
+      if (dragged) {
+        pan.endDrag();
+      } else {
+        pan.stop();
+      }
+      touchingNode = false;
       isDown = null;
       [mouseX, mouseY] = [NaN, NaN];
       viewport.refresh();
-    });
+    };
+    window.addEventListener("mouseup", onMouseUp);
 
-    canvas.addEventListener("mousemove", (e) => {
+    const onMouseMove = (e) => {
       if (!this.viewport().hasWidget()) {
+        return;
+      }
+      if (!isDown && !canvas.contains(e.target)) {
+        return;
+      }
+      if (isDown && !(e.buttons & 1)) {
+        cancelInteraction();
         return;
       }
       const car = viewport.caret();
@@ -393,8 +424,9 @@ export default class ViewportInput {
       const dy = e.clientY - mouseY;
       if (!touchingNode) {
         if (isDown) {
-          cam.adjustOrigin(dx / cam.scale(), dy / cam.scale());
-          viewport.refresh();
+          dragDistance += Math.hypot(dx, dy);
+          dragged = dragDistance > 4;
+          pan.dragBy(dx, dy);
         } else {
           const [worldX, worldY] = cam.transform(e.clientX, e.clientY);
           let hoveredNode = car
@@ -408,6 +440,12 @@ export default class ViewportInput {
         }
       }
       [mouseX, mouseY] = [e.clientX, e.clientY];
+    };
+    window.addEventListener("mousemove", onMouseMove);
+    this._uninstallers.push(() => {
+      canvas.removeEventListener("mousedown", onMouseDown);
+      window.removeEventListener("mouseup", onMouseUp);
+      window.removeEventListener("mousemove", onMouseMove);
     });
 
     const ongoingTouches = new Map();
@@ -422,16 +460,31 @@ export default class ViewportInput {
 
     let touchingNode = false;
 
-    document.body.addEventListener("focusout", () => {
+    const cancelInteraction = () => {
+      pan.stop();
       ongoingTouches.clear();
       touchingNode = false;
       isDown = false;
       [mouseX, mouseY] = [NaN, NaN];
       mouseDownPos[0] = 0;
       mouseDownPos[1] = 0;
+    };
+    document.body.addEventListener("focusout", cancelInteraction);
+    window.addEventListener("blur", cancelInteraction);
+    const onVisibilityChange = () => {
+      if (document.hidden) {
+        cancelInteraction();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    this._uninstallers.push(() => {
+      document.body.removeEventListener("focusout", cancelInteraction);
+      window.removeEventListener("blur", cancelInteraction);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
     });
 
     canvas.addEventListener("touchstart", (e) => {
+      pan.stop();
       this._hoveredNode = null;
       if (!this.viewport().hasWidget()) {
         return;
@@ -648,6 +701,7 @@ export default class ViewportInput {
         return;
       }
       e.preventDefault();
+      pan.stop();
       viewport.camera().zoomToPoint(
         Math.exp(-delta * WHEEL_ZOOM_SENSITIVITY), mouseX, mouseY
       );
@@ -658,19 +712,30 @@ export default class ViewportInput {
       canvas.removeEventListener("wheel", handleWheel);
     });
 
-    canvas.addEventListener("keydown", (e) => {
+    const onKeyDown = (e) => {
       this._hoveredNode = null;
 
       if (!this.canInteract() || viewport.showingEditor()) {
         return;
       }
 
-      if (handleKeyDown(viewport, e.key, mouseX, mouseY, e)) {
+      const panning = pan.keyDown(e.key);
+      if (!panning) {
+        pan.stop();
+      }
+      if (panning || handleKeyDown(viewport, e.key, mouseX, mouseY, e)) {
         if (this.keystrokes()) {
           this.keystrokes().handleKey(e.key);
         }
         e.preventDefault();
       }
+    };
+    const onKeyUp = (e) => pan.keyUp(e.key);
+    canvas.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    this._uninstallers.push(() => {
+      canvas.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
     });
 
     new ResizeObserver(() => {

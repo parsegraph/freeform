@@ -1,5 +1,5 @@
 import { Direction, reverseDirection } from "parsegraph";
-import { DONT_TOUCH_CAMERA, MOVE_SPEED } from "../../settings";
+import { DONT_TOUCH_CAMERA } from "../../settings";
 
 const handleKeyDown = (viewport, key, mouseX, mouseY, modifiers) => {
   const cam = viewport.camera();
@@ -118,22 +118,6 @@ const handleKeyDown = (viewport, key, mouseX, mouseY, modifiers) => {
       break;
     case "Tab":
       viewport.tab(modifiers.shiftKey);
-      break;
-    case "ArrowDown":
-      cam.adjustOrigin(0, MOVE_SPEED / cam.scale());
-      viewport.refresh();
-      break;
-    case "ArrowUp":
-      cam.adjustOrigin(0, -MOVE_SPEED / cam.scale());
-      viewport.refresh();
-      break;
-    case "ArrowLeft":
-      cam.adjustOrigin(-MOVE_SPEED / cam.scale(), 0);
-      viewport.refresh();
-      break;
-    case "ArrowRight":
-      cam.adjustOrigin(MOVE_SPEED / cam.scale(), 0);
-      viewport.refresh();
       break;
     case "`":
     case "~":

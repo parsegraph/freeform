@@ -65,7 +65,7 @@ const ColorField = ({ name, label, style, setStyle }) => {
             step="0.01"
             value={style[name + "Alpha"]}
             onChange={(e) => {
-              setStyle({ ...style, [name + "Alpha"]: e.target.value });
+              setStyle({ ...style, [name + "Alpha"]: Number(e.target.value) });
             }}
           />
         </label>

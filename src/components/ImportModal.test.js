@@ -2,6 +2,8 @@ import { StrictMode } from "react";
 import { render, screen, waitFor, fireEvent, act } from "@testing-library/react";
 import ImportModal from "./ImportModal";
 import { createExample, loadExample } from "../examples";
+import fixture from "../fixtures/v1/appearance-colors.json";
+import { documentState } from "../graphDocument";
 
 jest.mock("../examples", () => ({
   createExample: jest.fn((type, options) => ({ type, ...options })),
@@ -50,4 +52,25 @@ test("a cancelled example load cannot replace a subsequently opened file", async
   fireEvent.click(screen.getByRole("button", { name: "Open", exact: true }));
   await act(async () => finish(loaded));
   expect(openGraph).not.toHaveBeenCalled();
+});
+
+test("file import opens v1 with all capabilities and reports validation errors in the chooser", async () => {
+  const openGraph = jest.fn();
+  const onClose = jest.fn();
+  render(<ImportModal openGraph={openGraph} onClose={onClose} />);
+  fireEvent.click(screen.getByRole("button", { name: "Open", exact: true }));
+  const file = new File([""], "colors.parsegraph");
+  file.text = jest.fn().mockResolvedValue(JSON.stringify(fixture));
+  fireEvent.change(screen.getByLabelText("Choose file"), { target: { files: [file] } });
+  fireEvent.click(screen.getByRole("button", { name: "Import", exact: true }));
+  await waitFor(() => expect(openGraph).toHaveBeenCalledTimes(1));
+  expect(documentState(openGraph.mock.calls[0][0]).capabilities).toEqual(fixture.capabilities);
+  expect(onClose).toHaveBeenCalledTimes(1);
+  openGraph.mockClear();
+  onClose.mockClear();
+  file.text.mockResolvedValue(JSON.stringify({ ...fixture, version: 999 }));
+  fireEvent.click(screen.getByRole("button", { name: "Import", exact: true }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("Could not open file:");
+  expect(openGraph).not.toHaveBeenCalled();
+  expect(onClose).not.toHaveBeenCalled();
 });

@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 import * as exporters from "../exporters";
-import { serializeParsegraph } from "parsegraph";
+import { writeGraph, documentState } from "../graphDocument";
 
 import "./modal.css";
 import { PUBLIC_SERVERS } from "../settings";
@@ -40,15 +40,11 @@ const addExtension = (name, ext) => {
 
 function ExportForm({ viewport, graph, onExport, onClose }) {
   const [exportType, setExportType] = useState("parsegraph");
-  const [name, setName] = useState(graph.value() ?? "graph");
+  const [name, setName] = useState(typeof graph.value() === "string" || typeof graph.value() === "number"
+    ? String(graph.value()) : "graph");
 
-  const exportParsegraph = () => {
-    return {
-      ...serializeParsegraph(graph),
-      selectedNode: viewport.node().id(),
-      viewport: viewport.toJSON(),
-    };
-  };
+  const exportParsegraph = (version = 1) =>
+    writeGraph(graph, viewport.node(), viewport.toJSON(), version);
 
   const performExport = () => {
     try {
@@ -69,6 +65,9 @@ function ExportForm({ viewport, graph, onExport, onClose }) {
             addExtension(name, ".parsegraph"),
             JSON.stringify(exportParsegraph())
           );
+          break;
+        case "parsegraph-v0":
+          download(addExtension(name, ".parsegraph"), JSON.stringify(exportParsegraph(0)));
           break;
         case "words":
           download(
@@ -134,7 +133,8 @@ function ExportForm({ viewport, graph, onExport, onClose }) {
           value={exportType}
           onChange={(e) => setExportType(e.target.value)}
         >
-          <option value="parsegraph">Parsegraph</option>
+          <option value="parsegraph">Parsegraph v1</option>
+          <option value="parsegraph-v0">Parsegraph v0 (legacy; loses capabilities)</option>
           <option value="words">Words</option>
           <option value="lines">Lines</option>
           <option value="lisp">Lisp</option>
@@ -142,9 +142,11 @@ function ExportForm({ viewport, graph, onExport, onClose }) {
           {PUBLIC_SERVERS && <option value="public">Public</option>}
         </select>
       </label>
+      {exportType === "parsegraph-v0" && documentState(graph)?.version === 1 &&
+        <p role="status">Legacy export discards presentation, appearance, generation recipes, and other v1 capabilities.</p>}
       <div className="buttons">
-        <input type="submit" onClick={performExport} value="Save" />
-        <button onClick={onClose}>Cancel</button>
+        <input type="submit" value="Save" />
+        <button type="button" onClick={onClose}>Cancel</button>
       </div>
     </form>
   );

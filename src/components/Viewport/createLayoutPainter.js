@@ -22,6 +22,7 @@ import Color from "parsegraph-color";
 import SpotlightPainter from "parsegraph-spotlightpainter";
 import Rect from "parsegraph-rect";
 import { Font, Label, GlyphPainter, GL_TEXTURE_SIZE } from 'parsegraph-glyphpainter';
+import { createDocumentLayout } from "../../graphPresentation";
 
 const getNodeSize = (node, size, ctx) => {
   size[0] = FONT_SIZE;
@@ -88,7 +89,7 @@ const getSeparation = (node, axis) => {
   return NODE_SEPARATION;
 };
 
-const paint = (pg, painters, bounds, glProvider, getNodeStyle) => {
+const paint = (pg, painters, bounds, glProvider, getNodeStyle, presentation) => {
   if (!painters.has(pg)) {
     painters.set(pg, {});
   }
@@ -124,7 +125,7 @@ const paint = (pg, painters, bounds, glProvider, getNodeStyle) => {
     });
     paintNodeBounds(node, () => {
       ++numBlocks;
-      if (nodeHasValue(node)) {
+      if (!presentation && nodeHasValue(node) && node.value() !== "") {
         label.setText("" + node.value());
         label.glyphCount(glyphCounts, Math.pow(GL_TEXTURE_SIZE / glyphPainter.font().pageTextureSize(), 2));
       }
@@ -156,16 +157,16 @@ const paint = (pg, painters, bounds, glProvider, getNodeStyle) => {
         Color.fromHex(style.borderColor).setA(style.borderAlpha)
       );
       const scale = node.layout().groupScale();
-      if (nodeHasValue(node) || node.neighbors().hasNode(Direction.INWARD)) {
+      if (presentation || nodeHasValue(node) || node.neighbors().hasNode(Direction.INWARD)) {
         painter.drawBlock(
           x,
           y,
           w,
           h,
-          BORDER_ROUNDEDNESS * scale,
-          BORDER_THICKNESS * scale
+          Math.min(BORDER_ROUNDEDNESS * scale, w / 2, h / 2),
+          Math.min(BORDER_THICKNESS * scale, w / 2, h / 2)
         );
-        if (nodeHasValue(node)) {
+        if (!presentation && nodeHasValue(node) && node.value() !== "") {
           label.setText("" + node.value());
           let maxAscent = 0;
           const scale = node.layout().groupScale();
@@ -219,7 +220,8 @@ const createLayoutPainter = (
   bounds,
   glProvider,
   ctx,
-  getNodeStyle
+  getNodeStyle,
+  presentation
 ) => {
   if (!getNodeStyle) {
     throw new Error("getNodeStyle is not defined");
@@ -227,10 +229,12 @@ const createLayoutPainter = (
   if (!ctx) {
     throw new Error("ctx is not defined");
   }
+  const geometry = presentation ? createDocumentLayout(presentation, ctx) : {
+    size: (node, size) => getNodeSize(node, size, ctx), getSeparation,
+  };
   return {
-    size: (node, size) => getNodeSize(node, size, ctx),
-    getSeparation,
-    paint: (pg) => paint(pg, painters, bounds, glProvider, getNodeStyle),
+    ...geometry,
+    paint: (pg) => paint(pg, painters, bounds, glProvider, getNodeStyle, presentation),
   };
 };
 

@@ -2,12 +2,22 @@ import { Direction, DirectionNode } from "parsegraph";
 import * as builders from "./builders";
 import * as importers from "./importers";
 import { MAX_ROUNDS } from "./settings";
+import { readGraph } from "./graphDocument";
+import proportional from "./fixtures/v1/proportion-proportional.json";
+import standard from "./fixtures/v1/proportion-standard.json";
+import math from "./fixtures/v1/proportion-math.json";
+import colors from "./fixtures/v1/appearance-colors.json";
+import memory from "./fixtures/v1/memory-piers.json";
+
+const DOCUMENT_EXAMPLES = { proportion_v1: proportional, proportion_standard_v1: standard,
+  proportion_math_v1: math, appearance_v1: colors, memory_piers_v1: memory };
 
 const TYPES = new Set([
   "blank", "json", "lisp", "grid", "daily_planner_5", "daily_planner_10",
   "daily_planner_15", "daily_planner_30", "daily_planner_60", "random",
   "alt_columns", "march_madness", "march_madness_vert", "playoffs",
   "playoffs_vert", "march", "rainbow", "rainbow_vert", "rainbow_random", "cross",
+  ...Object.keys(DOCUMENT_EXAMPLES),
 ]);
 const RANDOM_TYPES = new Set(["random", "alt_columns", "rainbow_random"]);
 
@@ -73,6 +83,10 @@ function tournamentRounds(count) {
 export async function loadExample(value) {
   const example = normalizeExample(value);
   if (!example) throw new Error("Unknown example or invalid example options.");
+  if (DOCUMENT_EXAMPLES[example.type]) {
+    return { graph: readGraph(DOCUMENT_EXAMPLES[example.type]), selectedNode: null,
+      viewportData: null, example };
+  }
   const random = seededRandom(example.seed ?? 0);
   let args;
   switch (example.type) {

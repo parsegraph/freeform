@@ -27,6 +27,7 @@ import ViewportRendering from "./ViewportRendering";
 import ViewportInput from "./ViewportInput";
 import ViewportCameraTravel from "./ViewportCameraTravel";
 import Carousel from "../Carousel";
+import { documentState, ensureStringIds } from "../../graphDocument";
 
 const findNodeById = (root, id) => {
   let foundNode = null;
@@ -494,7 +495,8 @@ export default class Viewport {
   }
 
   toJSON() {
-    const styles = {};
+    if (documentState(this.widget())?.version === 1) ensureStringIds(this.widget());
+    const styles = Object.create(null);
     this._userCaret
       .root()
       .paintGroup()
@@ -510,6 +512,8 @@ export default class Viewport {
       defaultNodeStyle: this.defaultNodeStyle(),
       pageBackgroundColor: this.rendering().pageBackgroundColor().asRGBA(),
       cam: this.camera().toJSON(),
+      showingUI: this.rendering().showingUI(),
+      appearanceChanged: !!this._appearanceChanged,
     };
   }
 
@@ -560,7 +564,7 @@ export default class Viewport {
         .paintGroup()
         .forEach((pg) => {
           pg.siblings().forEach((node) => {
-            if (viewportData.styles[node.id()]) {
+            if (Object.prototype.hasOwnProperty.call(viewportData.styles, node.id())) {
               this.updateNodeStyle(node, viewportData.styles[node.id()]);
             }
           });
@@ -576,9 +580,13 @@ export default class Viewport {
     }
     if (viewportData.pageBackgroundColor) {
       this.rendering().setPageBackgroundColor(
-        Color.fromRGB(viewportData.pageBackgroundColor)
+        viewportData.pageBackgroundColor.startsWith("#")
+          ? Color.fromHex(viewportData.pageBackgroundColor)
+          : Color.fromRGB(viewportData.pageBackgroundColor)
       );
     }
+    if (viewportData.showingUI === true) this.rendering().showUI();
+    if (viewportData.showingUI === false) this.rendering().hideUI();
     this.refresh();
   }
 
@@ -596,6 +604,7 @@ export default class Viewport {
     this._ensureVisible = true;
 
     this._defaultNodeStyle = createDefaultNodeStyle();
+    this._appearanceChanged = false;
   }
 
   showingStyling() {
@@ -882,10 +891,24 @@ export default class Viewport {
       }
     }
     this.resetSettings();
+    const appearance = documentState(widget)?.appearance;
+    if (appearance) {
+      this.load({
+        defaultNodeStyle: appearance.defaults,
+        styles: appearance.nodeStyles,
+        pageBackgroundColor: Color.fromHex(appearance.pageBackgroundColor)
+          .setA(appearance.pageBackgroundAlpha).asRGBA(),
+      });
+    }
     if (viewport) {
       this.load(viewport);
     }
+    this._appearanceChanged = false;
     this.refresh();
+  }
+
+  presentation() {
+    return documentState(this.widget())?.presentation;
   }
 
   createEditor() {
@@ -997,8 +1020,9 @@ export default class Viewport {
   }
 
   updateDefaultNodeStyle(newRules) {
+    this._appearanceChanged = true;
     this._defaultNodeStyle = {
-      ...this.defaultNodeStyle,
+      ...this.defaultNodeStyle(),
       ...newRules,
     };
     invalidateAll(this.widget());
@@ -1038,9 +1062,15 @@ export default class Viewport {
       newRules = args[1];
     }
 
-    if (newRules.pageBackgroundColor) {
-      this.setPageBackgroundColor(Color.fromHex(newRules.pageBackgroundColor));
+    this._appearanceChanged = true;
+    newRules = { ...newRules };
+    if (newRules.pageBackgroundColor !== undefined || newRules.pageBackgroundAlpha !== undefined) {
+      const color = newRules.pageBackgroundColor !== undefined
+        ? Color.fromHex(newRules.pageBackgroundColor) : this.rendering().pageBackgroundColor().clone();
+      color.setA(newRules.pageBackgroundAlpha ?? this.rendering().pageBackgroundColor().a());
+      this.rendering().setPageBackgroundColor(color);
       delete newRules.pageBackgroundColor;
+      delete newRules.pageBackgroundAlpha;
     }
 
     if (Object.keys(newRules).length === 0) {

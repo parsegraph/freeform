@@ -4,7 +4,6 @@ import {
   Alignment,
   Axis,
   getDirectionAxis,
-  serializeParsegraph,
   directionSign,
   getNegativeDirection,
   getPositiveDirection,
@@ -42,6 +41,8 @@ import {
 } from "../../settings";
 import { WorldLabels } from "../WorldLabel";
 import { createLayoutPainter } from "./createLayoutPainter";
+import { writeGraph } from "../../graphDocument";
+import { drawDocumentLabel } from "../../graphPresentation";
 
 const minVisibleTextScale = 1;
 const initialScale = 8;
@@ -147,6 +148,7 @@ export default class ViewportRendering {
   }
 
   initializeText() {
+    if (this.viewport().presentation()) return false;
     if (!this._textRenderer) {
       this._textRenderer = new Worker("textrenderer.js");
       this._textRenderer.addEventListener("message", (e) => {
@@ -173,6 +175,8 @@ export default class ViewportRendering {
     this._cameraNode = null;
     this._cameraNodeScale = null;
     this._pageBackgroundColor = PAGE_BACKGROUND_COLOR;
+    this._worldLabels = null;
+    this._renderedWorldLabels = null;
   }
 
   extentGlProvider() {
@@ -460,14 +464,10 @@ export default class ViewportRendering {
     glProvider.render();
     gl.viewport(0, 0, cam.width(), cam.height());
 
-    gl.clearColor(
-      this._pageBackgroundColor.r(),
-      this._pageBackgroundColor.g(),
-      this._pageBackgroundColor.b(),
-      this._pageBackgroundColor.a()
-    );
+    // The page's CSS background carries alpha once, behind transparent canvases.
+    gl.clearColor(0, 0, 0, 0);
     gl.enable(gl.BLEND);
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.clear(gl.COLOR_BUFFER_BIT);
 
     this._textCanvas.width = cam.width();
@@ -573,10 +573,9 @@ export default class ViewportRendering {
       "parsegraph-camera",
       JSON.stringify(this.camera().toJSON())
     );
-    // TODO This does not persist colors?
     localStorage.setItem(
       "parsegraph-graph",
-      JSON.stringify(serializeParsegraph(this.widget()))
+      JSON.stringify(writeGraph(this.widget(), this.node(), this.viewport().toJSON()))
     );
   }
 
@@ -588,7 +587,8 @@ export default class ViewportRendering {
         this._bounds,
         this.glProvider(),
         this.ctx(),
-        (node) => this.viewport().getNodeStyle(node)
+        (node) => this.viewport().getNodeStyle(node),
+        this.viewport().presentation()
       )
     );
   }
@@ -620,6 +620,13 @@ export default class ViewportRendering {
 
     const cam = this.camera();
     if (!cam.containsAny(b)) {
+      return false;
+    }
+
+    const presentation = this.viewport().presentation();
+    if (presentation) {
+      pg.siblings().forEach((node) => drawDocumentLabel(ctx, node, cam, presentation,
+        this.viewport().getNodeStyle(node)));
       return false;
     }
 
@@ -1127,6 +1134,7 @@ export default class ViewportRendering {
   }
 
   postRenderText() {
+    if (this.viewport().presentation()) return false;
     if (this._textRenderer && !this._renderedTextImage) {
       this._renderTextKey = Math.random() + " " + Date.now();
       this._textRenderer.postMessage({event: "render", key: this._renderTextKey});

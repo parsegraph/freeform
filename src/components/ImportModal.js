@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { deserializeParsegraph } from "parsegraph";
+import { readGraph, graphViewport, graphSelection } from "../graphDocument";
 
 import * as importers from "../importers";
 
@@ -17,56 +17,33 @@ function ImportFromFile({ openGraph, onClose }) {
   const [importType, setImportType] = useState("words");
   const [importName, setImportName] = useState(null);
 
-  const performImport = useCallback(() => {
-    console.log(importType);
+  const [importError, setImportError] = useState(null);
+  const performImport = useCallback(async () => {
+    setImportError(null);
     try {
+      if (!importData) throw new Error("Choose a file first.");
       if (importType === "png") {
-        importData.arrayBuffer().then((buff) => {
-          openGraph(importers.graphPng(new Uint8Array(buff)));
-        });
-        return;
-      }
-      if (importType === "jpeg") {
-        importData.arrayBuffer().then((buff) => {
-          openGraph(importers.graphJpeg(buff));
-        });
-        return;
-      }
-
-      importData.text().then((importData) => {
+        openGraph(importers.graphPng(new Uint8Array(await importData.arrayBuffer())));
+      } else if (importType === "jpeg") {
+        openGraph(importers.graphJpeg(await importData.arrayBuffer()));
+      } else {
+        const text = await importData.text();
         switch (importType) {
-          case "words":
-            openGraph(importers.graphWords(importData));
+          case "words": openGraph(importers.graphWords(text)); break;
+          case "lisp": openGraph(importers.graphLisp(text)); break;
+          case "json": openGraph(importers.graphJson(JSON.parse(text))); break;
+          case "parsegraph": {
+            const data = JSON.parse(text);
+            openGraph(readGraph(data), graphSelection(data), null, graphViewport(data));
             break;
-          case "lisp":
-            openGraph(importers.graphLisp(importData));
-            break;
-          case "json":
-            openGraph(importers.graphJson(JSON.parse(importData)));
-            break;
-          case "parsegraph":
-            const data = JSON.parse(importData);
-            openGraph(
-              deserializeParsegraph(data),
-              data.selectedNode,
-              null,
-              data.viewport
-            );
-            break;
-          case "lines":
-            openGraph(importers.graphLines(importData));
-            break;
-          default:
-            throw new Error("Unsupported import type: " + importType);
+          }
+          case "lines": openGraph(importers.graphLines(text)); break;
+          default: throw new Error("Unsupported import type: " + importType);
         }
-      });
-    } catch (ex) {
-      console.log(ex);
-      alert(ex);
-    } finally {
-      if (onClose) {
-        onClose();
       }
+      onClose?.();
+    } catch (ex) {
+      setImportError(ex.message);
     }
   }, [onClose, importType, importData, openGraph]);
 
@@ -166,15 +143,15 @@ function ImportFromFile({ openGraph, onClose }) {
           <option value="jpeg">JPEG</option>
         </select>
       </label>
+      {importError && <p role="alert">Could not open file: {importError}</p>}
       <div className="buttons">
         <input
           type="submit"
           style={{ flexGrow: "1" }}
-          onClick={performImport}
           value="Import"
         />
         {onClose && (
-          <button style={{ flexGrow: "1" }} onClick={onClose}>
+          <button type="button" style={{ flexGrow: "1" }} onClick={onClose}>
             Cancel
           </button>
         )}
@@ -188,10 +165,10 @@ const loadRoom = (openGraph, roomName) => {
     .then((resp) => resp.json())
     .then((roomData) => {
       openGraph(
-        deserializeParsegraph(roomData),
+        readGraph(roomData),
         null,
         roomName,
-        roomData.viewport
+        graphViewport(roomData)
       );
     });
 };
@@ -314,6 +291,11 @@ function ImportFromTemplate({ openGraph, onClose }) {
           <option value="rainbow_vert">Rainbow (vertical)</option>
           <option value="rainbow_random">Random Colors</option>
           <option value="cross">Recursive cross</option>
+          <option value="proportion_v1">Proportion (v1)</option>
+          <option value="proportion_standard_v1">Proportion, standard (v1)</option>
+          <option value="proportion_math_v1">Proportion, math (v1)</option>
+          <option value="appearance_v1">Appearance colors (v1)</option>
+          <option value="memory_piers_v1">Memory Piers (v1, seed 42)</option>
         </select>
       </label>
       {(importType === "march" || importType === "cross") && (

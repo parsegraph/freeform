@@ -1,16 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import {
-  deserializeParsegraph,
-  serializeParsegraph,
-} from "parsegraph";
+import { readGraph, writeGraph, documentState } from "../graphDocument";
+import GraphStack from "../GraphStack";
 import "./App.css";
 import Viewport from "./Viewport/Viewport";
 import ImportModal from "./ImportModal";
 import ExportModal from "./ExportModal";
-import { PRINT_PAINT_STATS, PUBLIC_SERVERS, SHOW_WORLD_LABELS, USE_LOCAL_STORAGE } from "../settings";
+import { PRINT_PAINT_STATS, PUBLIC_SERVERS, SHOW_WORLD_LABELS } from "../settings";
 import NodeStylingModal from "./NodeStylingModal";
-import Color from "parsegraph-color";
 import OffscreenModal from "./Viewport/OffscreenModal";
 import MousePanControls from "./MousePanControls";
 import CameraTravelControls from "./CameraTravelControls";
@@ -18,117 +15,11 @@ import { clearExampleSession, initialExampleSession, watchExampleSession } from 
 
 const sessionId = crypto.randomUUID();
 
-const loadGraph = () => {
-  if (!USE_LOCAL_STORAGE) {
-    return null;
-  }
-  try {
-    return JSON.parse(localStorage.getItem("parsegraph-graph"));
-  } catch (ex) {
-    console.log(ex);
-    return null;
-  }
-};
-
-class GraphStack {
-  constructor() {
-    const loaded = loadGraph();
-    if (loaded) {
-      this._actions = [loaded];
-    } else {
-      this._actions = [];
-    }
-    this._actionIndex = this._actions.length - 1;
-  }
-
-  undoCount() {
-    return this._actionIndex;
-  }
-
-  redoCount() {
-    return this._actions.length - (this._actionIndex + 1);
-  }
-
-  hasWidget() {
-    return this._actionIndex >= 0 && this._actionIndex < this._actions.length;
-  }
-
-  widget() {
-    if (this.hasWidget()) {
-      return deserializeParsegraph(this._actions[this._actionIndex]);
-    }
-    return null;
-  }
-
-  viewportData() {
-    if (this.hasWidget()) {
-      return this._actions[this._actionIndex].viewport;
-    }
-    return null;
-  }
-
-  selectedNode() {
-    if (this.hasWidget()) {
-      return this._actions[this._actionIndex].selectedNode;
-    }
-    return null;
-  }
-
-  replace(...saveArgs) {
-    this.save(...saveArgs);
-    if (this._actionIndex < 1) {
-      return;
-    }
-    this._actions[this._actionIndex - 1] = this._actions[this._actionIndex];
-    this._actions.splice(this._actionIndex, 1);
-    this._actionIndex--;
-  }
-
-  save(newGraph, selectedNode, viewport) {
-    const newGraphData = serializeParsegraph(newGraph);
-    if (selectedNode) {
-      newGraphData.selectedNode =
-        typeof selectedNode === "object" ? selectedNode.id() : selectedNode;
-    }
-    newGraphData.viewport =
-      viewport instanceof Viewport ? viewport.toJSON() : viewport;
-    if (
-      this.hasWidget() &&
-      JSON.stringify(this._actions[this._actionIndex]) ===
-        JSON.stringify(newGraphData)
-    ) {
-      return;
-    }
-    if (this._actionIndex < this._actions.length - 1) {
-      this._actions.splice(this._actionIndex + 1);
-    }
-    this._actions.push(newGraphData);
-    this._actionIndex = this._actions.length - 1;
-  }
-
-  undo() {
-    if (this._actionIndex > 0) {
-      --this._actionIndex;
-    }
-  }
-
-  redo() {
-    if (this._actionIndex < this._actions.length - 1) {
-      ++this._actionIndex;
-    }
-  }
-
-  clear() {
-    this._actions = [];
-    this._actionIndex = -1;
-  }
-}
-
 const loadRoom = (openGraph, roomName) => {
   return fetch("/public/" + roomName)
     .then((resp) => resp.json())
     .then((roomData) => {
-      openGraph(deserializeParsegraph(roomData));
+      openGraph(readGraph(roomData));
     });
 };
 
@@ -144,7 +35,7 @@ const loadInitialRoom = (openGraph) => {
   }
   return initialRoom.then((roomData) => {
     if (roomData) {
-      openGraph(deserializeParsegraph(roomData));
+      openGraph(readGraph(roomData));
     }
   });
 };
@@ -158,6 +49,7 @@ function App() {
   const [needsSave, setNeedsSave] = useState(false);
 
   const [hasWidget, setHasWidget] = useState(false);
+  const [documentInfo, setDocumentInfo] = useState(null);
 
   const [autopublish, setAutopublish] = useState(false);
 
@@ -172,7 +64,9 @@ function App() {
     (dontTouchCamera) => {
       setHasWidget(graphs.hasWidget());
       if (graphs.hasWidget()) {
-        viewport.show(graphs.widget(), graphs.viewportData());
+        const root = graphs.widget();
+        viewport.show(root, graphs.viewportData());
+        setDocumentInfo(documentState(root));
         viewport.moveToId(graphs.selectedNode());
         if (!dontTouchCamera) {
           viewport.showInCamera();
@@ -189,9 +83,8 @@ function App() {
     if (!roomName) {
       return;
     }
-    // TODO this won't serialize colors
     fetch("/public/" + roomName + "?sid=" + sessionId, {
-      body: JSON.stringify(serializeParsegraph(graphs.widget())),
+      body: JSON.stringify(writeGraph(viewport.widget(), viewport.node(), viewport.toJSON())),
       headers: {
         "Content-Type": "application/json",
       },
@@ -244,7 +137,7 @@ function App() {
     const es = new EventSource("/public/" + roomName + "?sid=" + sessionId);
     es.onmessage = (e) => {
       const selectedNode = viewport._userCaret.node().id();
-      graphs.save(deserializeParsegraph(JSON.parse(e.data)));
+      graphs.save(readGraph(JSON.parse(e.data)));
       resetUndoCounts();
       refresh(true);
       viewport.moveToId(selectedNode);
@@ -359,7 +252,9 @@ function App() {
     if (graphs._actionIndex < 0) {
       return;
     }
-    viewport.show(graphs.widget(), graphs.viewportData());
+    const root = graphs.widget();
+    viewport.show(root, graphs.viewportData());
+    setDocumentInfo(documentState(root));
   }, [graphs, viewport, refresh, autopublish, publish, undo, redo, refreshUndoCounts]);
 
   useEffect(() => {
@@ -385,7 +280,7 @@ function App() {
     }
     viewport.setToggleNodeStyling((showingStyling) => {
       if (showingStyling) {
-        graphs.save(graphs.widget(), viewport.node().id(), viewport);
+        graphs.save(viewport.widget(), viewport.node().id(), viewport);
         refreshUndoCounts();
         setNodeStyling({
           ...viewport.getNodeStyle(),
@@ -393,6 +288,7 @@ function App() {
             .rendering()
             .pageBackgroundColor()
             .asHex(),
+          pageBackgroundAlpha: viewport.rendering().pageBackgroundColor().a(),
         });
       }
       setNodeStylingModalOpen(showingStyling);
@@ -400,15 +296,8 @@ function App() {
   }, [viewport, setNodeStylingModalOpen, setNodeStyling, graphs, refreshUndoCounts]);
 
   const updateNodeStyling = (newStyling) => {
-    if (newStyling.pageBackgroundColor) {
-      viewport
-        .rendering()
-        .setPageBackgroundColor(Color.fromHex(newStyling.pageBackgroundColor));
-      delete newStyling.pageBackgroundColor;
-      viewport.refresh();
-    }
     viewport.updateNodeStyle(newStyling);
-    graphs.replace(graphs.widget(), viewport.node().id(), viewport);
+    graphs.replace(viewport.widget(), viewport.node().id(), viewport);
   };
 
   const modalRef = useRef();
@@ -537,7 +426,7 @@ function App() {
               onExport={() => {
                 setNeedsSave(false);
               }}
-              graph={graphs.widget()}
+              graph={viewport.widget()}
               onClose={() => setExportModalOpen(false)}
             />
           </div>
@@ -661,6 +550,18 @@ function App() {
         {hasWidget && <div className="navigation-controls">
           <MousePanControls />
           <CameraTravelControls />
+          {documentInfo?.version === 1 && <details className="mouse-pan-controls">
+            <summary>Document capabilities</summary>
+            <div className="mouse-pan-controls-body">
+              <p>V1 document. {documentInfo.presentation ? "Presentation applied. " : "Local sizing. "}
+                {documentInfo.appearance ? "Appearance applied." : "Local colors."}</p>
+              {documentInfo.hasUnsupportedContent && <p>Non-text JSON values are preserved without text labels.</p>}
+              {documentInfo.ignoredCapabilities.length > 0 && <p>
+                Preserved without interpretation: {documentInfo.ignoredCapabilities.join(", ")}.
+                Generation recipes never replace edited nodes automatically.
+              </p>}
+            </div>
+          </details>}
         </div>}
         {!showingUI && <div>
           <button style={{position: 'fixed', bottom: '3px', right: '3px'}} onClick={() => viewport.rendering().toggleUI()}>Edit</button>

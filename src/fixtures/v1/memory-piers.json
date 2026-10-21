@@ -1,0 +1,341 @@
+{
+  "format": "parsegraph",
+  "version": 1,
+  "root": "memory-piers-0",
+  "nodes": [
+    {
+      "id": "memory-piers-0",
+      "scale": 1,
+      "fit": "loose",
+      "layoutPreference": "horizontal",
+      "parentId": null,
+      "parentDir": null,
+      "alignment": "none",
+      "axisOverlap": "default",
+      "rightToLeft": false,
+      "paintGroup": false
+    },
+    {
+      "id": "memory-piers-10",
+      "scale": 1,
+      "fit": "loose",
+      "layoutPreference": "perpendicular",
+      "parentId": "memory-piers-1",
+      "parentDir": "backward",
+      "alignment": "none",
+      "axisOverlap": "default",
+      "rightToLeft": false,
+      "paintGroup": true
+    },
+    {
+      "id": "memory-piers-19",
+      "scale": 1,
+      "fit": "loose",
+      "layoutPreference": "perpendicular",
+      "parentId": "memory-piers-10",
+      "parentDir": "backward",
+      "alignment": "none",
+      "axisOverlap": "default",
+      "rightToLeft": false,
+      "paintGroup": false
+    },
+    {
+      "id": "memory-piers-11",
+      "value": "",
+      "scale": 1,
+      "fit": "loose",
+      "layoutPreference": "perpendicular",
+      "parentId": "memory-piers-10",
+      "parentDir": "downward",
+      "alignment": "none",
+      "axisOverlap": "default",
+      "rightToLeft": false,
+      "paintGroup": false
+    },
+    {
+      "id": "memory-piers-14",
+      "value": "",
+      "scale": 1,
+      "fit": "loose",
+      "layoutPreference": "perpendicular",
+      "parentId": "memory-piers-11",
+      "parentDir": "downward",
+      "alignment": "none",
+      "axisOverlap": "default",
+      "rightToLeft": false,
+      "paintGroup": false
+    },
+    {
+      "id": "memory-piers-15",
+      "value": "",
+      "scale": 1,
+      "fit": "loose",
+      "layoutPreference": "perpendicular",
+      "parentId": "memory-piers-14",
+      "parentDir": "backward",
+      "alignment": "none",
+      "axisOverlap": "default",
+      "rightToLeft": false,
+      "paintGroup": false
+    },
+    {
+      "id": "memory-piers-16",
+      "value": "",
+      "scale": 1,
+      "fit": "loose",
+      "layoutPreference": "perpendicular",
+      "parentId": "memory-piers-15",
+      "parentDir": "upward",
+      "alignment": "none",
+      "axisOverlap": "default",
+      "rightToLeft": false,
+      "paintGroup": false
+    },
+    {
+      "id": "memory-piers-17",
+      "scale": 1,
+      "fit": "loose",
+      "layoutPreference": "perpendicular",
+      "parentId": "memory-piers-14",
+      "parentDir": "forward",
+      "alignment": "none",
+      "axisOverlap": "default",
+      "rightToLeft": false,
+      "paintGroup": false
+    },
+    {
+      "id": "memory-piers-18",
+      "scale": 1,
+      "fit": "loose",
+      "layoutPreference": "perpendicular",
+      "parentId": "memory-piers-17",
+      "parentDir": "forward",
+      "alignment": "none",
+      "axisOverlap": "default",
+      "rightToLeft": false,
+      "paintGroup": false
+    },
+    {
+      "id": "memory-piers-12",
+      "value": "",
+      "scale": 1,
+      "fit": "loose",
+      "layoutPreference": "perpendicular",
+      "parentId": "memory-piers-11",
+      "parentDir": "forward",
+      "alignment": "none",
+      "axisOverlap": "default",
+      "rightToLeft": false,
+      "paintGroup": false
+    },
+    {
+      "id": "memory-piers-13",
+      "value": "",
+      "scale": 1,
+      "fit": "loose",
+      "layoutPreference": "perpendicular",
+      "parentId": "memory-piers-12",
+      "parentDir": "upward",
+      "alignment": "none",
+      "axisOverlap": "default",
+      "rightToLeft": false,
+      "paintGroup": false
+    },
+    {
+      "id": "memory-piers-1",
+      "scale": 1,
+      "fit": "loose",
+      "layoutPreference": "perpendicular",
+      "parentId": "memory-piers-0",
+      "parentDir": "backward",
+      "alignment": "none",
+      "axisOverlap": "default",
+      "rightToLeft": false,
+      "paintGroup": true
+    },
+    {
+      "id": "memory-piers-2",
+      "value": "",
+      "scale": 1,
+      "fit": "loose",
+      "layoutPreference": "perpendicular",
+      "parentId": "memory-piers-1",
+      "parentDir": "upward",
+      "alignment": "none",
+      "axisOverlap": "default",
+      "rightToLeft": false,
+      "paintGroup": false
+    },
+    {
+      "id": "memory-piers-5",
+      "value": "",
+      "scale": 1,
+      "fit": "loose",
+      "layoutPreference": "perpendicular",
+      "parentId": "memory-piers-2",
+      "parentDir": "upward",
+      "alignment": "none",
+      "axisOverlap": "default",
+      "rightToLeft": false,
+      "paintGroup": false
+    },
+    {
+      "id": "memory-piers-8",
+      "value": "",
+      "scale": 1,
+      "fit": "loose",
+      "layoutPreference": "perpendicular",
+      "parentId": "memory-piers-5",
+      "parentDir": "backward",
+      "alignment": "none",
+      "axisOverlap": "default",
+      "rightToLeft": false,
+      "paintGroup": false
+    },
+    {
+      "id": "memory-piers-9",
+      "value": "",
+      "scale": 1,
+      "fit": "loose",
+      "layoutPreference": "perpendicular",
+      "parentId": "memory-piers-8",
+      "parentDir": "upward",
+      "alignment": "none",
+      "axisOverlap": "default",
+      "rightToLeft": false,
+      "paintGroup": false
+    },
+    {
+      "id": "memory-piers-6",
+      "value": "",
+      "scale": 1,
+      "fit": "loose",
+      "layoutPreference": "perpendicular",
+      "parentId": "memory-piers-5",
+      "parentDir": "forward",
+      "alignment": "none",
+      "axisOverlap": "default",
+      "rightToLeft": false,
+      "paintGroup": false
+    },
+    {
+      "id": "memory-piers-7",
+      "value": "",
+      "scale": 1,
+      "fit": "loose",
+      "layoutPreference": "perpendicular",
+      "parentId": "memory-piers-6",
+      "parentDir": "upward",
+      "alignment": "none",
+      "axisOverlap": "default",
+      "rightToLeft": false,
+      "paintGroup": false
+    },
+    {
+      "id": "memory-piers-3",
+      "value": "",
+      "scale": 1,
+      "fit": "loose",
+      "layoutPreference": "perpendicular",
+      "parentId": "memory-piers-2",
+      "parentDir": "forward",
+      "alignment": "none",
+      "axisOverlap": "default",
+      "rightToLeft": false,
+      "paintGroup": false
+    },
+    {
+      "id": "memory-piers-4",
+      "value": "",
+      "scale": 1,
+      "fit": "loose",
+      "layoutPreference": "perpendicular",
+      "parentId": "memory-piers-3",
+      "parentDir": "upward",
+      "alignment": "none",
+      "axisOverlap": "default",
+      "rightToLeft": false,
+      "paintGroup": false
+    }
+  ],
+  "capabilities": {
+    "generation/1": {
+      "generator": {
+        "name": "memory-piers",
+        "revision": 1
+      },
+      "random": {
+        "algorithm": "lcg32/1",
+        "seed": 42
+      },
+      "parameters": {
+        "count": 2
+      }
+    },
+    "presentation/1": {
+      "text": {
+        "fontFamily": "sans-serif",
+        "fontSize": 10,
+        "lineHeight": 10
+      },
+      "styles": {
+        "block": {
+          "minWidth": 37.5,
+          "minHeight": 30,
+          "paddingX": 7.5,
+          "paddingY": 1.25,
+          "square": false
+        },
+        "bud": {
+          "minWidth": 7.5,
+          "minHeight": 7.5,
+          "paddingX": 0,
+          "paddingY": 0,
+          "square": false
+        },
+        "slot": {
+          "minWidth": 37.5,
+          "minHeight": 30,
+          "paddingX": 7.5,
+          "paddingY": 1.25,
+          "square": false
+        },
+        "slider": {
+          "minWidth": 320,
+          "minHeight": 15,
+          "paddingX": 1.25,
+          "paddingY": 1.25,
+          "square": false
+        }
+      },
+      "defaultStyle": "block",
+      "nodeStyles": {
+        "memory-piers-0": "bud",
+        "memory-piers-1": "bud",
+        "memory-piers-2": "slot",
+        "memory-piers-3": "block",
+        "memory-piers-4": "slider",
+        "memory-piers-5": "slot",
+        "memory-piers-6": "block",
+        "memory-piers-7": "slider",
+        "memory-piers-8": "block",
+        "memory-piers-9": "slider",
+        "memory-piers-10": "bud",
+        "memory-piers-11": "slot",
+        "memory-piers-12": "block",
+        "memory-piers-13": "slider",
+        "memory-piers-14": "slot",
+        "memory-piers-15": "block",
+        "memory-piers-16": "slider",
+        "memory-piers-17": "bud",
+        "memory-piers-18": "bud",
+        "memory-piers-19": "bud"
+      },
+      "spacing": {
+        "horizontal": 5,
+        "vertical": 5,
+        "inward": 5
+      }
+    }
+  }
+}

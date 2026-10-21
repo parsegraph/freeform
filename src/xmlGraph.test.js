@@ -1,4 +1,4 @@
-import { Direction, DirectionNode } from "parsegraph";
+import { Direction, DirectionNode, PreferredAxis } from "parsegraph";
 import { TextDecoder, TextEncoder } from "util";
 import { readFileSync } from "fs";
 import { resolve } from "path";
@@ -43,6 +43,49 @@ function tree(xml) {
 }
 
 afterEach(() => jest.restoreAllMocks());
+
+test("attributes are inward and children occupy forward branches of downward buds", () => {
+  const at = (node, direction) => node.neighbors().nodeAt(direction);
+  const children = (node) => {
+    const result = [];
+    let bud = node.neighbors().hasChild(Direction.DOWNWARD)
+      ? at(node, Direction.DOWNWARD)
+      : null;
+    while (bud) {
+      expect(bud.value()).toBeUndefined();
+      expect(bud.siblings().getLayoutPreference()).toBe(PreferredAxis.PERPENDICULAR);
+      result.push(at(bud, Direction.FORWARD));
+      bud = bud.neighbors().hasChild(Direction.DOWNWARD)
+        ? at(bud, Direction.DOWNWARD)
+        : null;
+    }
+    return result;
+  };
+  const source = '<g fill="red" id="group"><rect/><g><circle/></g> tail</g>';
+  const root = graphXml(source);
+  const [group] = children(root);
+  const fill = at(group, Direction.INWARD);
+  expect(fill.value()).toBe("@fill");
+  expect(at(fill, Direction.FORWARD).value()).toBe("red");
+  const id = at(fill, Direction.DOWNWARD);
+  expect(id.value()).toBe("@id");
+  expect(at(id, Direction.FORWARD).value()).toBe("group");
+  const content = children(group);
+  expect(content.map((node) => node.value())).toEqual(["<rect>", "<g>", "#text"]);
+  expect(children(content[1]).map((node) => node.value())).toEqual(["<circle>"]);
+  expect(at(content[2], Direction.DOWNWARD).value()).toBe(" tail");
+  expect(exportGraphToXml(root)).toBe(source);
+});
+
+test("export reports malformed child buds instead of discarding their contents", () => {
+  const root = graphXml("<a/>");
+  const bud = root.neighbors().nodeAt(Direction.DOWNWARD);
+  bud.setValue("unexpected text");
+  expect(() => exportGraphToXml(root)).toThrow(/buds must be empty/);
+  bud.setValue(undefined);
+  bud.disconnect(Direction.FORWARD);
+  expect(() => exportGraphToXml(root)).toThrow(/XML node to its right/);
+});
 
 test("SVG round-trip preserves namespaces, attributes, mixed content, whitespace, CDATA, comments and PIs", () => {
   const graph = graphXml(svg);

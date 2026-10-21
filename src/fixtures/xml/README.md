@@ -6,11 +6,15 @@ an opaque copy of the original source. It survives Parsegraph v1 save/reload,
 and XML export reads the graph's current contents.
 
 - The root is `#document`.
-- Child content starts inward; siblings continue forward in document order.
-- An element is labeled `<qualified:name>`. Its attributes form a downward
-  chain of `@qualified:name` nodes, each with its literal value to the right.
+- Each child has an empty bud below its parent (or the previous child's bud),
+  with the XML node attached forward from that bud. The downward bud chain
+  preserves document order, including text and whitespace nodes. Buds pull
+  forward so each child stays snug before the next row is laid out.
+- An element is labeled `<qualified:name>`. Its attributes start inward and
+  form a downward chain of `@qualified:name` nodes, each with its literal value
+  to the right. The attribute list is contained inside the element.
 - `#text`, `#cdata`, `#comment`, `#doctype`, and `?target` have a value below.
-- `#xml` represents the optional XML declaration, with attributes below it.
+- `#xml` represents the optional XML declaration, with attributes inward too.
 
 Text and whitespace inside elements are preserved, including mixed content,
 indentation, empty attributes, and `xml:space`. Namespace declarations and

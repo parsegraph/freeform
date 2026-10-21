@@ -169,16 +169,29 @@ function dataNode(kind, value) {
 }
 
 function addAttributes(node, attributes) {
-  let previous = node;
+  let previous;
   for (const [name, value] of attributes) {
     const attribute = new DirectionNode(`@${name}`);
-    previous.connect(Direction.DOWNWARD, attribute);
+    if (previous) previous.connect(Direction.DOWNWARD, attribute);
+    else {
+      node.connect(Direction.INWARD, attribute);
+      attribute.paintGroups().crease();
+    }
     attribute.connect(Direction.FORWARD, new DirectionNode(value));
+    attribute.siblings().pull(Direction.FORWARD);
     previous = attribute;
   }
 }
 
-/** Ordered XML grammar: inward children, forward siblings, downward attributes. */
+function appendChild(previous, node) {
+  const bud = new DirectionNode();
+  previous.connect(Direction.DOWNWARD, bud);
+  bud.connect(Direction.FORWARD, node);
+  bud.siblings().pull(Direction.FORWARD);
+  return bud;
+}
+
+/** Attributes inward; ordered children forward from a downward chain of buds. */
 export function graphXml(input) {
   const parsed = parseSource(input);
   const root = new DirectionNode("#document");
@@ -188,12 +201,11 @@ export function graphXml(input) {
   if (parsed.declaration) {
     const declaration = new DirectionNode("#xml");
     addAttributes(declaration, declarationAttributes(parsed.declaration));
-    root.connect(Direction.INWARD, declaration);
-    jobs[0].previous = declaration;
+    jobs[0].previous = appendChild(root, declaration);
   }
   while (jobs.length) {
     const { parent, children, previous: firstPrevious } = jobs.pop();
-    let previous = firstPrevious;
+    let previous = firstPrevious || parent;
     for (const child of children) {
       let node;
       switch (child.nodeType) {
@@ -227,12 +239,7 @@ export function graphXml(input) {
         default:
           fail(`Unsupported XML node type ${child.nodeType}.`);
       }
-      if (previous) previous.connect(Direction.FORWARD, node);
-      else {
-        parent.connect(Direction.INWARD, node);
-        node.paintGroups().crease();
-      }
-      previous = node;
+      previous = appendChild(previous, node);
     }
   }
   return root;
@@ -269,7 +276,7 @@ function valueOf(node) {
   return node.value();
 }
 function dataOf(node) {
-  checkChildren(node, [Direction.DOWNWARD, Direction.FORWARD]);
+  checkChildren(node, [Direction.DOWNWARD]);
   const data = child(node, Direction.DOWNWARD);
   if (!data) fail(`${valueOf(node)} needs a value below it.`);
   checkChildren(data, []);
@@ -278,7 +285,7 @@ function dataOf(node) {
 function attributesOf(node) {
   const attributes = [];
   const names = new Set();
-  let attribute = child(node, Direction.DOWNWARD);
+  let attribute = child(node, Direction.INWARD);
   while (attribute) {
     checkChildren(attribute, [Direction.DOWNWARD, Direction.FORWARD]);
     const label = valueOf(attribute);
@@ -312,40 +319,40 @@ function escaped(value, attribute = false) {
 function serializeGraph(root) {
   if (root.value() !== "#document")
     fail("Export requires an imported XML graph with a #document root.");
-  checkChildren(root, [Direction.INWARD]);
+  checkChildren(root, [Direction.DOWNWARD]);
   const output = [];
-  const jobs = [{ node: child(root, Direction.INWARD), documentLevel: true }];
+  const jobs = [{ bud: child(root, Direction.DOWNWARD), documentLevel: true }];
   while (jobs.length) {
     const job = jobs.pop();
     if (job.close) {
       output.push(job.close);
       continue;
     }
-    const { node, documentLevel } = job;
-    if (!node) continue;
-    const sibling = child(node, Direction.FORWARD);
-    if (sibling) jobs.push({ node: sibling, documentLevel });
+    const { bud, documentLevel } = job;
+    if (!bud) continue;
+    checkChildren(bud, [Direction.DOWNWARD, Direction.FORWARD]);
+    if (valueOf(bud) !== "") fail("Child list buds must be empty.");
+    const node = child(bud, Direction.FORWARD);
+    if (!node) fail("Each child list bud needs an XML node to its right.");
+    const sibling = child(bud, Direction.DOWNWARD);
+    if (sibling) jobs.push({ bud: sibling, documentLevel });
     const label = valueOf(node);
     if (label.startsWith("<") && label.endsWith(">")) {
-      checkChildren(node, [
-        Direction.INWARD,
-        Direction.DOWNWARD,
-        Direction.FORWARD,
-      ]);
+      checkChildren(node, [Direction.INWARD, Direction.DOWNWARD]);
       const name = label.slice(1, -1);
       const attributes = attributesOf(node)
         .map(([key, value]) => ` ${key}="${escaped(value, true)}"`)
         .join("");
-      const first = child(node, Direction.INWARD);
+      const first = child(node, Direction.DOWNWARD);
       output.push(`<${name}${attributes}${first ? ">" : "/>"}`);
       if (first) {
         jobs.push({ close: `</${name}>` });
-        jobs.push({ node: first, documentLevel: false });
+        jobs.push({ bud: first, documentLevel: false });
       }
     } else if (label === "#xml") {
       if (!documentLevel || output.length)
         fail("The XML declaration must be first in the document.");
-      checkChildren(node, [Direction.DOWNWARD, Direction.FORWARD]);
+      checkChildren(node, [Direction.INWARD]);
       const attributes = attributesOf(node)
         .map(
           ([key, value]) =>

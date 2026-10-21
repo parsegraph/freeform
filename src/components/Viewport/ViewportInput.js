@@ -21,6 +21,10 @@ const VIEW_PAN_KEYS = new Map([
   ["s", "ArrowDown"],
   ["d", "ArrowRight"],
 ]);
+const NODE_DIRECTIONS = new Map([
+  ["ArrowUp", Direction.UPWARD], ["ArrowDown", Direction.DOWNWARD],
+  ["ArrowLeft", Direction.BACKWARD], ["ArrowRight", Direction.FORWARD],
+]);
 
 const distance = (x1, y1, x2, y2) => {
   return Math.sqrt(Math.pow(y2 - y1, 2) + Math.pow(x2 - x1, 2));
@@ -402,7 +406,7 @@ export default class ViewportInput {
 
       if (
         includeFinalMovement && !dragged && !hadGesture && canvas.contains(e.target) &&
-        this.canInteract() && !isNaN(isDown) &&
+        !isNaN(isDown) &&
         Date.now() - isDown < MAX_CLICK_DELAY_MS
       ) {
         const [worldX, worldY] = cam.transform(mouseX, mouseY);
@@ -410,7 +414,10 @@ export default class ViewportInput {
           .root()
           .layout()
           .nodeUnderCoords(worldX, worldY, 1, size);
-        if (clickedOnSelected && selectedNode === car.node()) {
+        if (!this.canInteract()) {
+          if (selectedNode) viewport.selectNode(selectedNode);
+          else viewport.clearNodeSelection();
+        } else if (clickedOnSelected && selectedNode === car.node()) {
           viewport.toggleEditor();
         } else {
           viewport.hideEditor();
@@ -483,11 +490,13 @@ export default class ViewportInput {
     };
 
     let touchingNode = false;
+    let viewTouch = null;
 
     const cancelInteraction = () => {
       viewport.cancelCameraTravel?.();
       pan.stop();
       ongoingTouches.clear();
+      viewTouch = null;
       touchingNode = false;
       isDown = false;
       [mouseX, mouseY] = [NaN, NaN];
@@ -532,6 +541,12 @@ export default class ViewportInput {
           mouseY: touch.clientY,
         });
         if (!this.canInteract()) {
+          // View-mode taps select on release; drags and pinches keep panning.
+          touchingNode = false;
+          viewTouch = numActiveTouches() === 1 ? {
+            id: touch.identifier, x: touch.clientX, y: touch.clientY,
+            time: e.timeStamp, moved: false,
+          } : null;
           continue;
         }
         const [worldX, worldY] = cam.transform(mouseX, mouseY);
@@ -602,6 +617,7 @@ export default class ViewportInput {
     };
 
     canvas.addEventListener("touchcancel", (e) => {
+      viewTouch = null;
       if (!this.viewport().hasWidget()) {
         return;
       }
@@ -626,6 +642,22 @@ export default class ViewportInput {
       }
       let [mouseX, mouseY] = [NaN, NaN];
       const isGesture = numActiveTouches() === 1;
+      if (!this.canInteract()) {
+        for (const touch of e.changedTouches) {
+          if (viewTouch?.id === touch.identifier && isGesture && !viewTouch.moved &&
+            Math.hypot(touch.clientX - viewTouch.x, touch.clientY - viewTouch.y) <= 8 &&
+            e.timeStamp - viewTouch.time < MAX_CLICK_DELAY_MS) {
+            const [x, y] = cam.transform(touch.clientX, touch.clientY);
+            const selected = car.root().layout().nodeUnderCoords(x, y, 1, size);
+            if (selected) viewport.selectNode(selected);
+            else viewport.clearNodeSelection();
+          }
+          ongoingTouches.delete(touch.identifier);
+        }
+        viewTouch = null;
+        touchingNode = false;
+        return;
+      }
       for (let i = 0; i < e.changedTouches.length; ++i) {
         const touch = e.changedTouches[i];
         const touchData = ongoingTouches.get(touch.identifier);
@@ -663,6 +695,14 @@ export default class ViewportInput {
       }
       const cam = viewport.camera();
       e.preventDefault();
+      if (viewTouch) {
+        for (const touch of e.changedTouches) {
+          if (touch.identifier === viewTouch.id &&
+            Math.hypot(touch.clientX - viewTouch.x, touch.clientY - viewTouch.y) > 8) {
+            viewTouch.moved = true;
+          }
+        }
+      }
 
       if (numActiveTouches() > 1) {
         const [first, second] = [...ongoingTouches.values()];
@@ -751,6 +791,20 @@ export default class ViewportInput {
         !e.ctrlKey && !e.metaKey && !e.altKey
         ? VIEW_PAN_KEYS.get(key) || e.key
         : e.key;
+      if (!this.canInteract() && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        if (e.key === "Escape") {
+          pan.stop();
+          viewport.clearNodeSelection();
+          e.preventDefault();
+          return;
+        }
+        if (viewport.navigatingNodes() && NODE_DIRECTIONS.has(direction)) {
+          pan.stop();
+          viewport.moveToNeighbor(NODE_DIRECTIONS.get(direction));
+          e.preventDefault();
+          return;
+        }
+      }
       const panning = pan.keyDown(key, direction);
       if (!panning) {
         if (!this.canInteract()) {

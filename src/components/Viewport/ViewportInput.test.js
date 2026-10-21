@@ -48,6 +48,11 @@ beforeEach(() => {
     refresh: jest.fn(),
     hideEditor: jest.fn(),
     toggleEditor: jest.fn(),
+    repaint: jest.fn(),
+    navigatingNodes: () => false,
+    selectNode: jest.fn(),
+    clearNodeSelection: jest.fn(),
+    moveToNeighbor: jest.fn(),
   };
   input = new ViewportInput(viewport);
 });
@@ -80,6 +85,15 @@ function mouse(target, type, x, buttons = 1) {
   });
   Object.defineProperty(event, "timeStamp", { value: time });
   target.dispatchEvent(event);
+}
+
+function touch(type, points) {
+  const event = new Event(type, { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "changedTouches", { value: points.map(([identifier, x, y]) => ({
+    identifier, clientX: x, clientY: y,
+  })) });
+  Object.defineProperty(event, "timeStamp", { value: time });
+  canvas.dispatchEvent(event);
 }
 
 test("a fast flick reported at mouseup pans and glides without waiting for grace", () => {
@@ -167,6 +181,78 @@ test("View mode continues to block editing shortcuts", () => {
   expect(key(canvas, "keydown", "Enter").defaultPrevented).toBe(false);
   expect(viewport.removeNode).not.toHaveBeenCalled();
   expect(viewport.toggleEditor).not.toHaveBeenCalled();
+});
+
+test.each([
+  ["w", Direction.UPWARD], ["a", Direction.BACKWARD],
+  ["s", Direction.DOWNWARD], ["d", Direction.FORWARD],
+  ["ArrowUp", Direction.UPWARD], ["ArrowLeft", Direction.BACKWARD],
+  ["ArrowDown", Direction.DOWNWARD], ["ArrowRight", Direction.FORWARD],
+])("View mode %s follows neighbors after selection without panning", (value, direction) => {
+  viewport.rendering = () => ({ showingUI: () => false });
+  viewport.navigatingNodes = () => true;
+  viewport.spawnMove = jest.fn();
+  expect(key(canvas, "keydown", value).defaultPrevented).toBe(true);
+  advance(200);
+  expect(viewport.moveToNeighbor).toHaveBeenCalledWith(direction);
+  expect(position).toEqual([0, 0]);
+  expect(viewport.spawnMove).not.toHaveBeenCalled();
+});
+
+test("Escape stops following nodes and returns arrows to panning", () => {
+  viewport.rendering = () => ({ showingUI: () => false });
+  let navigating = true;
+  viewport.navigatingNodes = () => navigating;
+  viewport.clearNodeSelection.mockImplementation(() => { navigating = false; });
+  key(canvas, "keydown", "ArrowRight");
+  expect(viewport.moveToNeighbor).toHaveBeenCalledTimes(1);
+  expect(key(canvas, "keydown", "Escape").defaultPrevented).toBe(true);
+  key(canvas, "keydown", "ArrowRight");
+  advance(200);
+  expect(position[0]).toBeLessThan(0);
+  expect(viewport.moveToNeighbor).toHaveBeenCalledTimes(1);
+});
+
+test("View-mode mouse clicks select nodes without opening the editor", () => {
+  viewport.rendering = () => ({ showingUI: () => false });
+  const node = {};
+  viewport.caret = () => ({ root: () => ({ layout: () => ({ nodeUnderCoords: () => node }) }) });
+  mouse(canvas, "mousedown", 40);
+  mouse(canvas, "mouseup", 40, 0);
+  expect(viewport.selectNode).toHaveBeenCalledWith(node);
+  expect(viewport.toggleEditor).not.toHaveBeenCalled();
+});
+
+test("View-mode touch taps select on release, while drags only pan", () => {
+  viewport.rendering = () => ({ showingUI: () => false });
+  const node = {};
+  viewport.caret = () => ({ root: () => ({ layout: () => ({ nodeUnderCoords: () => node }) }) });
+  touch("touchstart", [[1, 40, 50]]);
+  expect(viewport.selectNode).not.toHaveBeenCalled();
+  advance(20);
+  touch("touchend", [[1, 40, 50]]);
+  expect(viewport.selectNode).toHaveBeenCalledWith(node);
+  viewport.selectNode.mockClear();
+  touch("touchstart", [[2, 40, 50]]);
+  touch("touchmove", [[2, 70, 50]]);
+  touch("touchend", [[2, 70, 50]]);
+  expect(position).toEqual([30, 0]);
+  expect(viewport.selectNode).not.toHaveBeenCalled();
+  expect(viewport.toggleEditor).not.toHaveBeenCalled();
+});
+
+test("a pinch or canceled touch never selects a node", () => {
+  viewport.rendering = () => ({ showingUI: () => false });
+  const node = {};
+  viewport.caret = () => ({ root: () => ({ layout: () => ({ nodeUnderCoords: () => node }) }) });
+  touch("touchstart", [[1, 40, 50]]);
+  touch("touchstart", [[2, 80, 50]]);
+  touch("touchend", [[2, 80, 50]]);
+  touch("touchend", [[1, 40, 50]]);
+  touch("touchstart", [[3, 40, 50]]);
+  touch("touchcancel", [[3, 40, 50]]);
+  touch("touchend", [[3, 40, 50]]);
+  expect(viewport.selectNode).not.toHaveBeenCalled();
 });
 
 test.each([

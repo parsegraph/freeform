@@ -276,8 +276,10 @@ export default class ViewportRendering {
     const bodySize = [NaN, NaN];
     layout.absoluteSize(bodySize);
     const bounds = new Rect(layout.absoluteX(), layout.absoluteY(), ...bodySize);
+    const navigationRequested = viewport._nodeNavigationRequested;
+    viewport._nodeNavigationRequested = false;
 
-    if (previousNode && previousNode !== this.node() &&
+    if (previousNode && (previousNode !== this.node() || navigationRequested) &&
       (viewport.ensuringVisible() || viewport.showingInCamera())) {
       const target = nodeTravelTarget(camera, layout, previousScale,
         travel.destinationScale() ?? camera.scale());
@@ -788,15 +790,15 @@ export default class ViewportRendering {
   }
 
   renderUI() {
-    if (this.showingUI()) {
-      const ctx = this.ctx();
-      const cam = this.camera();
-      if (cam.canProject()) {
-        ctx.resetTransform();
-        ctx.scale(cam.scale(), cam.scale());
-        ctx.translate(cam.x(), cam.y());
+    const ctx = this.ctx();
+    const cam = this.camera();
+    if (cam.canProject()) {
+      ctx.resetTransform();
+      ctx.scale(cam.scale(), cam.scale());
+      ctx.translate(cam.x(), cam.y());
 
-        this.renderHovered();
+      this.renderHovered();
+      if (this.showingUI() || this.viewport().navigatingNodes()) {
         this.renderCaret();
       }
     }

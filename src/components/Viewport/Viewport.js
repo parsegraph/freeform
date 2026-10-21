@@ -296,6 +296,35 @@ export default class Viewport {
     }
   }
 
+  navigatingNodes() {
+    return !!this._navigatingNodes;
+  }
+
+  selectNode(node) {
+    this.caret().moveTo(node);
+    this._navigatingNodes = true;
+    this._nodeNavigationRequested = true;
+    this.repaint();
+  }
+
+  clearNodeSelection() {
+    this._navigatingNodes = false;
+    this._nodeNavigationRequested = false;
+    this.cancelCameraTravel();
+    this._showInCamera = false;
+    this._checkScale = false;
+    this._ensureVisible = false;
+    this.refresh();
+  }
+
+  moveToNeighbor(direction) {
+    if (!this.node().neighbors().hasNode(direction)) return false;
+    this.caret().move(direction);
+    this._nodeNavigationRequested = true;
+    this.repaint();
+    return true;
+  }
+
   save() {
     if (this._saveGraph) {
       this._saveGraph(this.widget(), this.caret().node());
@@ -554,6 +583,8 @@ export default class Viewport {
   }
 
   resetSettings() {
+    this._navigatingNodes = false;
+    this._nodeNavigationRequested = false;
     this._cameraZoomTarget = null;
     this._cameraTravel.cancel();
     this.camera().setOrigin(0, 0);
@@ -1033,7 +1064,8 @@ export default class Viewport {
   }
 
   showingCaret() {
-    return !this._showingStyling;
+    return !this._showingStyling &&
+      (this.rendering().showingUI() || this.navigatingNodes());
   }
 
   showNodeActions() {

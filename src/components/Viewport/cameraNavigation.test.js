@@ -2,6 +2,7 @@ import Viewport from "./Viewport";
 import ViewportRendering from "./ViewportRendering";
 import { cameraPose } from "./ViewportCameraTravel";
 import { handleKeyDown } from "./handleKeyDown";
+import { Direction } from "parsegraph";
 
 let viewport, renderer, frames, time;
 beforeEach(() => {
@@ -70,4 +71,38 @@ test("Re-center starts a transition and ends at the selected node", () => {
   expect(cameraPose(viewport.camera()).x).toBeLessThan(2000);
   advance(5000);
   expect(cameraPose(viewport.camera()).x).toBeCloseTo(0);
+});
+
+test("selecting the current node enables navigation and smoothly centers it", () => {
+  viewport.camera().setOrigin(-1500, 500);
+  expect(viewport.navigatingNodes()).toBe(false);
+  const node = viewport.node();
+  const moveTo = jest.fn();
+  viewport.caret = () => ({ node: () => node, moveTo });
+  viewport.selectNode(node);
+  expect(viewport.navigatingNodes()).toBe(true);
+  expect(moveTo).toHaveBeenCalledWith(node);
+  renderer.focusCamera();
+  expect(viewport.cameraTravel().active()).toBe(true);
+  advance(5000);
+  expect(cameraPose(viewport.camera()).x).toBeCloseTo(0);
+});
+
+test("neighbor navigation never spawns nodes and clearing selection cancels queued focus", () => {
+  const original = viewport.node();
+  let available = false;
+  const node = { ...original, neighbors: () => ({ hasNode: () => available }) };
+  const move = jest.fn();
+  viewport.caret = () => ({ node: () => node, move });
+  viewport.spawnMove = jest.fn();
+  expect(viewport.moveToNeighbor(Direction.FORWARD)).toBe(false);
+  expect(move).not.toHaveBeenCalled();
+  available = true;
+  expect(viewport.moveToNeighbor(Direction.FORWARD)).toBe(true);
+  expect(move).toHaveBeenCalledWith(Direction.FORWARD);
+  expect(viewport.spawnMove).not.toHaveBeenCalled();
+  viewport.clearNodeSelection();
+  expect(viewport.navigatingNodes()).toBe(false);
+  expect(viewport._nodeNavigationRequested).toBe(false);
+  expect(viewport.ensuringVisible()).toBe(false);
 });

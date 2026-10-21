@@ -482,7 +482,7 @@ function App() {
     viewport.rendering().setOffscreenHandler(setOffscreen);
   }, [canvasRef, viewport]);
 
-  const [showingUI, setShowingUI] = useState(true);
+  const [showingUI, setShowingUI] = useState(false);
 
   useEffect(() => {
     if (!viewport) {

@@ -76,7 +76,7 @@ test("malformed storage falls back to the chooser; a bad camera still permits th
   localStorage.setItem(KEY, "broken");
   expect(readExampleSession()).toBeNull();
   localStorage.setItem(KEY, JSON.stringify({ version: 1, example, cam: { ...cam, scale: -1 } }));
-  expect(readExampleSession()).toEqual({ example, cam: null, showingUI: true });
+  expect(readExampleSession()).toEqual({ example, cam: null, showingUI: false });
   localStorage.setItem(KEY, JSON.stringify({ version: 1, example: { type: "unknown" } }));
   expect(readExampleSession()).toBeNull();
 });

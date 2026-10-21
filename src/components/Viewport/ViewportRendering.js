@@ -80,7 +80,7 @@ export default class ViewportRendering {
     this._phase = 0;
     this._scheduledPostRender = null;
 
-    this._showingUI = true;
+    this._showingUI = false;
 
     const container = viewport.container();
 

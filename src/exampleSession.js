@@ -14,7 +14,7 @@ export function readExampleSession() {
     if (data?.version !== 1) return null;
     const example = normalizeExample(data.example);
     if (!example) return null;
-    return { example, cam: normalizeCamera(data.cam), showingUI: data.showingUI !== false };
+    return { example, cam: normalizeCamera(data.cam), showingUI: data.showingUI === true };
   } catch {
     return null;
   }

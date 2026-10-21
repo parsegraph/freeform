@@ -11,6 +11,9 @@ import Rect from "parsegraph-rect";
 
 const INACTION_THROTTLE_MS = 15 * 1000;
 const INACTION_CHECK_MS = 1000;
+// Keep a 100-pixel wheel movement at the previous 10% zoom step.
+const WHEEL_ZOOM_SENSITIVITY = Math.log(1.1) / 100;
+const WHEEL_LINE_HEIGHT = 16;
 
 const distance = (x1, y1, x2, y2) => {
   return Math.sqrt(Math.pow(y2 - y1, 2) + Math.pow(x2 - x1, 2));
@@ -630,16 +633,29 @@ export default class ViewportInput {
       }
     });
 
-    canvas.addEventListener("wheel", (e) => {
+    const handleWheel = (e) => {
       this._hoveredNode = null;
-      if (!this.viewport().hasWidget()) {
+      if (!this.viewport().hasWidget() || isNaN(mouseX)) {
         return;
       }
-      const cam = viewport.camera();
-      if (!isNaN(mouseX)) {
-        cam.zoomToPoint(Math.pow(1.1, e.deltaY > 0 ? -1 : 1), mouseX, mouseY);
-        viewport.checkScale();
+      // Wheel deltas can be expressed in pixels, lines, or pages.
+      const deltaMode = e.deltaMode;
+      const deltaUnit = deltaMode === 1
+        ? WHEEL_LINE_HEIGHT
+        : deltaMode === 2 ? canvas.clientHeight : 1;
+      const delta = e.deltaY * deltaUnit;
+      if (!Number.isFinite(delta) || delta === 0) {
+        return;
       }
+      e.preventDefault();
+      viewport.camera().zoomToPoint(
+        Math.exp(-delta * WHEEL_ZOOM_SENSITIVITY), mouseX, mouseY
+      );
+      viewport.checkScale();
+    };
+    canvas.addEventListener("wheel", handleWheel, { passive: false });
+    this._uninstallers.push(() => {
+      canvas.removeEventListener("wheel", handleWheel);
     });
 
     canvas.addEventListener("keydown", (e) => {

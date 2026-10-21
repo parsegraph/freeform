@@ -41,6 +41,7 @@ import {
 } from "../../settings";
 import { WorldLabels } from "../WorldLabel";
 import { createLayoutPainter } from "./createLayoutPainter";
+import DocumentFont from "./DocumentFont";
 import { documentState, writeGraph } from "../../graphDocument";
 import { drawDocumentLabel } from "../../graphPresentation";
 import {
@@ -141,6 +142,7 @@ export default class ViewportRendering {
     this._viewport = viewport;
 
     this._painters = new WeakMap();
+    this._documentFont = new DocumentFont();
     this._worldLabels = null;
     this._bounds = new WeakMap();
 
@@ -152,6 +154,22 @@ export default class ViewportRendering {
     this._textRenderer = null;
 
     this.resetCounts();
+    glProvider.setOnContextChanged((isLost) => this.contextChanged(isLost));
+  }
+
+  contextChanged(isLost) {
+    this._contextLost = isLost;
+    if (isLost) {
+      this.viewport().cancelScheduledRender();
+      this._documentFont.contextLost();
+      this._painters = new WeakMap();
+      this._bounds = new WeakMap();
+      this._layout = null;
+    } else {
+      // Every group lost GPU buffers, including groups with committed geometry.
+      this.widget()?.paintGroup().forEach((pg) => pg.invalidate());
+      this.viewport().refresh();
+    }
   }
 
   initializeText() {
@@ -541,6 +559,7 @@ export default class ViewportRendering {
   }
 
   crank() {
+    if (this._contextLost) return false;
     if (isNaN(this._startTime)) {
       this._startTime = Date.now();
     }
@@ -615,16 +634,24 @@ export default class ViewportRendering {
   }
 
   createLayout() {
+    const root = this.widget();
+    const provider = this.glProvider();
+    if (!this._documentFont.isFor(root, provider)) {
+      // A previously displayed root can retain committed geometry and painters
+      // for a disposed atlas. Rebind every group to the current document font.
+      root.paintGroup().forEach((pg) => pg.invalidate());
+    }
     return new CommitLayout(
-      this.widget(),
+      root,
       createLayoutPainter(
         this._painters,
         this._bounds,
-        this.glProvider(),
+        provider,
         this.ctx(),
         (node) => this.viewport().getNodeStyle(node),
         this.viewport().presentation(),
-        this._benchmark
+        this._benchmark,
+        this._documentFont.get(root, provider, this._benchmark)
       )
     );
   }

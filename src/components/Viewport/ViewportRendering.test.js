@@ -1,6 +1,7 @@
 import Camera from "parsegraph-camera";
 import ViewportRendering from "./ViewportRendering";
-import { DirectionNode } from "parsegraph";
+import DocumentFont from "./DocumentFont";
+import { Direction, DirectionNode, LayoutPhase } from "parsegraph";
 import { attachBenchmark, beginBenchmark, benchmarkFor, cancelBenchmark, getBenchmarkRuns } from "../../benchmark";
 
 function node(x, scale = 1) {
@@ -87,4 +88,99 @@ test("initial render timing follows all phases and detaches before later worker 
     jest.useRealTimers();
     window.history.replaceState({}, "", "/");
   }
+});
+
+test("context loss suspends rendering and restoration rebuilds every paint group", () => {
+  const root = new DirectionNode("root");
+  const child = new DirectionNode("child");
+  const grandchild = new DirectionNode("grandchild");
+  root.connect(Direction.FORWARD, child);
+  child.connect(Direction.DOWNWARD, grandchild);
+  child.paintGroups().crease();
+  grandchild.paintGroups().crease();
+  const groups = [];
+  root.paintGroup().forEach((group) => {
+    groups.push(group);
+    group.layout().setPhase(LayoutPhase.COMMITTED);
+  });
+  expect(groups).toHaveLength(3);
+
+  const painters = new WeakMap(groups.map((group) => [group, {}]));
+  const bounds = new WeakMap(groups.map((group) => [group, {}]));
+  const step = jest.fn(() => false);
+  const renderer = Object.create(ViewportRendering.prototype);
+  renderer._viewport = {
+    widget: () => root,
+    cancelScheduledRender: jest.fn(),
+    refresh: jest.fn(() => {
+      expect(groups.every((group) => group.layout().needsCommit())).toBe(true);
+    }),
+  };
+  renderer._documentFont = { contextLost: jest.fn() };
+  renderer._painters = painters;
+  renderer._bounds = bounds;
+  renderer._layout = {};
+  renderer._phase = 0;
+  renderer._cranks = 0;
+  renderer._steps = [["Painting graph", step]];
+  renderer._scheduledPostRender = null;
+
+  renderer.contextChanged(true);
+  expect(renderer._viewport.cancelScheduledRender).toHaveBeenCalledTimes(1);
+  expect(renderer._documentFont.contextLost).toHaveBeenCalledTimes(1);
+  expect(renderer._painters).not.toBe(painters);
+  expect(renderer._bounds).not.toBe(bounds);
+  expect(renderer._layout).toBeFalsy();
+  expect(renderer.crank()).toBe(false);
+  expect(step).not.toHaveBeenCalled();
+  expect(renderer._viewport.refresh).not.toHaveBeenCalled();
+
+  renderer.contextChanged(false);
+  expect(renderer._viewport.refresh).toHaveBeenCalledTimes(1);
+  expect(renderer.crank()).toBe(true);
+  expect(step).toHaveBeenCalledTimes(1);
+});
+
+test("returning to a committed root rebinds every group without invalidating routine layout restarts", () => {
+  const firstRoot = new DirectionNode("first");
+  const firstChild = new DirectionNode("first child");
+  firstRoot.connect(Direction.FORWARD, firstChild);
+  firstChild.paintGroups().crease();
+  const secondRoot = new DirectionNode("second");
+  let currentRoot = firstRoot;
+  const resource = new DocumentFont();
+  // Atlas allocation is covered by DocumentFont tests; keep this regression
+  // focused on real graph invalidation when renderer ownership changes.
+  resource.get = jest.fn(function (root, provider) {
+    this._root = root;
+    this._provider = provider;
+    return {};
+  });
+  const renderer = Object.create(ViewportRendering.prototype);
+  renderer._viewport = {
+    widget: () => currentRoot,
+    presentation: () => undefined,
+    getNodeStyle: () => ({}),
+  };
+  renderer._documentFont = resource;
+  renderer._glProvider = {};
+  renderer._ctx = {};
+  renderer._painters = new WeakMap();
+  renderer._bounds = new WeakMap();
+
+  renderer.createLayout();
+  [firstRoot, firstChild].forEach((node) =>
+    node.layout().setPhase(LayoutPhase.COMMITTED)
+  );
+  renderer.createLayout();
+  expect(firstRoot.layout().needsCommit()).toBe(false);
+  expect(firstChild.layout().needsCommit()).toBe(false);
+
+  currentRoot = secondRoot;
+  renderer.createLayout();
+  currentRoot = firstRoot;
+  renderer.createLayout();
+  expect(firstRoot.layout().needsCommit()).toBe(true);
+  expect(firstChild.layout().needsCommit()).toBe(true);
+  expect(resource.isFor(firstRoot, renderer._glProvider)).toBe(true);
 });

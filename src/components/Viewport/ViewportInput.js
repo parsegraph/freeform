@@ -181,6 +181,7 @@ class ViewportGamepad {
       gamepad.axes.forEach((axis, index) => {
         const delta = this._axes[index] - axis;
         if (Math.abs(delta) > 1e-3) {
+          this.viewport().cancelCameraTravel?.();
           let [dx, dy] = [0, 0];
           switch (index) {
           case 0:
@@ -239,10 +240,14 @@ export default class ViewportInput {
   }
 
   unmount() {
+    this.viewport().cancelCameraTravel?.();
     this._uninstallers.forEach(uninstaller=>uninstaller());
     this._uninstallers = [];
   }
 
+  stopPan() {
+    this._pan?.stop();
+  }
   findControllerForGamepad(index) {
     for (let i = 0; i < this._gamepads.length; ++i) {
       const controller = this._gamepads[i];
@@ -314,6 +319,7 @@ export default class ViewportInput {
     let dragged = false;
     let dragDistance = 0;
     const pan = new ViewportPan(viewport);
+    this._pan = pan;
     this._uninstallers.push(() => pan.stop());
     const dragTo = (e) => {
       const dx = e.clientX - mouseX;
@@ -362,7 +368,7 @@ export default class ViewportInput {
           cam.containsAll(boundsRect)
         ) {
           car.moveTo(selectedNode);
-          viewport.refresh();
+          viewport.repaint();
         }
         touchingNode =
           (SINGLE_TAP_GESTURES || clickedOnSelected) &&
@@ -410,7 +416,7 @@ export default class ViewportInput {
           viewport.hideEditor();
           if (selectedNode) {
             car.moveTo(selectedNode);
-            viewport.refresh();
+            viewport.repaint();
           }
         }
       }
@@ -479,6 +485,7 @@ export default class ViewportInput {
     let touchingNode = false;
 
     const cancelInteraction = () => {
+      viewport.cancelCameraTravel?.();
       pan.stop();
       ongoingTouches.clear();
       touchingNode = false;
@@ -502,6 +509,7 @@ export default class ViewportInput {
     });
 
     canvas.addEventListener("touchstart", (e) => {
+      viewport.cancelCameraTravel?.();
       pan.stop();
       this._hoveredNode = null;
       if (!this.viewport().hasWidget()) {
@@ -538,7 +546,7 @@ export default class ViewportInput {
           touchingNode = SINGLE_TAP_GESTURES || clickedOnSelected;
           if (!clickedOnSelected) {
             car.moveTo(selectedNode);
-            viewport.refresh();
+            viewport.repaint();
           }
           isDown = Date.now();
         } else {
@@ -720,6 +728,7 @@ export default class ViewportInput {
       }
       e.preventDefault();
       pan.stop();
+      viewport.cancelCameraTravel?.();
       viewport.camera().zoomToPoint(
         Math.exp(-delta * WHEEL_ZOOM_SENSITIVITY), mouseX, mouseY
       );
@@ -765,6 +774,7 @@ export default class ViewportInput {
     });
 
     new ResizeObserver(() => {
+      viewport.cancelCameraTravel?.();
       viewport.camera().setSize(canvas.offsetWidth, canvas.offsetHeight);
       if (this.viewport().hasWidget()) {
         viewport.checkScale();

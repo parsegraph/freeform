@@ -114,6 +114,28 @@ test("a click without movement never starts a glide", () => {
   expect(frames.size).toBe(0);
 });
 
+test("clicking a neighboring node requests camera focus instead of only redrawing", () => {
+  const layout = {
+    absoluteX: () => 40, absoluteY: () => 50,
+    absoluteSize: (size) => { size[0] = 10; size[1] = 10; },
+  };
+  const neighbor = {
+    layout: () => layout,
+    neighbors: () => ({ hasAncestor: () => false }),
+  };
+  const car = {
+    root: () => ({ layout: () => ({ nodeUnderCoords: () => neighbor }) }),
+    node: () => ({}), moveTo: jest.fn(),
+  };
+  viewport.caret = () => car;
+  viewport.camera().containsAll = () => true;
+  viewport.repaint = jest.fn();
+  mouse(canvas, "mousedown", 40);
+  mouse(canvas, "mouseup", 40, 0);
+  expect(car.moveTo).toHaveBeenCalledWith(neighbor);
+  expect(viewport.repaint).toHaveBeenCalledTimes(1);
+});
+
 test("held arrows move smoothly and keyup outside the canvas releases them", () => {
   expect(key(canvas, "keydown", "ArrowRight").defaultPrevented).toBe(true);
   advance(200);

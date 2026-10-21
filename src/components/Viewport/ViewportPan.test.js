@@ -130,6 +130,16 @@ function drag() {
   pan.dragBy(20, 10);
 }
 
+test("manual panning and dragging interrupt node travel", () => {
+  viewport.cancelCameraTravel = jest.fn();
+  pan.keyDown("unhandled");
+  expect(viewport.cancelCameraTravel).not.toHaveBeenCalled();
+  pan.keyDown("ArrowRight");
+  expect(viewport.cancelCameraTravel).toHaveBeenCalledTimes(1);
+  pan.beginDrag();
+  expect(viewport.cancelCameraTravel).toHaveBeenCalledTimes(2);
+});
+
 test("a quick flick survives input events processed in the same clock tick", () => {
   // The browser can queue input while a graph frame is being rendered.
   time = 100;

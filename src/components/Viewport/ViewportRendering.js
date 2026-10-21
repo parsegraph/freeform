@@ -20,6 +20,8 @@ import {
 } from "parsegraph-matrix";
 import { showNodeInCamera } from "parsegraph-showincamera";
 import Rect from "parsegraph-rect";
+import Camera from "parsegraph-camera";
+import { cameraPose, nodeTravelTarget } from "./ViewportCameraTravel";
 import {
   USE_LOCAL_STORAGE,
   TEXT_IS_VISIBLE_SCALE,
@@ -168,6 +170,8 @@ export default class ViewportRendering {
   }
 
   resetSettings() {
+    this._cameraNode = null;
+    this._cameraNodeScale = null;
     this._pageBackgroundColor = PAGE_BACKGROUND_COLOR;
   }
 
@@ -262,7 +266,48 @@ export default class ViewportRendering {
       return true;
     }
     const viewport = this.viewport();
-    const cam = this.camera();
+    const camera = this.camera();
+    const previousNode = this._cameraNode;
+    const previousScale = this._cameraNodeScale;
+    const layout = this.node().layout();
+    this._cameraNode = this.node();
+    this._cameraNodeScale = layout.absoluteScale();
+    const travel = viewport.cameraTravel();
+    const bodySize = [NaN, NaN];
+    layout.absoluteSize(bodySize);
+    const bounds = new Rect(layout.absoluteX(), layout.absoluteY(), ...bodySize);
+
+    if (previousNode && previousNode !== this.node() &&
+      (viewport.ensuringVisible() || viewport.showingInCamera())) {
+      const target = nodeTravelTarget(camera, layout, previousScale,
+        travel.destinationScale() ?? camera.scale());
+      viewport.clearShowingInCamera();
+      viewport.clearCheckScale();
+      viewport.clearEnsuringVisible();
+      viewport.input().stopPan();
+      travel.start(target, camera.containsAny(bounds));
+      return true;
+    }
+    if (travel.active() && !viewport.showingInCamera() && !viewport.checkingScale()) {
+      viewport.clearEnsuringVisible();
+      return false;
+    }
+
+    // Compute the endpoint separately so rendering never snaps the live camera.
+    const cam = new Camera();
+    const zoomTarget = viewport._cameraZoomTarget;
+    viewport._cameraZoomTarget = null;
+    cam.copy(zoomTarget ?? camera);
+    const applyTarget = (animate) => {
+      if (animate && previousNode) {
+        viewport.input().stopPan();
+        travel.start(cameraPose(cam), camera.containsAny(bounds));
+      } else {
+        travel.cancel();
+        camera.copy(cam);
+      }
+      return true;
+    };
 
     const showInCamera = () => {
       //this.viewport().logMessage("Explicitly showing node in camera");
@@ -361,21 +406,16 @@ export default class ViewportRendering {
     };
 
     if (this.viewport().showingInCamera()) {
-      return showInCamera();
+      showInCamera();
+      checkScale();
+      viewport.clearEnsuringVisible();
+      return applyTarget(true);
     }
     if (this.viewport().checkingScale()) {
-      return checkScale();
+      checkScale();
+      return applyTarget(!!zoomTarget);
     }
 
-    const bodySize = [NaN, NaN];
-    const layout = this.layout();
-    layout.absoluteSize(bodySize);
-    const bounds = new Rect(
-      layout.absoluteX(),
-      layout.absoluteY(),
-      bodySize[0] * layout.absoluteScale(),
-      bodySize[1] * layout.absoluteScale()
-    );
     if (this.viewport().ensuringVisible()) {
       if (bounds.isNaN()) {
         return true;
@@ -387,7 +427,7 @@ export default class ViewportRendering {
         showNodeInCamera(this.node(), cam);
       }
       this.viewport().clearEnsuringVisible();
-      return true;
+      return applyTarget(true);
     }
     return false;
   }

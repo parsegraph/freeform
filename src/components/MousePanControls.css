@@ -1,4 +1,4 @@
-.mouse-pan-controls {
+.navigation-controls {
   position: fixed;
   bottom: 12px;
   left: 12px;
@@ -7,6 +7,13 @@
   width: min(280px, calc(100vw - 24px));
   max-height: calc(100vh - 24px);
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mouse-pan-controls {
+  flex: none;
   color: #f1f1f1;
   background: rgba(30, 32, 38, 0.96);
   border: 1px solid #555963;
@@ -14,6 +21,20 @@
   box-shadow: 0 6px 24px #0005;
   text-align: left;
   font-size: 13px;
+}
+
+.camera-travel-curve {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 12px;
+}
+
+.camera-travel-curve select {
+  padding: 5px;
+  font-size: 13px;
+  background: #3b3b3b;
+  color: #f1f1f1;
 }
 
 .mouse-pan-controls summary {

@@ -40,6 +40,7 @@ export default class ViewportPan {
     if (!KEY_DIRECTIONS.has(direction)) {
       return false;
     }
+    this._viewport.cancelCameraTravel?.();
     if (!this._samples) {
       this._mouseGlide = false;
       this._keys.set(key, direction);
@@ -105,6 +106,7 @@ export default class ViewportPan {
   }
 
   beginDrag(time = performance.now()) {
+    this._viewport.cancelCameraTravel?.();
     this.stop();
     this._samples = [{ time, x: 0, y: 0 }];
   }

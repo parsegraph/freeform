@@ -25,6 +25,7 @@ import {
 } from "../../settings";
 import ViewportRendering from "./ViewportRendering";
 import ViewportInput from "./ViewportInput";
+import ViewportCameraTravel from "./ViewportCameraTravel";
 import Carousel from "../Carousel";
 
 const findNodeById = (root, id) => {
@@ -104,6 +105,7 @@ export default class Viewport {
 
     // Create and restore the camera if possible
     this._cam = new Camera();
+    this._cameraTravel = new ViewportCameraTravel(this);
     if (USE_LOCAL_STORAGE) {
       try {
         this._cam.restore(
@@ -486,6 +488,36 @@ export default class Viewport {
     return this._cam;
   }
 
+  cameraTravel() {
+    return this._cameraTravel;
+  }
+
+  zoomCamera(factor, x, y) {
+    const target = new Camera();
+    target.copy(this._cameraZoomTarget ?? this.camera());
+    const destination = this._cameraTravel.destination();
+    if (destination && !this._cameraZoomTarget) {
+      target.setScale(destination.scale);
+      target.setOrigin(target.width() / (2 * destination.scale) - destination.x,
+        target.height() / (2 * destination.scale) - destination.y);
+    }
+    this.cancelCameraTravel();
+    this.input().stopPan();
+    target.zoomToPoint(factor, Number.isFinite(x) ? x : target.width() / 2,
+      Number.isFinite(y) ? y : target.height() / 2);
+    this._cameraZoomTarget = target;
+    this.checkScale();
+  }
+
+  cancelCameraTravel() {
+    this._cameraZoomTarget = null;
+    if (!this._cameraTravel.active()) return;
+    this._cameraTravel.cancel();
+    this._showInCamera = false;
+    this._checkScale = false;
+    this._ensureVisible = false;
+  }
+
   load(viewportData) {
     if (!viewportData) {
       return;
@@ -506,6 +538,8 @@ export default class Viewport {
         });
     }
     if (viewportData.cam) {
+      this._cameraZoomTarget = null;
+      this._cameraTravel.cancel();
       this.camera().restore(viewportData.cam);
       this._showInCamera = false;
       this._checkScale = false;
@@ -520,6 +554,8 @@ export default class Viewport {
   }
 
   resetSettings() {
+    this._cameraZoomTarget = null;
+    this._cameraTravel.cancel();
     this.camera().setOrigin(0, 0);
     this.camera().setScale(1);
 

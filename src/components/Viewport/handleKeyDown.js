@@ -2,7 +2,6 @@ import { Direction, reverseDirection } from "parsegraph";
 import { DONT_TOUCH_CAMERA } from "../../settings";
 
 const handleKeyDown = (viewport, key, mouseX, mouseY, modifiers) => {
-  const cam = viewport.camera();
   const car = viewport.caret();
 
   const pull = (dir) => {
@@ -30,19 +29,11 @@ const handleKeyDown = (viewport, key, mouseX, mouseY, modifiers) => {
       viewport.movePaintGroup(true);
       break;
     case "-":
-      if (!isNaN(mouseX)) {
-        viewport.checkScale();
-        cam.zoomToPoint(Math.pow(1.1, -1), mouseX, mouseY);
-        viewport.refresh();
-      }
+      viewport.zoomCamera(1 / 1.1, mouseX, mouseY);
       break;
     case "+":
     case "=":
-      if (!isNaN(mouseX)) {
-        viewport.checkScale();
-        cam.zoomToPoint(Math.pow(1.1, 1), mouseX, mouseY);
-        viewport.refresh();
-      }
+      viewport.zoomCamera(1.1, mouseX, mouseY);
       break;
     case "r":
       if (modifiers.ctrlKey) {

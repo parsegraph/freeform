@@ -2,6 +2,9 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import ExportModal from "./ExportModal";
 import fixture from "../fixtures/v1/appearance-colors.json";
 import { readGraph } from "../graphDocument";
+import { graphXml } from "../xmlGraph";
+
+afterEach(() => jest.restoreAllMocks());
 
 test("export writes the edited v1 document and makes legacy export explicitly lossy", () => {
   const data = JSON.parse(JSON.stringify(fixture));
@@ -46,4 +49,34 @@ test("export writes the edited v1 document and makes legacy export explicitly lo
   expect(downloads[1].version).toBeUndefined();
   expect(downloads[1].viewport.styles).toEqual(appearance.nodeStyles);
   jest.restoreAllMocks();
+});
+
+test("XML and SVG exports download source with the right MIME types and suffixes", () => {
+  const source = '<svg xmlns="http://www.w3.org/2000/svg">\n <text>A &amp; B</text>\n</svg>';
+  const root = graphXml(source);
+  const downloads = [];
+  jest.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function () {
+    downloads.push({ href: this.getAttribute("href"), name: this.getAttribute("download") });
+  });
+  render(<ExportModal graph={root} viewport={{}} />);
+  fireEvent.change(screen.getByRole("combobox"), { target: { value: "xml" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save", exact: true }));
+  expect(downloads[0]).toEqual({ name: "document.xml", href: `data:application/xml;charset=utf-8,${encodeURIComponent(source)}` });
+  fireEvent.change(screen.getByRole("combobox"), { target: { value: "svg" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save", exact: true }));
+  expect(downloads[1]).toEqual({ name: "document.svg", href: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(source)}` });
+});
+
+test("invalid XML graph edits fail visibly without closing the exporter or claiming a save", () => {
+  const root = graphXml("<root/>");
+  const onClose = jest.fn();
+  const onExport = jest.fn();
+  const download = jest.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+  render(<ExportModal graph={root} viewport={{}} onClose={onClose} onExport={onExport} />);
+  fireEvent.change(screen.getByRole("combobox"), { target: { value: "svg" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save", exact: true }));
+  expect(screen.getByRole("alert")).toHaveTextContent("SVG export requires");
+  expect(download).not.toHaveBeenCalled();
+  expect(onClose).not.toHaveBeenCalled();
+  expect(onExport).not.toHaveBeenCalled();
 });

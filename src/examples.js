@@ -8,6 +8,7 @@ import standard from "./fixtures/v1/proportion-standard.json";
 import math from "./fixtures/v1/proportion-math.json";
 import colors from "./fixtures/v1/appearance-colors.json";
 import memory from "./fixtures/v1/memory-piers.json";
+import svgSource from "./fixtures/xml/svgSource";
 
 const DOCUMENT_EXAMPLES = { proportion_v1: proportional, proportion_standard_v1: standard,
   proportion_math_v1: math, appearance_v1: colors, memory_piers_v1: memory };
@@ -17,6 +18,7 @@ const TYPES = new Set([
   "daily_planner_15", "daily_planner_30", "daily_planner_60", "random",
   "alt_columns", "march_madness", "march_madness_vert", "playoffs",
   "playoffs_vert", "march", "rainbow", "rainbow_vert", "rainbow_random", "cross",
+  "svg",
   ...Object.keys(DOCUMENT_EXAMPLES),
 ]);
 const RANDOM_TYPES = new Set(["random", "alt_columns", "rainbow_random"]);
@@ -90,6 +92,7 @@ export async function loadExample(value) {
   const random = seededRandom(example.seed ?? 0);
   let args;
   switch (example.type) {
+    case "svg": args = [importers.graphXml(svgSource)]; break;
     case "blank": args = [new DirectionNode()]; break;
     case "json":
     case "lisp": {

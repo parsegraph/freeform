@@ -6,6 +6,7 @@ import * as importers from "../importers";
 
 import "./modal.css";
 import { createExample, loadExample } from "../examples";
+import { readXmlFile } from "../xmlGraph";
 import {
   HIDE_PUBLIC_SERVERS_TAB,
   MAX_ROUNDS,
@@ -27,11 +28,12 @@ function ImportFromFile({ openGraph, onClose }) {
       } else if (importType === "jpeg") {
         openGraph(importers.graphJpeg(await importData.arrayBuffer()));
       } else {
-        const text = await importData.text();
+        const text = importType === "xml" ? await readXmlFile(importData) : await importData.text();
         switch (importType) {
           case "words": openGraph(importers.graphWords(text)); break;
           case "lisp": openGraph(importers.graphLisp(text)); break;
           case "json": openGraph(importers.graphJson(JSON.parse(text))); break;
+          case "xml": openGraph(importers.graphXml(text)); break;
           case "parsegraph": {
             const data = JSON.parse(text);
             openGraph(readGraph(data), graphSelection(data), null, graphViewport(data));
@@ -52,6 +54,10 @@ function ImportFromFile({ openGraph, onClose }) {
       setImportName(file.name);
       setImportData(file);
       switch (file.name.split(".").pop().toLowerCase()) {
+        case "xml":
+        case "svg":
+          setImportType("xml");
+          break;
         case "png":
           setImportType("png");
           break;
@@ -139,10 +145,15 @@ function ImportFromFile({ openGraph, onClose }) {
           <option value="lines">Lines</option>
           <option value="lisp">Lisp</option>
           <option value="json">JSON</option>
+          <option value="xml">XML / SVG</option>
           <option value="png">PNG</option>
           <option value="jpeg">JPEG</option>
         </select>
       </label>
+      {importType === "xml" && <p>
+        Preserves text and whitespace. External DOCTYPEs are kept as data;
+        custom DTDs and entity declarations are unsupported.
+      </p>}
       {importError && <p role="alert">Could not open file: {importError}</p>}
       <div className="buttons">
         <input
@@ -274,6 +285,7 @@ function ImportFromTemplate({ openGraph, onClose }) {
           <option value="blank">Blank</option>
           <option value="json">Sample JSON</option>
           <option value="lisp">Sample Lisp</option>
+          <option value="svg">SVG source (XML)</option>
           <option value="grid">Grid</option>
           <option value="daily_planner_5">Daily planner (5m)</option>
           <option value="daily_planner_10">Daily planner (10m)</option>

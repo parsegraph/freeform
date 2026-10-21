@@ -4,6 +4,8 @@ import ImportModal from "./ImportModal";
 import { createExample, loadExample } from "../examples";
 import fixture from "../fixtures/v1/appearance-colors.json";
 import { documentState } from "../graphDocument";
+import { exportGraphToSvg } from "../xmlGraph";
+import { TextDecoder, TextEncoder } from "util";
 
 jest.mock("../examples", () => ({
   createExample: jest.fn((type, options) => ({ type, ...options })),
@@ -12,6 +14,8 @@ jest.mock("../examples", () => ({
 
 const example = { type: "cross", rounds: 3 };
 const loaded = { graph: {}, selectedNode: null, viewportData: { styles: {} }, example };
+
+beforeAll(() => { global.TextDecoder = TextDecoder; });
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -71,6 +75,29 @@ test("file import opens v1 with all capabilities and reports validation errors i
   file.text.mockResolvedValue(JSON.stringify({ ...fixture, version: 999 }));
   fireEvent.click(screen.getByRole("button", { name: "Import", exact: true }));
   expect(await screen.findByRole("alert")).toHaveTextContent("Could not open file:");
+  expect(openGraph).not.toHaveBeenCalled();
+  expect(onClose).not.toHaveBeenCalled();
+});
+
+test("SVG files select XML import, preserve whitespace, and keep errors in the chooser", async () => {
+  const openGraph = jest.fn();
+  const onClose = jest.fn();
+  render(<ImportModal openGraph={openGraph} onClose={onClose} />);
+  fireEvent.click(screen.getByRole("button", { name: "Open", exact: true }));
+  const source = '<svg xmlns="http://www.w3.org/2000/svg">\n  <text>A <tspan>B</tspan> C</text>\n</svg>';
+  const file = new File([""], "SOURCE.SVG");
+  file.arrayBuffer = jest.fn().mockResolvedValue(new TextEncoder().encode(source).buffer);
+  fireEvent.change(screen.getByLabelText("Choose file"), { target: { files: [file] } });
+  expect(screen.getByRole("combobox")).toHaveValue("xml");
+  fireEvent.click(screen.getByRole("button", { name: "Import", exact: true }));
+  await waitFor(() => expect(openGraph).toHaveBeenCalledTimes(1));
+  expect(exportGraphToSvg(openGraph.mock.calls[0][0])).toBe(source);
+  expect(onClose).toHaveBeenCalledTimes(1);
+  openGraph.mockClear();
+  onClose.mockClear();
+  file.arrayBuffer.mockResolvedValue(new TextEncoder().encode('<svg><bad></svg>').buffer);
+  fireEvent.click(screen.getByRole("button", { name: "Import", exact: true }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("Could not open file: XML:");
   expect(openGraph).not.toHaveBeenCalled();
   expect(onClose).not.toHaveBeenCalled();
 });

@@ -6,11 +6,11 @@ import { writeGraph, documentState } from "../graphDocument";
 import "./modal.css";
 import { PUBLIC_SERVERS } from "../settings";
 
-function download(filename, text) {
+function download(filename, text, mimeType = "text/plain") {
   var element = document.createElement("a");
   element.setAttribute(
     "href",
-    "data:text/plain;charset=utf-8," + encodeURIComponent(text)
+    `data:${mimeType};charset=utf-8,` + encodeURIComponent(text)
   );
   element.setAttribute("download", filename);
 
@@ -41,12 +41,14 @@ const addExtension = (name, ext) => {
 function ExportForm({ viewport, graph, onExport, onClose }) {
   const [exportType, setExportType] = useState("parsegraph");
   const [name, setName] = useState(typeof graph.value() === "string" || typeof graph.value() === "number"
-    ? String(graph.value()) : "graph");
+    ? graph.value() === "#document" ? "document" : String(graph.value()) : "graph");
+  const [exportError, setExportError] = useState(null);
 
   const exportParsegraph = (version = 1) =>
     writeGraph(graph, viewport.node(), viewport.toJSON(), version);
 
   const performExport = () => {
+    setExportError(null);
     try {
       switch (exportType) {
         case "lisp":
@@ -59,6 +61,12 @@ function ExportForm({ viewport, graph, onExport, onClose }) {
             addExtension(name, ".json"),
             JSON.stringify(exporters.exportGraphToJson(graph))
           );
+          break;
+        case "xml":
+          download(addExtension(name, ".xml"), exporters.exportGraphToXml(graph), "application/xml");
+          break;
+        case "svg":
+          download(addExtension(name, ".svg"), exporters.exportGraphToSvg(graph), "image/svg+xml");
           break;
         case "parsegraph":
           download(
@@ -102,8 +110,8 @@ function ExportForm({ viewport, graph, onExport, onClose }) {
         onExport();
       }
     } catch (ex) {
-      alert(ex);
-      console.log(ex);
+      setExportError(ex.message);
+      return;
     }
     if (onClose) {
       onClose();
@@ -139,9 +147,16 @@ function ExportForm({ viewport, graph, onExport, onClose }) {
           <option value="lines">Lines</option>
           <option value="lisp">Lisp</option>
           <option value="json">JSON</option>
+          <option value="xml">XML</option>
+          <option value="svg">SVG (from XML graph)</option>
           {PUBLIC_SERVERS && <option value="public">Public</option>}
         </select>
       </label>
+      {(exportType === "xml" || exportType === "svg") && <p>
+        Exports the XML tree and its edits as UTF-8, preserving content whitespace.
+        SVG requires an svg root in the SVG namespace.
+      </p>}
+      {exportError && <p role="alert">Could not export: {exportError}</p>}
       {exportType === "parsegraph-v0" && documentState(graph)?.version === 1 &&
         <p role="status">Legacy export discards presentation, appearance, generation recipes, and other v1 capabilities.</p>}
       <div className="buttons">

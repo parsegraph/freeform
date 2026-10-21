@@ -1,15 +1,21 @@
 # XML / SVG tree mapping
 
+For shared definitions and diagrams of buds, multislot spines/prongs, centering,
+and pulling, see [Graph terminology](../../../docs/graph-terminology.md).
+
 `graphXml` imports XML 1.0 using the browser XML parser. XML and SVG files use
 the same mapping, which is carried by node values and connections rather than
 an opaque copy of the original source. It survives Parsegraph v1 save/reload,
 and XML export reads the graph's current contents.
 
 - The root is `#document`.
-- Each child has an empty bud below its parent (or the previous child's bud),
-  with the XML node attached forward from that bud. The downward bud chain
-  preserves document order, including text and whitespace nodes. Buds pull
-  forward so each child stays snug before the next row is laid out.
+- A parent's children occupy a horizontal multislot: the parent connects down
+  to a spine of empty buds connected forward, each with its XML child downward.
+  Buds pull downward to keep each child's subtree snug before the next prong
+  is laid out. Downward connections into the multislot and its children use
+  center alignment; forward spine connections stay straight. Nested children
+  use the same pattern. The forward spine preserves document order, including
+  text and whitespace nodes.
 - An element is labeled `<qualified:name>`. Its attributes start inward and
   form a downward chain of `@qualified:name` nodes, each with its literal value
   to the right. The attribute list is contained inside the element.

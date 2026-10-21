@@ -1,4 +1,4 @@
-import { Direction, DirectionNode } from "parsegraph";
+import { Alignment, Direction, DirectionNode, Fit } from "parsegraph";
 
 const XML_SPACE = "[\\x20\\t\\r\\n]";
 const DECLARATION = new RegExp(
@@ -183,15 +183,22 @@ function addAttributes(node, attributes) {
   }
 }
 
-function appendChild(previous, node) {
+function appendChild(previous, node, first = false) {
   const bud = new DirectionNode();
-  previous.connect(Direction.DOWNWARD, bud);
-  bud.connect(Direction.FORWARD, node);
-  bud.siblings().pull(Direction.FORWARD);
+  const direction = first ? Direction.DOWNWARD : Direction.FORWARD;
+  previous.connect(direction, bud);
+  if (first) {
+    previous.neighbors().align(direction, Alignment.CENTER);
+    previous.setNodeFit(Fit.EXACT);
+  }
+  bud.connect(Direction.DOWNWARD, node);
+  bud.neighbors().align(Direction.DOWNWARD, Alignment.CENTER);
+  bud.setNodeFit(Fit.EXACT);
+  bud.siblings().pull(Direction.DOWNWARD);
   return bud;
 }
 
-/** Attributes inward; ordered children forward from a downward chain of buds. */
+/** Attributes inward; a horizontal multislot has forward buds, downward children. */
 export function graphXml(input) {
   const parsed = parseSource(input);
   const root = new DirectionNode("#document");
@@ -201,7 +208,7 @@ export function graphXml(input) {
   if (parsed.declaration) {
     const declaration = new DirectionNode("#xml");
     addAttributes(declaration, declarationAttributes(parsed.declaration));
-    jobs[0].previous = appendChild(root, declaration);
+    jobs[0].previous = appendChild(root, declaration, true);
   }
   while (jobs.length) {
     const { parent, children, previous: firstPrevious } = jobs.pop();
@@ -239,7 +246,7 @@ export function graphXml(input) {
         default:
           fail(`Unsupported XML node type ${child.nodeType}.`);
       }
-      previous = appendChild(previous, node);
+      previous = appendChild(previous, node, previous === parent);
     }
   }
   return root;
@@ -332,9 +339,9 @@ function serializeGraph(root) {
     if (!bud) continue;
     checkChildren(bud, [Direction.DOWNWARD, Direction.FORWARD]);
     if (valueOf(bud) !== "") fail("Child list buds must be empty.");
-    const node = child(bud, Direction.FORWARD);
-    if (!node) fail("Each child list bud needs an XML node to its right.");
-    const sibling = child(bud, Direction.DOWNWARD);
+    const node = child(bud, Direction.DOWNWARD);
+    if (!node) fail("Each child list bud needs an XML node below it.");
+    const sibling = child(bud, Direction.FORWARD);
     if (sibling) jobs.push({ bud: sibling, documentLevel });
     const label = valueOf(node);
     if (label.startsWith("<") && label.endsWith(">")) {

@@ -44,7 +44,7 @@ function tree(xml) {
 
 afterEach(() => jest.restoreAllMocks());
 
-test("attributes are inward and children occupy forward branches of downward buds", () => {
+test("attributes are inward and a horizontal multislot has a forward spine with downward children", () => {
   const at = (node, direction) => node.neighbors().nodeAt(direction);
   const children = (node) => {
     const result = [];
@@ -53,15 +53,18 @@ test("attributes are inward and children occupy forward branches of downward bud
       : null;
     while (bud) {
       expect(bud.value()).toBeUndefined();
-      expect(bud.siblings().getLayoutPreference()).toBe(PreferredAxis.PERPENDICULAR);
-      result.push(at(bud, Direction.FORWARD));
-      bud = bud.neighbors().hasChild(Direction.DOWNWARD)
-        ? at(bud, Direction.DOWNWARD)
+      expect(bud.siblings().getLayoutPreference()).toBe(
+        result.length ? PreferredAxis.PERPENDICULAR : PreferredAxis.PARENT
+      );
+      const content = at(bud, Direction.DOWNWARD);
+      result.push(content);
+      bud = bud.neighbors().hasChild(Direction.FORWARD)
+        ? at(bud, Direction.FORWARD)
         : null;
     }
     return result;
   };
-  const source = '<g fill="red" id="group"><rect/><g><circle/></g> tail</g>';
+  const source = '<g fill="red" id="group"><rect/><g><circle/><ellipse/></g> tail<path/></g>';
   const root = graphXml(source);
   const [group] = children(root);
   const fill = at(group, Direction.INWARD);
@@ -71,8 +74,8 @@ test("attributes are inward and children occupy forward branches of downward bud
   expect(id.value()).toBe("@id");
   expect(at(id, Direction.FORWARD).value()).toBe("group");
   const content = children(group);
-  expect(content.map((node) => node.value())).toEqual(["<rect>", "<g>", "#text"]);
-  expect(children(content[1]).map((node) => node.value())).toEqual(["<circle>"]);
+  expect(content.map((node) => node.value())).toEqual(["<rect>", "<g>", "#text", "<path>"]);
+  expect(children(content[1]).map((node) => node.value())).toEqual(["<circle>", "<ellipse>"]);
   expect(at(content[2], Direction.DOWNWARD).value()).toBe(" tail");
   expect(exportGraphToXml(root)).toBe(source);
 });
@@ -83,8 +86,8 @@ test("export reports malformed child buds instead of discarding their contents",
   bud.setValue("unexpected text");
   expect(() => exportGraphToXml(root)).toThrow(/buds must be empty/);
   bud.setValue(undefined);
-  bud.disconnect(Direction.FORWARD);
-  expect(() => exportGraphToXml(root)).toThrow(/XML node to its right/);
+  bud.disconnect(Direction.DOWNWARD);
+  expect(() => exportGraphToXml(root)).toThrow(/XML node below it/);
 });
 
 test("SVG round-trip preserves namespaces, attributes, mixed content, whitespace, CDATA, comments and PIs", () => {

@@ -6,6 +6,7 @@ import fixture from "../fixtures/v1/appearance-colors.json";
 import { documentState } from "../graphDocument";
 import { exportGraphToSvg } from "../xmlGraph";
 import { TextDecoder, TextEncoder } from "util";
+import { benchmarkFor, cancelBenchmark, getBenchmarkRuns } from "../benchmark";
 
 jest.mock("../examples", () => ({
   createExample: jest.fn((type, options) => ({ type, ...options })),
@@ -100,4 +101,38 @@ test("SVG files select XML import, preserve whitespace, and keep errors in the c
   expect(await screen.findByRole("alert")).toHaveTextContent("Could not open file: XML:");
   expect(openGraph).not.toHaveBeenCalled();
   expect(onClose).not.toHaveBeenCalled();
+});
+
+test("file import records read, parse and construction stages and carries the run with its graph", async () => {
+  window.history.replaceState({}, "", "/?benchmark=1");
+  const openGraph = jest.fn();
+  let run;
+  try {
+    render(<ImportModal openGraph={openGraph} />);
+    fireEvent.click(screen.getByRole("button", { name: "Open", exact: true }));
+    const file = new File([""], "input.json");
+    file.text = jest.fn().mockResolvedValue('{"a":[1,2]}');
+    fireEvent.change(screen.getByLabelText("Choose file"), { target: { files: [file] } });
+    fireEvent.click(screen.getByRole("button", { name: "Import", exact: true }));
+    await waitFor(() => expect(openGraph).toHaveBeenCalledTimes(1));
+    run = benchmarkFor(openGraph.mock.calls[0][0]);
+    expect(run).toBeDefined();
+    expect(getBenchmarkRuns().at(-1)).toMatchObject({
+      source: { kind: "file", type: "json", name: "input.json" },
+      status: "running",
+      stages: expect.arrayContaining([
+        expect.objectContaining({ name: "File read and decode", kind: "async", calls: 1 }),
+        expect.objectContaining({ name: "JSON parsing", kind: "sync", calls: 1 }),
+        expect.objectContaining({ name: "Graph construction", kind: "sync", calls: 1 }),
+      ]),
+    });
+    cancelBenchmark(run);
+    file.text.mockResolvedValue('{broken');
+    fireEvent.click(screen.getByRole("button", { name: "Import", exact: true }));
+    await screen.findByRole("alert");
+    expect(getBenchmarkRuns().at(-1).status).toBe("failed");
+  } finally {
+    cancelBenchmark(run);
+    window.history.replaceState({}, "", "/");
+  }
 });

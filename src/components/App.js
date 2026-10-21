@@ -11,6 +11,8 @@ import NodeStylingModal from "./NodeStylingModal";
 import OffscreenModal from "./Viewport/OffscreenModal";
 import MousePanControls from "./MousePanControls";
 import CameraTravelControls from "./CameraTravelControls";
+import { attachBenchmark, benchmarkFor, measureBenchmark } from "../benchmark";
+import BenchmarkPanel from "./BenchmarkPanel";
 import { clearExampleSession, initialExampleSession, watchExampleSession } from "../exampleSession";
 
 const sessionId = crypto.randomUUID();
@@ -61,16 +63,23 @@ function App() {
   const [roomName, setRoomName] = useState(urlParams.get("public"));
 
   const refresh = useCallback(
-    (dontTouchCamera) => {
+    (dontTouchCamera, benchmark) => {
       setHasWidget(graphs.hasWidget());
       if (graphs.hasWidget()) {
-        const root = graphs.widget();
-        viewport.show(root, graphs.viewportData());
-        setDocumentInfo(documentState(root));
-        viewport.moveToId(graphs.selectedNode());
-        if (!dontTouchCamera) {
-          viewport.showInCamera();
-        }
+        const root = attachBenchmark(
+          measureBenchmark(benchmark, "Display reconstruction", () =>
+            graphs.widget()
+          ),
+          benchmark
+        );
+        measureBenchmark(benchmark, "Viewport setup", () => {
+          viewport.show(root, graphs.viewportData());
+          setDocumentInfo(documentState(root));
+          viewport.moveToId(graphs.selectedNode());
+          if (!dontTouchCamera) {
+            viewport.showInCamera();
+          }
+        });
       }
     },
     [viewport, graphs]
@@ -164,16 +173,19 @@ function App() {
   };
 
   const openGraph = useCallback((graph, selectedNode, roomName, viewportData, example = null, showingUI) => {
+    const benchmark = benchmarkFor(graph);
     setInitialSession(null);
     setRoomName(roomName);
     setImportModalOpen(false);
     setNeedsSave(false);
     viewport.container()?.focus();
     graphs.clear();
-    graphs.save(graph, selectedNode, viewportData);
+    measureBenchmark(benchmark, "History serialization", () =>
+      graphs.save(graph, selectedNode, viewportData)
+    );
     setUndoSize(0);
     setRedoSize(0);
-    refresh(!!viewportData?.cam);
+    refresh(!!viewportData?.cam, benchmark);
     if (showingUI === false) viewport.rendering().hideUI();
     if (showingUI === true) viewport.rendering().showUI();
     // Imported files must not reopen an unrelated example or inherit its camera.
@@ -395,6 +407,7 @@ function App() {
   return (
     <>
       <div className="App">
+        <BenchmarkPanel />
         <div
           id="parsegraph"
           style={{ position: "fixed", inset: "0" }}

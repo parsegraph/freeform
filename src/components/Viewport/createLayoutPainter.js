@@ -23,6 +23,7 @@ import SpotlightPainter from "parsegraph-spotlightpainter";
 import Rect from "parsegraph-rect";
 import { Font, Label, GlyphPainter, GL_TEXTURE_SIZE } from 'parsegraph-glyphpainter';
 import { createDocumentLayout } from "../../graphPresentation";
+import { measureBenchmark } from "../../benchmark";
 
 const getNodeSize = (node, size, ctx) => {
   size[0] = FONT_SIZE;
@@ -89,7 +90,7 @@ const getSeparation = (node, axis) => {
   return NODE_SEPARATION;
 };
 
-const paint = (pg, painters, bounds, glProvider, getNodeStyle, presentation) => {
+const paint = (pg, painters, bounds, glProvider, getNodeStyle, presentation, benchmark) => {
   if (!painters.has(pg)) {
     painters.set(pg, {});
   }
@@ -108,7 +109,16 @@ const paint = (pg, painters, bounds, glProvider, getNodeStyle, presentation) => 
     spotlightPainter.clear();
   }
   if (!glyphPainter || glyphPainter._window !== glProvider) {
-    glyphPainter = new GlyphPainter(glProvider, new Font(FONT_UPSCALE * FONT_SIZE, "sans-serif", "normal"));
+    const font = new Font(FONT_UPSCALE * FONT_SIZE, "sans-serif", "normal");
+    if (benchmark) {
+      const update = font.update;
+      font.update = function (...args) {
+        return measureBenchmark(benchmark, "Glyph atlas update", () =>
+          update.apply(this, args)
+        );
+      };
+    }
+    glyphPainter = new GlyphPainter(glProvider, font);
     painterData.glyphPainter = glyphPainter;
   } else {
     glyphPainter.clear();
@@ -221,7 +231,8 @@ const createLayoutPainter = (
   glProvider,
   ctx,
   getNodeStyle,
-  presentation
+  presentation,
+  benchmark
 ) => {
   if (!getNodeStyle) {
     throw new Error("getNodeStyle is not defined");
@@ -232,9 +243,22 @@ const createLayoutPainter = (
   const geometry = presentation ? createDocumentLayout(presentation, ctx) : {
     size: (node, size) => getNodeSize(node, size, ctx), getSeparation,
   };
-  return {
+  const painter = {
     ...geometry,
-    paint: (pg) => paint(pg, painters, bounds, glProvider, getNodeStyle, presentation),
+    paint: (pg) => paint(pg, painters, bounds, glProvider, getNodeStyle, presentation, benchmark),
+  };
+  if (!benchmark) return painter;
+  return {
+    size: (...args) =>
+      measureBenchmark(benchmark, "Node sizing", () => painter.size(...args)),
+    getSeparation: (...args) =>
+      measureBenchmark(benchmark, "Node separation", () =>
+        painter.getSeparation(...args)
+      ),
+    paint: (...args) =>
+      measureBenchmark(benchmark, "Paint preparation", () =>
+        painter.paint(...args)
+      ),
   };
 };
 

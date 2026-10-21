@@ -1,4 +1,5 @@
 import { Alignment, Direction, DirectionNode, Fit } from "parsegraph";
+import { measureBenchmark } from "./benchmark";
 
 const XML_SPACE = "[\\x20\\t\\r\\n]";
 const DECLARATION = new RegExp(
@@ -199,8 +200,10 @@ function appendChild(previous, node, first = false) {
 }
 
 /** Attributes inward; a horizontal multislot has forward buds, downward children. */
-export function graphXml(input) {
-  const parsed = parseSource(input);
+export function graphXml(input, benchmark) {
+  const parsed = measureBenchmark(benchmark, "XML parsing and validation", () =>
+    parseSource(input)
+  );
   const root = new DirectionNode("#document");
   const jobs = [
     { parent: root, children: Array.from(parsed.document.childNodes) },

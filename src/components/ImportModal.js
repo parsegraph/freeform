@@ -8,6 +8,14 @@ import "./modal.css";
 import { createExample, loadExample } from "../examples";
 import { readXmlFile } from "../xmlGraph";
 import {
+  attachBenchmark,
+  beginBenchmark,
+  cancelBenchmark,
+  failBenchmark,
+  measureBenchmark,
+  measureBenchmarkAsync,
+} from "../benchmark";
+import {
   HIDE_PUBLIC_SERVERS_TAB,
   MAX_ROUNDS,
   PUBLIC_SERVERS,
@@ -19,32 +27,78 @@ function ImportFromFile({ openGraph, onClose }) {
   const [importName, setImportName] = useState(null);
 
   const [importError, setImportError] = useState(null);
+  const pendingBenchmark = useRef();
+  useEffect(() => () => cancelBenchmark(pendingBenchmark.current), []);
   const performImport = useCallback(async () => {
     setImportError(null);
+    let benchmark;
     try {
       if (!importData) throw new Error("Choose a file first.");
+      benchmark = beginBenchmark({
+        kind: "file",
+        type: importType,
+        name: importData.name,
+        bytes: importData.size,
+      });
+      pendingBenchmark.current = benchmark;
+      const read = (fn) =>
+        measureBenchmarkAsync(benchmark, "File read and decode", fn);
+      const build = (fn) =>
+        attachBenchmark(
+          measureBenchmark(benchmark, "Graph construction", fn),
+          benchmark
+        );
       if (importType === "png") {
-        openGraph(importers.graphPng(new Uint8Array(await importData.arrayBuffer())));
+        const bytes = await read(() => importData.arrayBuffer());
+        openGraph(build(() => importers.graphPng(new Uint8Array(bytes))));
       } else if (importType === "jpeg") {
-        openGraph(importers.graphJpeg(await importData.arrayBuffer()));
+        const bytes = await read(() => importData.arrayBuffer());
+        openGraph(build(() => importers.graphJpeg(bytes)));
       } else {
-        const text = importType === "xml" ? await readXmlFile(importData) : await importData.text();
+        const text = await read(() =>
+          importType === "xml" ? readXmlFile(importData) : importData.text()
+        );
         switch (importType) {
-          case "words": openGraph(importers.graphWords(text)); break;
-          case "lisp": openGraph(importers.graphLisp(text)); break;
-          case "json": openGraph(importers.graphJson(JSON.parse(text))); break;
-          case "xml": openGraph(importers.graphXml(text)); break;
-          case "parsegraph": {
-            const data = JSON.parse(text);
-            openGraph(readGraph(data), graphSelection(data), null, graphViewport(data));
+          case "words":
+            openGraph(build(() => importers.graphWords(text)));
+            break;
+          case "lisp":
+            openGraph(build(() => importers.graphLisp(text)));
+            break;
+          case "json": {
+            const data = measureBenchmark(benchmark, "JSON parsing", () =>
+              JSON.parse(text)
+            );
+            openGraph(build(() => importers.graphJson(data)));
             break;
           }
-          case "lines": openGraph(importers.graphLines(text)); break;
-          default: throw new Error("Unsupported import type: " + importType);
+          case "xml":
+            openGraph(build(() => importers.graphXml(text, benchmark)));
+            break;
+          case "parsegraph": {
+            const data = measureBenchmark(benchmark, "JSON parsing", () =>
+              JSON.parse(text)
+            );
+            openGraph(
+              build(() => readGraph(data)),
+              graphSelection(data),
+              null,
+              graphViewport(data)
+            );
+            break;
+          }
+          case "lines":
+            openGraph(build(() => importers.graphLines(text)));
+            break;
+          default:
+            throw new Error("Unsupported import type: " + importType);
         }
       }
+      pendingBenchmark.current = undefined;
       onClose?.();
     } catch (ex) {
+      failBenchmark(benchmark, ex);
+      pendingBenchmark.current = undefined;
       setImportError(ex.message);
     }
   }, [onClose, importType, importData, openGraph]);
@@ -243,21 +297,43 @@ function ImportFromTemplate({ openGraph, onClose }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const active = useRef(true);
+  const pendingBenchmark = useRef();
   useEffect(() => {
     active.current = true;
-    return () => { active.current = false; };
+    return () => {
+      active.current = false;
+      cancelBenchmark(pendingBenchmark.current);
+    };
   }, []);
 
   const createFromTemplate = async () => {
     setLoading(true);
     setError(null);
+    const example = createExample(importType, { rounds: numRounds, vertical });
+    const benchmark = beginBenchmark({
+      kind: "example",
+      ...example,
+    });
+    pendingBenchmark.current = benchmark;
     try {
-      const loaded = await loadExample(createExample(importType, { rounds: numRounds, vertical }));
+      const loaded = await (benchmark
+        ? loadExample(example, benchmark)
+        : loadExample(example));
       if (!active.current) return;
-      openGraph(loaded.graph, loaded.selectedNode, null, loaded.viewportData, loaded.example);
+      attachBenchmark(loaded.graph, benchmark);
+      pendingBenchmark.current = undefined;
+      openGraph(
+        loaded.graph,
+        loaded.selectedNode,
+        null,
+        loaded.viewportData,
+        loaded.example
+      );
       onClose?.();
     } catch (err) {
-      if (active.current) setError("Could not load this example. Please try again.");
+      failBenchmark(benchmark, err);
+      if (active.current)
+        setError("Could not load this example. Please try again.");
     } finally {
       if (active.current) setLoading(false);
     }
@@ -375,17 +451,42 @@ export default function ImportModal({ onClose, openGraph, initialSession }) {
   useEffect(() => {
     if (!initialSession) return;
     let cancelled = false;
-    loadExample(initialSession.example).then((loaded) => {
-      if (cancelled) return;
-      const viewportData = initialSession.cam
-        ? { ...loaded.viewportData, cam: initialSession.cam }
-        : loaded.viewportData;
-      openGraph(loaded.graph, loaded.selectedNode, null, viewportData,
-        loaded.example, initialSession.showingUI);
-    }).catch(() => {
-      if (!cancelled) setLoadError("Could not restore the example. Choose a template or open a file.");
+    let handedOff = false;
+    const benchmark = beginBenchmark({
+      kind: "restored example",
+      ...initialSession.example,
     });
-    return () => { cancelled = true; };
+    (benchmark
+      ? loadExample(initialSession.example, benchmark)
+      : loadExample(initialSession.example)
+    )
+      .then((loaded) => {
+        if (cancelled) return;
+        attachBenchmark(loaded.graph, benchmark);
+        handedOff = true;
+        const viewportData = initialSession.cam
+          ? { ...loaded.viewportData, cam: initialSession.cam }
+          : loaded.viewportData;
+        openGraph(
+          loaded.graph,
+          loaded.selectedNode,
+          null,
+          viewportData,
+          loaded.example,
+          initialSession.showingUI
+        );
+      })
+      .catch((err) => {
+        failBenchmark(benchmark, err);
+        if (!cancelled)
+          setLoadError(
+            "Could not restore the example. Choose a template or open a file."
+          );
+      });
+    return () => {
+      cancelled = true;
+      if (!handedOff) cancelBenchmark(benchmark);
+    };
   }, [initialSession, openGraph]);
 
   if (initialSession && !loadError) {

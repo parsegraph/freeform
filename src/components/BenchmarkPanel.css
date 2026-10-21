@@ -1,0 +1,124 @@
+.benchmark-panel {
+  position: fixed;
+  top: 60px;
+  right: 12px;
+  z-index: 10;
+  box-sizing: border-box;
+  width: min(450px, calc(100vw - 24px));
+  max-height: calc(100vh - 84px);
+  overflow-y: auto;
+  color: #f1f1f1;
+  background: rgba(30, 32, 38, 0.97);
+  border: 1px solid #555963;
+  border-radius: 10px;
+  box-shadow: 0 6px 24px #0005;
+  text-align: left;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.benchmark-panel > summary {
+  padding: 11px 14px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.benchmark-panel-body {
+  padding: 0 14px 14px;
+}
+
+.benchmark-panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.benchmark-panel-actions label {
+  display: flex;
+  flex: 1 1 130px;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.benchmark-panel select,
+.benchmark-panel button {
+  min-width: 0;
+  padding: 5px;
+  color: #f1f1f1;
+  background: #3b3b3b;
+  font-size: 12px;
+}
+
+.benchmark-panel button:disabled {
+  opacity: 0.5;
+}
+
+.benchmark-panel p {
+  margin: 10px 0;
+  overflow-wrap: anywhere;
+}
+
+.benchmark-source,
+.benchmark-notes {
+  color: #bfc5d1;
+}
+
+.benchmark-table-scroll {
+  overflow-x: auto;
+}
+
+.benchmark-panel table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.benchmark-panel caption {
+  text-align: left;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.benchmark-panel th,
+.benchmark-panel td {
+  padding: 5px 4px;
+  border-bottom: 1px solid #555963;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.benchmark-panel th:first-child {
+  max-width: 160px;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.benchmark-panel small {
+  display: block;
+  color: #bfc5d1;
+  font-size: 10px;
+  font-weight: normal;
+}
+
+.benchmark-notes summary {
+  cursor: pointer;
+}
+
+.benchmark-trace {
+  box-sizing: border-box;
+  width: 100%;
+  resize: vertical;
+  color: #f1f1f1;
+  background: #25272d;
+  border: 1px solid #555963;
+  font: 11px/1.4 monospace;
+}
+
+.benchmark-panel :focus-visible {
+  outline: 2px solid #9bceff;
+  outline-offset: 2px;
+}

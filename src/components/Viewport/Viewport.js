@@ -28,6 +28,7 @@ import ViewportInput from "./ViewportInput";
 import ViewportCameraTravel from "./ViewportCameraTravel";
 import Carousel from "../Carousel";
 import { documentState, ensureStringIds } from "../../graphDocument";
+import { benchmarkFor, measureBenchmark } from "../../benchmark";
 
 const findNodeById = (root, id) => {
   let foundNode = null;
@@ -780,13 +781,15 @@ export default class Viewport {
     if (!this.canPaint()) {
       return false;
     }
-    const start = Date.now();
-    while (this.rendering().crank()) {
-      if (Date.now() - start > MAX_PAINT_TIME_MS) {
-        return true;
+    return measureBenchmark(benchmarkFor(this.widget()), "Render slice", () => {
+      const start = Date.now();
+      while (this.rendering().crank()) {
+        if (Date.now() - start > MAX_PAINT_TIME_MS) {
+          return true;
+        }
       }
-    }
-    return false;
+      return false;
+    });
   }
 
   node() {

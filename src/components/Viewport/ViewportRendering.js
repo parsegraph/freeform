@@ -41,8 +41,15 @@ import {
 } from "../../settings";
 import { WorldLabels } from "../WorldLabel";
 import { createLayoutPainter } from "./createLayoutPainter";
-import { writeGraph } from "../../graphDocument";
+import { documentState, writeGraph } from "../../graphDocument";
 import { drawDocumentLabel } from "../../graphPresentation";
+import {
+  annotateBenchmark,
+  benchmarkFor,
+  completeBenchmark,
+  failBenchmark,
+  measureBenchmark,
+} from "../../benchmark";
 
 const minVisibleTextScale = 1;
 const initialScale = 8;
@@ -506,6 +513,7 @@ export default class ViewportRendering {
   }
 
   restart() {
+    this._benchmark = benchmarkFor(this.widget());
     this.pushPastCrank(!this.isDone());
     this._phase = 0;
     this.resetCounts();
@@ -543,11 +551,38 @@ export default class ViewportRendering {
       return false;
     }
 
-    if (!step[1]()) {
+    let more;
+    try {
+      more = measureBenchmark(
+        this._benchmark,
+        this.phase() === 0 ? "Layout + paint preparation" : step[0],
+        step[1]
+      );
+    } catch (error) {
+      failBenchmark(this._benchmark, error);
+      throw error;
+    }
+    if (!more) {
       this.nextPhase();
-      if (step) {
-      } else {
-        return false;
+      if (this.isDone() && this._benchmark) {
+        const state = documentState(this.widget());
+        const counts = measureBenchmark(
+          this._benchmark,
+          "Graph statistics",
+          () => ({
+            nodes: this.allNodeCount(),
+            paintGroups: this.allPaintGroupCount(),
+          })
+        );
+        annotateBenchmark(this._benchmark, {
+          ...counts,
+          documentVersion: state?.version ?? 0,
+          capabilities: Object.keys(state?.capabilities ?? {}),
+          textWorker: !this.viewport().presentation(),
+          worldLabels: this._showWorldLabels,
+        });
+        completeBenchmark(this._benchmark);
+        this._benchmark = undefined;
       }
     }
     return true;
@@ -588,7 +623,8 @@ export default class ViewportRendering {
         this.glProvider(),
         this.ctx(),
         (node) => this.viewport().getNodeStyle(node),
-        this.viewport().presentation()
+        this.viewport().presentation(),
+        this._benchmark
       )
     );
   }
@@ -637,18 +673,18 @@ export default class ViewportRendering {
     }
 
     const layout = paintGroup.layout();
-    glyphPainter.render(
+    measureBenchmark(this._benchmark, "Glyph rendering", () => glyphPainter.render(
       matrixMultiply3x3(
         makeScale3x3(layout.absoluteScale()),
         makeTranslation3x3(layout.absoluteX(), layout.absoluteY()),
         cam.project()
       ),
       cam.scale()
-    );
+    ));
 
     // eslint-disable-next-line no-loop-func
     let dirty = false;
-    pg.siblings().forEach((node) => {
+    measureBenchmark(this._benchmark, "Label collection and enqueue", () => pg.siblings().forEach((node) => {
         if (!this._worldLabels) {
           this._worldLabels = new WorldLabels(minVisibleTextScale);
         }
@@ -696,7 +732,7 @@ export default class ViewportRendering {
             node.neighbors().getAlignment(Direction.INWARD) === Alignment.INWARD_VERTICAL
           );
         }
-    });
+    }));
     return dirty;
   }
 

@@ -9,6 +9,7 @@ import math from "./fixtures/v1/proportion-math.json";
 import colors from "./fixtures/v1/appearance-colors.json";
 import memory from "./fixtures/v1/memory-piers.json";
 import svgSource from "./fixtures/xml/svgSource";
+import { measureBenchmark, measureBenchmarkAsync } from "./benchmark";
 
 const DOCUMENT_EXAMPLES = { proportion_v1: proportional, proportion_standard_v1: standard,
   proportion_math_v1: math, appearance_v1: colors, memory_piers_v1: memory };
@@ -82,49 +83,59 @@ function tournamentRounds(count) {
   );
 }
 
-export async function loadExample(value) {
+export async function loadExample(value, benchmark) {
   const example = normalizeExample(value);
   if (!example) throw new Error("Unknown example or invalid example options.");
   if (DOCUMENT_EXAMPLES[example.type]) {
-    return { graph: readGraph(DOCUMENT_EXAMPLES[example.type]), selectedNode: null,
+    return { graph: measureBenchmark(benchmark, "Graph construction", () => readGraph(DOCUMENT_EXAMPLES[example.type])), selectedNode: null,
       viewportData: null, example };
   }
   const random = seededRandom(example.seed ?? 0);
-  let args;
-  switch (example.type) {
-    case "svg": args = [importers.graphXml(svgSource)]; break;
-    case "blank": args = [new DirectionNode()]; break;
-    case "json":
-    case "lisp": {
+  let source;
+  if (example.type === "json" || example.type === "lisp") {
+    source = await measureBenchmarkAsync(benchmark, "Example fetch", async () => {
       const response = await fetch(example.type === "json" ? "/package.json" : "/surface.lisp");
       if (!response.ok) throw new Error("Could not load the example.");
-      const text = await response.text();
-      const graph = example.type === "json"
-        ? importers.graphJson(JSON.parse(text))
-        : importers.graphLisp(text);
-      args = [graph, example.type === "json" && graph.neighbors().hasChild(Direction.INWARD)
-        ? graph.neighbors().nodeAt(Direction.INWARD) : null];
-      break;
+      return response.text();
+    });
+    if (example.type === "json") {
+      source = measureBenchmark(benchmark, "JSON parsing", () => JSON.parse(source));
     }
-    case "grid": args = [builders.buildGrid(example.size)]; break;
-    case "daily_planner_5":
-    case "daily_planner_10":
-    case "daily_planner_15":
-    case "daily_planner_30":
-    case "daily_planner_60": args = [builders.buildPlanner(Number(example.type.split("_")[2]))]; break;
-    case "random": args = [builders.buildRandom(250, random)]; break;
-    case "alt_columns": args = builders.buildAlternatingColumns(random); break;
-    case "march_madness": args = [builders.buildMarchMadness(false)]; break;
-    case "march_madness_vert": args = [builders.buildMarchMadness(true)]; break;
-    case "playoffs": args = [builders.buildFootballPlayoffs(false)]; break;
-    case "playoffs_vert": args = [builders.buildFootballPlayoffs(true)]; break;
-    case "march": args = [builders.buildTournament(example.vertical, ...tournamentRounds(example.rounds))]; break;
-    case "rainbow": args = builders.buildRainbow(); break;
-    case "rainbow_vert": args = builders.buildRainbow(true); break;
-    case "rainbow_random": args = builders.buildRandomRainbow(random); break;
-    case "cross": args = [builders.buildCross(example.rounds)]; break;
-    default: throw new Error("Unknown example.");
   }
-  const [graph, selectedNode = null, , viewportData = null] = args;
-  return { graph, selectedNode, viewportData, example };
+  return measureBenchmark(benchmark, "Graph construction", () => {
+    let args;
+    switch (example.type) {
+      case "svg": args = [importers.graphXml(svgSource, benchmark)]; break;
+      case "blank": args = [new DirectionNode()]; break;
+      case "json":
+      case "lisp": {
+        const graph = example.type === "json"
+          ? importers.graphJson(source)
+          : importers.graphLisp(source);
+        args = [graph, example.type === "json" && graph.neighbors().hasChild(Direction.INWARD)
+          ? graph.neighbors().nodeAt(Direction.INWARD) : null];
+        break;
+      }
+      case "grid": args = [builders.buildGrid(example.size)]; break;
+      case "daily_planner_5":
+      case "daily_planner_10":
+      case "daily_planner_15":
+      case "daily_planner_30":
+      case "daily_planner_60": args = [builders.buildPlanner(Number(example.type.split("_")[2]))]; break;
+      case "random": args = [builders.buildRandom(250, random)]; break;
+      case "alt_columns": args = builders.buildAlternatingColumns(random); break;
+      case "march_madness": args = [builders.buildMarchMadness(false)]; break;
+      case "march_madness_vert": args = [builders.buildMarchMadness(true)]; break;
+      case "playoffs": args = [builders.buildFootballPlayoffs(false)]; break;
+      case "playoffs_vert": args = [builders.buildFootballPlayoffs(true)]; break;
+      case "march": args = [builders.buildTournament(example.vertical, ...tournamentRounds(example.rounds))]; break;
+      case "rainbow": args = builders.buildRainbow(); break;
+      case "rainbow_vert": args = builders.buildRainbow(true); break;
+      case "rainbow_random": args = builders.buildRandomRainbow(random); break;
+      case "cross": args = [builders.buildCross(example.rounds)]; break;
+      default: throw new Error("Unknown example.");
+    }
+    const [graph, selectedNode = null, , viewportData = null] = args;
+    return { graph, selectedNode, viewportData, example };
+  });
 }

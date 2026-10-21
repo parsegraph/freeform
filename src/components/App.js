@@ -13,6 +13,7 @@ import NodeStylingModal from "./NodeStylingModal";
 import Color from "parsegraph-color";
 import OffscreenModal from "./Viewport/OffscreenModal";
 import MousePanControls from "./MousePanControls";
+import { clearExampleSession, initialExampleSession, watchExampleSession } from "../exampleSession";
 
 const sessionId = crypto.randomUUID();
 
@@ -148,8 +149,10 @@ const loadInitialRoom = (openGraph) => {
 };
 
 function App() {
-  const [viewport] = useState(new Viewport());
-  const [graphs] = useState(new GraphStack());
+  const [viewport] = useState(() => new Viewport());
+  const [graphs] = useState(() => new GraphStack());
+  const [initialSession, setInitialSession] = useState(() => initialExampleSession(window.location.search));
+  const [exampleSource, setExampleSource] = useState(null);
 
   const [needsSave, setNeedsSave] = useState(false);
 
@@ -163,7 +166,6 @@ function App() {
 
   const urlParams = new URLSearchParams(window.location.search);
   const [roomName, setRoomName] = useState(urlParams.get("public"));
-  const [sampleName, setSampleName] = useState(urlParams.get("sample"));
 
   const refresh = useCallback(
     (dontTouchCamera) => {
@@ -266,6 +268,36 @@ function App() {
     setUndoSize(0);
     setRedoSize(0);
   };
+
+  const openGraph = useCallback((graph, selectedNode, roomName, viewportData, example = null, showingUI) => {
+    setInitialSession(null);
+    setRoomName(roomName);
+    setImportModalOpen(false);
+    setNeedsSave(false);
+    viewport.container()?.focus();
+    graphs.clear();
+    graphs.save(graph, selectedNode, viewportData);
+    setUndoSize(0);
+    setRedoSize(0);
+    refresh(!!viewportData?.cam);
+    if (showingUI === false) viewport.rendering().hideUI();
+    if (showingUI === true) viewport.rendering().showUI();
+    // Imported files must not reopen an unrelated example or inherit its camera.
+    clearExampleSession();
+    setExampleSource(example);
+    // Consume launch links so refresh follows the source opened most recently.
+    const url = new URL(window.location.href);
+    url.searchParams.delete("sample");
+    if (!roomName) url.searchParams.delete("public");
+    if (url.href !== window.location.href) {
+      window.history.replaceState(window.history.state, "", url);
+    }
+  }, [graphs, viewport, refresh]);
+
+  useEffect(() => {
+    if (!exampleSource) return;
+    return watchExampleSession(viewport, exampleSource);
+  }, [viewport, exampleSource]);
 
   const undo = useCallback(() => {
     graphs.undo();
@@ -491,19 +523,9 @@ function App() {
         {(!hasWidget || importModalOpen) && (
           <div className="modal">
             <ImportModal
-              sampleName={sampleName}
+              initialSession={initialSession}
               onClose={hasWidget ? () => setImportModalOpen(false) : null}
-              openGraph={(graph, selectedNode, roomName, viewportData) => {
-                setSampleName(null);
-                setRoomName(roomName);
-                if (canvasRef.current) {
-                  canvasRef.current.focus();
-                }
-                graphs.clear();
-                graphs.save(graph, selectedNode, viewportData);
-                resetUndoCounts();
-                refresh(!!viewportData?.cam);
-              }}
+              openGraph={openGraph}
             />
           </div>
         )}

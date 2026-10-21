@@ -14,11 +14,11 @@ import { CREASE_ROUNDS, MAX_ROUNDS } from "../settings";
 
 const SIZE = MAX_ROUNDS;
 
-const buildRandom = (steps) => {
+const buildRandom = (steps, random = Math.random) => {
   const car = new DirectionCaret();
 
   for (let i = 0; i < steps; ++i) {
-    switch (Math.floor(7 * Math.random())) {
+    switch (Math.floor(7 * random())) {
       case 0:
         if (car.has(Direction.FORWARD)) {
           car.pull(Direction.FORWARD);
@@ -101,7 +101,7 @@ const buildGrid = (sizeStr) => {
   return car.root();
 };
 
-const buildAlternatingColumns = () => {
+const buildAlternatingColumns = (random = Math.random) => {
   const styles = {};
   const car = new DirectionCaret();
   for (let col = 0; col < 5 * SIZE; ++col) {
@@ -110,7 +110,7 @@ const buildAlternatingColumns = () => {
     if (col % CREASE_ROUNDS === 0) {
       car.crease();
     }
-    const c = Color.random();
+    const c = new Color(random(), random(), random(), 1);
     for (let row = 0; row < 5 * SIZE; ++row) {
       car.spawnMove(col % 2 !== 0 ? "u" : "d", row);
       styles[car.node().id()] = {
@@ -224,7 +224,7 @@ const buildFootballPlayoffs = (vertical) => {
   );
 };
 
-const buildRandomRainbow = () => {
+const buildRandomRainbow = (random = Math.random) => {
   const car = new DirectionCaret();
   const styles = {};
 
@@ -236,8 +236,8 @@ const buildRandomRainbow = () => {
       car.crease();
     }
 
-    const a = Color.random();
-    const b = Color.random();
+    const a = new Color(random(), random(), random(), 1);
+    const b = new Color(random(), random(), random(), 1);
     for (let row = 0; row < size; ++row) {
       styles[car.node().id()] = {
         backgroundColor: a.interpolate(b, row / (size - 1)).asHex(),
@@ -252,7 +252,7 @@ const buildRandomRainbow = () => {
     car.root(),
     null,
     null,
-    { styles, pageBackgroundColor: Color.random().asRGBA() },
+    { styles, pageBackgroundColor: new Color(random(), random(), random(), 1).asRGBA() },
   ];
 };
 

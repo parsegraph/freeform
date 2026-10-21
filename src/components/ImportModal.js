@@ -1,26 +1,16 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-import {
-  Direction,
-  DirectionCaret,
-  DirectionNode,
-  deserializeParsegraph,
-  forEachCardinalDirection,
-  turnLeft,
-  turnRight,
-} from "parsegraph";
+import { deserializeParsegraph } from "parsegraph";
 
 import * as importers from "../importers";
 
 import "./modal.css";
-import * as builders from "../builders";
+import { createExample, loadExample } from "../examples";
 import {
-  CREASE_ROUNDS,
   HIDE_PUBLIC_SERVERS_TAB,
   MAX_ROUNDS,
   PUBLIC_SERVERS,
 } from "../settings";
-import Color from "parsegraph-color";
 
 function ImportFromFile({ openGraph, onClose }) {
   const [importData, setImportData] = useState(null);
@@ -257,103 +247,31 @@ function JoinPublic({ openGraph, onClose }) {
   );
 }
 
-const openSampleLisp = (openGraph) => {
-  return fetch("/surface.lisp")
-    .then((resp) => resp.text())
-    .then((text) => {
-      openGraph(importers.graphLisp(text));
-    });
-};
-
-const openSampleJson = (openGraph) => {
-  return fetch("/package.json")
-    .then((resp) => resp.text())
-    .then((text) => {
-      const graph = importers.graphJson(JSON.parse(text));
-      openGraph(
-        graph,
-        graph.neighbors().hasChild(Direction.INWARD)
-          ? graph.neighbors().nodeAt(Direction.INWARD)
-          : graph
-      );
-    });
-};
-
 function ImportFromTemplate({ openGraph, onClose }) {
   const [importType, setImportType] = useState("blank");
   const [numRounds, setNumRounds] = useState(5);
   const [vertical, setVertical] = useState(false);
 
-  const createFromTemplate = () => {
-    switch (importType) {
-      case "blank":
-        openGraph(new DirectionNode());
-        break;
-      case "lisp":
-        openSampleLisp(openGraph);
-        break;
-      case "json":
-        openSampleJson(openGraph);
-        break;
-      case "grid":
-        openGraph(builders.buildGrid());
-        break;
-      case "daily_planner_5":
-        openGraph(builders.buildPlanner(5));
-        break;
-      case "daily_planner_10":
-        openGraph(builders.buildPlanner(10));
-        break;
-      case "daily_planner_15":
-        openGraph(builders.buildPlanner(15));
-        break;
-      case "daily_planner_30":
-        openGraph(builders.buildPlanner(30));
-        break;
-      case "daily_planner_60":
-        openGraph(builders.buildPlanner(60));
-        break;
-      case "random":
-        openGraph(builders.buildRandom(250));
-        break;
-      case "alt_columns":
-        openGraph(...builders.buildAlternatingColumns());
-        break;
-      case "march_madness":
-        openGraph(builders.buildMarchMadness(false));
-        break;
-      case "march_madness_vert":
-        openGraph(builders.buildMarchMadness(true));
-        break;
-      case "playoffs":
-        openGraph(builders.buildFootballPlayoffs(false));
-        break;
-      case "playoffs_vert":
-        openGraph(builders.buildFootballPlayoffs(true));
-        break;
-      case "march":
-        openGraph(
-          builders.buildTournament(vertical, ...createTournamentRounds(numRounds))
-        );
-        break;
-      case "rainbow":
-        openGraph(...builders.buildRainbow());
-        break;
-      case "rainbow_vert":
-        openGraph(...builders.buildRainbow(true));
-        break;
-      case "rainbow_random":
-        openGraph(...builders.buildRandomRainbow());
-        break;
-      case "cross":
-        openGraph(builders.buildCross(numRounds));
-        break;
-      default:
-        openGraph(new DirectionNode("Unknown import type: " + importType));
-        break;
-    }
-    if (onClose) {
-      onClose();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const active = useRef(true);
+  useEffect(() => {
+    active.current = true;
+    return () => { active.current = false; };
+  }, []);
+
+  const createFromTemplate = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const loaded = await loadExample(createExample(importType, { rounds: numRounds, vertical }));
+      if (!active.current) return;
+      openGraph(loaded.graph, loaded.selectedNode, null, loaded.viewportData, loaded.example);
+      onClose?.();
+    } catch (err) {
+      if (active.current) setError("Could not load this example. Please try again.");
+    } finally {
+      if (active.current) setLoading(false);
     }
   };
 
@@ -434,15 +352,20 @@ function ImportFromTemplate({ openGraph, onClose }) {
           )}
         </div>
       )}
+      <p style={{ fontSize: "13px", maxWidth: "320px" }}>
+        Refresh restores the original example and your view. Save to keep edits.
+      </p>
+      {error && <p role="alert">{error}</p>}
       <div className="buttons">
         <input
           type="submit"
           style={{ flexGrow: "1" }}
-          value="Create"
+          value={loading ? "Loading…" : "Create"}
+          disabled={loading}
           autoFocus
         />
         {onClose && (
-          <button style={{ flexGrow: "1" }} onClick={onClose}>
+          <button type="button" style={{ flexGrow: "1" }} onClick={onClose}>
             Cancel
           </button>
         )}
@@ -451,100 +374,28 @@ function ImportFromTemplate({ openGraph, onClose }) {
   );
 }
 
-const tryParseInt = (str, defaultValue) => {
-  try {
-    return Number.parseInt(str);
-  } catch (ex) {
-    //console.log(ex);
-    return defaultValue;
-  }
-};
-
-const createTournamentRounds = (numRounds) => {
-  numRounds = tryParseInt(numRounds, 2);
-  const rounds = [];
-  const getLabel = (i) => {
-    switch (i) {
-      case 0:
-        return "Championship";
-      case 1:
-        return "Semifinals";
-      case 2:
-        return "Quarterfinals";
-      default:
-        return "Round " + (numRounds - i);
-    }
-  };
-  for (let i = 0; i < numRounds; ++i) {
-    rounds.push(getLabel(i));
-  }
-  return rounds;
-};
-
-export default function ImportModal({ onClose, openGraph, sampleName }) {
+export default function ImportModal({ onClose, openGraph, initialSession }) {
   const [activeTab, setActiveTab] = useState("template");
+  const [loadError, setLoadError] = useState(null);
 
   useEffect(() => {
-    if (!sampleName || !openGraph) {
-      return;
-    }
-    const sampleParts = sampleName.split("_");
+    if (!initialSession) return;
+    let cancelled = false;
+    loadExample(initialSession.example).then((loaded) => {
+      if (cancelled) return;
+      const viewportData = initialSession.cam
+        ? { ...loaded.viewportData, cam: initialSession.cam }
+        : loaded.viewportData;
+      openGraph(loaded.graph, loaded.selectedNode, null, viewportData,
+        loaded.example, initialSession.showingUI);
+    }).catch(() => {
+      if (!cancelled) setLoadError("Could not restore the example. Choose a template or open a file.");
+    });
+    return () => { cancelled = true; };
+  }, [initialSession, openGraph]);
 
-    switch (sampleParts[0]) {
-      case "cross":
-        openGraph(buildCross(tryParseInt(sampleParts[1])));
-        break;
-      case "lisp":
-        openSampleLisp(openGraph);
-        break;
-      case "json":
-        openSampleJson(openGraph);
-        break;
-      case "grid":
-        openGraph(buildGrid(sampleParts[1]));
-        break;
-      case "playoffs":
-        openGraph(
-          buildFootballPlayoffs(
-            sampleParts[1]?.toLowerCase().startsWith("vert")
-          )
-        );
-        break;
-      case "march":
-        const vert = sampleParts[2]?.toLowerCase().startsWith("vert");
-        if (sampleParts[1] === "madness") {
-          openGraph(buildMarchMadness(vert));
-          break;
-        }
-        openGraph(
-          buildTournament(vert, ...createTournamentRounds(sampleParts[1]))
-        );
-        break;
-      default:
-        return;
-    }
-  }, [sampleName, openGraph]);
-
-  if (sampleName) {
-    return (
-      <div
-        style={{
-          width: "100%",
-          height: "100%",
-          display: "flex",
-          justifyContent: "stretch",
-          flexDirection: "column",
-          alignItems: "stretch",
-          gap: "3px",
-          padding: "12px",
-          boxSizing: "border-box",
-        }}
-      >
-        <h3 style={{ margin: "0", marginBottom: ".5em" }}>
-          Loading Parsegraph...
-        </h3>
-      </div>
-    );
+  if (initialSession && !loadError) {
+    return <div style={{ padding: "12px" }}>Loading Parsegraph…</div>;
   }
 
   return (
@@ -552,7 +403,7 @@ export default function ImportModal({ onClose, openGraph, sampleName }) {
       style={{
         width: "100%",
         height: "100%",
-        display: sampleName ? "none" : "flex",
+        display: "flex",
         justifyContent: "stretch",
         flexDirection: "column",
         alignItems: "stretch",
@@ -569,6 +420,7 @@ export default function ImportModal({ onClose, openGraph, sampleName }) {
           : "Open"}{" "}
         Parsegraph
       </h3>
+      {loadError && <p role="alert">{loadError}</p>}
       <div className="tabs" style={{ display: "flex", gap: "5px" }}>
         <button
           className={activeTab === "template" ? "active" : null}

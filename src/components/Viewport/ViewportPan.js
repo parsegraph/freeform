@@ -1,3 +1,5 @@
+import { mousePanSettings } from "./mousePanSettings";
+
 // Speeds are in screen pixels so navigation feels consistent at every zoom.
 const KEY_SPEED = 800;
 const KEY_RESPONSE = 12;
@@ -5,7 +7,6 @@ const FRICTION = 8;
 const STOP_SPEED = 5;
 const MAX_FLING_SPEED = 2400;
 const DRAG_SAMPLE_MS = 80;
-const RELEASE_DECAY_MS = 160;
 const KEY_DIRECTIONS = new Map([
   ["ArrowLeft", [1, 0]],
   ["ArrowRight", [-1, 0]],
@@ -14,8 +15,10 @@ const KEY_DIRECTIONS = new Map([
 ]);
 
 export default class ViewportPan {
-  constructor(viewport) {
+  constructor(viewport, settings = mousePanSettings) {
     this._viewport = viewport;
+    this._settings = settings;
+    this._mouseGlide = false;
     this._keys = new Map();
     this._velocity = [0, 0];
     this._frame = null;
@@ -30,6 +33,7 @@ export default class ViewportPan {
     this._keys.clear();
     this._velocity = [0, 0];
     this._samples = null;
+    this._mouseGlide = false;
   }
 
   keyDown(key, direction = key) {
@@ -37,6 +41,7 @@ export default class ViewportPan {
       return false;
     }
     if (!this._samples) {
+      this._mouseGlide = false;
       this._keys.set(key, direction);
       this.schedule();
     }
@@ -74,7 +79,8 @@ export default class ViewportPan {
     });
     const length = Math.hypot(x, y) || 1;
     const target = [x * KEY_SPEED / length, y * KEY_SPEED / length];
-    const rate = this._keys.size ? KEY_RESPONSE : FRICTION;
+    const friction = this._mouseGlide ? this._settings.friction : FRICTION;
+    const rate = this._keys.size ? KEY_RESPONSE : friction;
     const decay = Math.exp(-rate * dt);
     const movement = target.map((speed, axis) => {
       const difference = this._velocity[axis] - speed;
@@ -107,6 +113,8 @@ export default class ViewportPan {
     if (!this._samples || (!dx && !dy)) {
       return;
     }
+    dx *= this._settings.dragSpeed;
+    dy *= this._settings.dragSpeed;
     this.move(dx, dy);
     const last = this._samples[this._samples.length - 1];
     this._samples.push({ time, x: last.x + dx, y: last.y + dy });
@@ -127,11 +135,12 @@ export default class ViewportPan {
     // Event timestamps preserve flick speed when rendering delays input handling.
     // Coarse clocks can still give equal timestamps; cap the resulting speed below.
     const dt = Math.max(1, last.time - first.time) / 1000;
-    const vx = (last.x - first.x) / dt;
-    const vy = (last.y - first.y) / dt;
+    const vx = (last.x - first.x) / dt * this._settings.glideStrength;
+    const vy = (last.y - first.y) / dt * this._settings.glideStrength;
     const limit = Math.min(1, MAX_FLING_SPEED / Math.hypot(vx, vy));
-    const decay = Math.exp(-Math.max(0, time - last.time) / RELEASE_DECAY_MS);
+    const decay = Math.exp(-Math.max(0, time - last.time) / this._settings.releaseGrace);
     this._velocity = [vx * limit * decay, vy * limit * decay];
+    this._mouseGlide = true;
     if (Math.hypot(...this._velocity) > STOP_SPEED) {
       this.schedule();
     }

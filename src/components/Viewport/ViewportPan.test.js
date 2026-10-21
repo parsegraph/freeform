@@ -1,4 +1,5 @@
 import ViewportPan from "./ViewportPan";
+import { DEFAULT_MOUSE_PAN_SETTINGS } from "./mousePanSettings";
 
 let time;
 let frames;
@@ -208,6 +209,76 @@ test("a drag with sparse movement events still glides", () => {
   pan.endDrag();
   advance(100);
   expect(position[0]).toBeGreaterThan(120);
+});
+
+test("drag speed updates affect an existing controller immediately", () => {
+  const settings = { ...DEFAULT_MOUSE_PAN_SETTINGS };
+  pan = new ViewportPan(viewport, settings);
+  pan.beginDrag();
+  advance(20);
+  pan.dragBy(10, 5);
+  settings.dragSpeed = 2;
+  advance(20);
+  pan.dragBy(10, 5);
+  expect(position).toEqual([30, 15]);
+});
+
+test("zero glide strength stops on release", () => {
+  pan = new ViewportPan(viewport, { ...DEFAULT_MOUSE_PAN_SETTINGS, glideStrength: 0 });
+  drag();
+  pan.endDrag();
+  advance(1000);
+  expect(position).toEqual([40, 20]);
+  expect(frames.size).toBe(0);
+});
+
+test("lower friction and higher glide strength carry a drag farther", () => {
+  const distances = [
+    DEFAULT_MOUSE_PAN_SETTINGS,
+    { ...DEFAULT_MOUSE_PAN_SETTINGS, friction: 3 },
+    { ...DEFAULT_MOUSE_PAN_SETTINGS, glideStrength: 2 },
+  ].map((settings) => {
+    pan.stop();
+    position = [0, 0];
+    pan = new ViewportPan(viewport, settings);
+    drag();
+    pan.endDrag();
+    advance(500);
+    return position[0];
+  });
+  expect(distances[1]).toBeGreaterThan(distances[0]);
+  expect(distances[2]).toBeGreaterThan(distances[0]);
+});
+
+test("release grace controls how much momentum survives a pause", () => {
+  const distances = [40, 400].map((releaseGrace) => {
+    pan.stop();
+    position = [0, 0];
+    pan = new ViewportPan(viewport, { ...DEFAULT_MOUSE_PAN_SETTINGS, releaseGrace });
+    drag();
+    advance(200);
+    pan.endDrag();
+    advance(500);
+    return position[0];
+  });
+  expect(distances[1] - 40).toBeGreaterThan((distances[0] - 40) * 5);
+});
+
+test("mouse tuning does not change keyboard movement or slowdown", () => {
+  const distances = [
+    DEFAULT_MOUSE_PAN_SETTINGS,
+    { dragSpeed: 4, glideStrength: 3, friction: 2, releaseGrace: 400 },
+  ].map((settings) => {
+    pan.stop();
+    position = [0, 0];
+    pan = new ViewportPan(viewport, settings);
+    pan.keyDown("ArrowRight");
+    advance(200);
+    pan.keyUp("ArrowRight");
+    advance(1000);
+    return position[0];
+  });
+  expect(distances[1]).toBeCloseTo(distances[0], 6);
 });
 
 test("a new drag immediately stops existing motion", () => {

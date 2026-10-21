@@ -12,6 +12,7 @@ import { PRINT_PAINT_STATS, PUBLIC_SERVERS, SHOW_WORLD_LABELS, USE_LOCAL_STORAGE
 import NodeStylingModal from "./NodeStylingModal";
 import Color from "parsegraph-color";
 import OffscreenModal from "./Viewport/OffscreenModal";
+import MousePanControls from "./MousePanControls";
 
 const sessionId = crypto.randomUUID();
 
@@ -634,6 +635,7 @@ function App() {
           <ParsegraphStatus viewport={viewport} />
           </>}
         </div>
+        {hasWidget && <MousePanControls />}
         {!showingUI && <div>
           <button style={{position: 'fixed', bottom: '3px', right: '3px'}} onClick={() => viewport.rendering().toggleUI()}>Edit</button>
         </div>}

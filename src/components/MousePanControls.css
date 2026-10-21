@@ -1,0 +1,79 @@
+.mouse-pan-controls {
+  position: fixed;
+  bottom: 12px;
+  left: 12px;
+  z-index: 10;
+  box-sizing: border-box;
+  width: min(280px, calc(100vw - 24px));
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
+  color: #f1f1f1;
+  background: rgba(30, 32, 38, 0.96);
+  border: 1px solid #555963;
+  border-radius: 10px;
+  box-shadow: 0 6px 24px #0005;
+  text-align: left;
+  font-size: 13px;
+}
+
+.mouse-pan-controls summary {
+  padding: 11px 14px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.mouse-pan-controls-body {
+  padding: 0 14px 14px;
+}
+
+.mouse-pan-controls p {
+  margin: 0 0 12px;
+  color: #bfc5d1;
+  font-size: 12px;
+}
+
+.mouse-pan-control {
+  margin-bottom: 12px;
+}
+
+.mouse-pan-control label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.mouse-pan-control output {
+  color: #a7d5ff;
+  font-variant-numeric: tabular-nums;
+}
+
+.mouse-pan-control input {
+  display: block;
+  width: 100%;
+  height: 24px;
+  margin: 3px 0;
+  accent-color: #9bceff;
+}
+
+.mouse-pan-control small {
+  display: block;
+  color: #bfc5d1;
+  line-height: 1.4;
+}
+
+.mouse-pan-presets {
+  display: flex;
+  gap: 8px;
+}
+
+.mouse-pan-presets button {
+  flex: 1;
+  padding: 7px;
+  font-size: 13px;
+}
+
+.mouse-pan-controls :focus-visible {
+  outline: 2px solid #9bceff;
+  outline-offset: 2px;
+}

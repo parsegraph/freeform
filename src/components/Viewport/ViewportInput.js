@@ -15,6 +15,12 @@ const INACTION_CHECK_MS = 1000;
 // Keep a 100-pixel wheel movement at the previous 10% zoom step.
 const WHEEL_ZOOM_SENSITIVITY = Math.log(1.1) / 100;
 const WHEEL_LINE_HEIGHT = 16;
+const VIEW_PAN_KEYS = new Map([
+  ["w", "ArrowUp"],
+  ["a", "ArrowLeft"],
+  ["s", "ArrowDown"],
+  ["d", "ArrowRight"],
+]);
 
 const distance = (x1, y1, x2, y2) => {
   return Math.sqrt(Math.pow(y2 - y1, 2) + Math.pow(x2 - x1, 2));
@@ -309,6 +315,13 @@ export default class ViewportInput {
     let dragDistance = 0;
     const pan = new ViewportPan(viewport);
     this._uninstallers.push(() => pan.stop());
+    const dragTo = (e) => {
+      const dx = e.clientX - mouseX;
+      const dy = e.clientY - mouseY;
+      dragDistance += Math.hypot(dx, dy);
+      dragged = dragDistance > 4;
+      pan.dragBy(dx, dy, e.timeStamp);
+    };
     const onMouseDown = (e) => {
       if (e.button !== 0 || !this.viewport().hasWidget()) {
         return;
@@ -316,7 +329,7 @@ export default class ViewportInput {
       if (this.carouselContainer().contains(e.target)) {
         return;
       }
-      pan.beginDrag();
+      pan.beginDrag(e.timeStamp);
       dragged = false;
       dragDistance = 0;
       touchingNode = false;
@@ -359,12 +372,19 @@ export default class ViewportInput {
     };
     canvas.addEventListener("mousedown", onMouseDown);
 
-    const onMouseUp = (e) => {
+    const onMouseUp = (e, includeFinalMovement = true) => {
       if (e.button !== 0 || !isDown) {
         return;
       }
+      // A quick flick may reach its final position only in the release event.
+      if (includeFinalMovement) {
+        if (!touchingNode) {
+          dragTo(e);
+        }
+        [mouseX, mouseY] = [e.clientX, e.clientY];
+      }
       let hadGesture = false;
-      if (touchingNode) {
+      if (touchingNode && includeFinalMovement) {
         hadGesture = gesture(mouseX, mouseY);
         if (hadGesture) {
           viewport.repaint();
@@ -375,7 +395,7 @@ export default class ViewportInput {
       const cam = viewport.camera();
 
       if (
-        !dragged && !hadGesture && canvas.contains(e.target) &&
+        includeFinalMovement && !dragged && !hadGesture && canvas.contains(e.target) &&
         this.canInteract() && !isNaN(isDown) &&
         Date.now() - isDown < MAX_CLICK_DELAY_MS
       ) {
@@ -396,7 +416,7 @@ export default class ViewportInput {
       }
 
       if (dragged) {
-        pan.endDrag();
+        pan.endDrag(e.timeStamp);
       } else {
         pan.stop();
       }
@@ -415,18 +435,16 @@ export default class ViewportInput {
         return;
       }
       if (isDown && !(e.buttons & 1)) {
-        cancelInteraction();
+        // A move can reveal release before mouseup arrives. Finish the known
+        // drag without treating the new hover position as additional movement.
+        onMouseUp(e, false);
         return;
       }
       const car = viewport.caret();
       const cam = viewport.camera();
-      const dx = e.clientX - mouseX;
-      const dy = e.clientY - mouseY;
       if (!touchingNode) {
         if (isDown) {
-          dragDistance += Math.hypot(dx, dy);
-          dragged = dragDistance > 4;
-          pan.dragBy(dx, dy);
+          dragTo(e);
         } else {
           const [worldX, worldY] = cam.transform(e.clientX, e.clientY);
           let hoveredNode = car
@@ -715,12 +733,20 @@ export default class ViewportInput {
     const onKeyDown = (e) => {
       this._hoveredNode = null;
 
-      if (!this.canInteract() || viewport.showingEditor()) {
+      if (!viewport.hasWidget() || viewport.showingEditor()) {
         return;
       }
 
-      const panning = pan.keyDown(e.key);
+      const key = e.key.toLowerCase();
+      const direction = !viewport.rendering().showingUI() &&
+        !e.ctrlKey && !e.metaKey && !e.altKey
+        ? VIEW_PAN_KEYS.get(key) || e.key
+        : e.key;
+      const panning = pan.keyDown(key, direction);
       if (!panning) {
+        if (!this.canInteract()) {
+          return;
+        }
         pan.stop();
       }
       if (panning || handleKeyDown(viewport, e.key, mouseX, mouseY, e)) {
@@ -730,7 +756,7 @@ export default class ViewportInput {
         e.preventDefault();
       }
     };
-    const onKeyUp = (e) => pan.keyUp(e.key);
+    const onKeyUp = (e) => pan.keyUp(e.key.toLowerCase());
     canvas.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
     this._uninstallers.push(() => {

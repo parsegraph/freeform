@@ -129,6 +129,25 @@ function drag() {
   pan.dragBy(20, 10);
 }
 
+test("a quick flick survives input events processed in the same clock tick", () => {
+  // The browser can queue input while a graph frame is being rendered.
+  time = 100;
+  pan.beginDrag(10);
+  pan.dragBy(20, 0, 20);
+  pan.endDrag(25);
+  advance(100);
+  expect(position[0]).toBeGreaterThan(20);
+});
+
+test("equal movement timestamps still allow a bounded fling", () => {
+  pan.beginDrag();
+  pan.dragBy(20, 0);
+  pan.endDrag();
+  advance(100);
+  expect(position[0]).toBeGreaterThan(20);
+  expect(position[0]).toBeLessThan(260);
+});
+
 test("drag follows the pointer exactly, then coasts along its release direction", () => {
   scale = 2;
   drag();
@@ -141,13 +160,54 @@ test("drag follows the pointer exactly, then coasts along its release direction"
   expect(frames.size).toBe(0);
 });
 
-test("pausing before release prevents a fling", () => {
+test.each([100, 200, 300])("a brief %i ms pause still produces a glide", (pause) => {
   drag();
+  advance(pause);
+  // Some devices report stationary moves while the button remains held.
+  pan.dragBy(0, 0);
+  expect(position).toEqual([40, 20]);
+  pan.endDrag();
   advance(100);
+  expect(position[0]).toBeGreaterThan(45);
+  advance(1500);
+  expect(frames.size).toBe(0);
+});
+
+test("longer release pauses smoothly reduce the glide without an 80 ms cliff", () => {
+  const distances = [0, 70, 90, 150, 300].map((pause) => {
+    pan.stop();
+    position = [0, 0];
+    drag();
+    advance(pause);
+    pan.endDrag();
+    advance(100);
+    return position[0] - 40;
+  });
+  for (let i = 1; i < distances.length; i++) {
+    expect(distances[i]).toBeGreaterThan(0);
+    expect(distances[i]).toBeLessThan(distances[i - 1]);
+  }
+  expect(distances[2] / distances[1]).toBeGreaterThan(0.8);
+});
+
+test("a deliberate long pause before release prevents a fling", () => {
+  drag();
+  advance(1200);
   pan.endDrag();
   advance(300);
   expect(position).toEqual([40, 20]);
   expect(frames.size).toBe(0);
+});
+
+test("a drag with sparse movement events still glides", () => {
+  pan.beginDrag();
+  advance(100);
+  pan.dragBy(60, 0);
+  advance(100);
+  pan.dragBy(60, 0);
+  pan.endDrag();
+  advance(100);
+  expect(position[0]).toBeGreaterThan(120);
 });
 
 test("a new drag immediately stops existing motion", () => {

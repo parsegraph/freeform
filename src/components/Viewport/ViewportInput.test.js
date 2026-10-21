@@ -1,6 +1,9 @@
 import ViewportInput from "./ViewportInput";
+import { Direction } from "parsegraph";
 
-jest.mock("parsegraph", () => ({ Direction: {} }));
+jest.mock("parsegraph", () => ({ Direction: {
+  UPWARD: "up", DOWNWARD: "down", BACKWARD: "left", FORWARD: "right",
+} }));
 
 let canvas;
 let input;
@@ -65,17 +68,51 @@ function advance(ms) {
   }
 }
 
-function key(target, type, value) {
-  const event = new KeyboardEvent(type, { key: value, bubbles: true, cancelable: true });
+function key(target, type, value, modifiers = {}) {
+  const event = new KeyboardEvent(type, { key: value, bubbles: true, cancelable: true, ...modifiers });
   target.dispatchEvent(event);
   return event;
 }
 
 function mouse(target, type, x, buttons = 1) {
-  target.dispatchEvent(new MouseEvent(type, {
+  const event = new MouseEvent(type, {
     bubbles: true, clientX: x, clientY: 50, button: 0, buttons,
-  }));
+  });
+  Object.defineProperty(event, "timeStamp", { value: time });
+  target.dispatchEvent(event);
 }
+
+test("a fast flick reported at mouseup pans and glides without waiting for grace", () => {
+  viewport.rendering = () => ({ showingUI: () => false });
+  mouse(canvas, "mousedown", 10);
+  advance(10);
+  mouse(canvas, "mouseup", 40, 0);
+  expect(position).toEqual([30, 0]);
+  advance(100);
+  expect(position[0]).toBeGreaterThan(30);
+  expect(viewport.toggleEditor).not.toHaveBeenCalled();
+});
+
+test("a released-button move before mouseup preserves the flick", () => {
+  mouse(canvas, "mousedown", 10);
+  advance(10);
+  mouse(canvas, "mousemove", 40);
+  advance(10);
+  mouse(canvas, "mousemove", 50, 0);
+  expect(position).toEqual([30, 0]);
+  mouse(canvas, "mouseup", 50, 0);
+  advance(100);
+  expect(position[0]).toBeGreaterThan(30);
+});
+
+test("a click without movement never starts a glide", () => {
+  mouse(canvas, "mousedown", 10);
+  advance(10);
+  mouse(canvas, "mouseup", 10, 0);
+  advance(100);
+  expect(position).toEqual([0, 0]);
+  expect(frames.size).toBe(0);
+});
 
 test("held arrows move smoothly and keyup outside the canvas releases them", () => {
   expect(key(canvas, "keydown", "ArrowRight").defaultPrevented).toBe(true);
@@ -84,6 +121,110 @@ test("held arrows move smoothly and keyup outside the canvas releases them", () 
   key(window, "keyup", "ArrowRight");
   advance(1500);
   expect(frames.size).toBe(0);
+});
+
+test.each([
+  ["ArrowLeft", 0, 1],
+  ["ArrowRight", 0, -1],
+  ["ArrowUp", 1, 1],
+  ["ArrowDown", 1, -1],
+])("View mode allows %s navigation", (value, axis, sign) => {
+  viewport.rendering = () => ({ showingUI: () => false });
+  expect(key(canvas, "keydown", value).defaultPrevented).toBe(true);
+  advance(200);
+  expect(position[axis] * sign).toBeGreaterThan(0);
+  key(window, "keyup", value);
+  advance(1500);
+  expect(frames.size).toBe(0);
+});
+
+test("View mode continues to block editing shortcuts", () => {
+  viewport.rendering = () => ({ showingUI: () => false });
+  viewport.removeNode = jest.fn();
+  expect(key(canvas, "keydown", "Backspace").defaultPrevented).toBe(false);
+  expect(key(canvas, "keydown", "Enter").defaultPrevented).toBe(false);
+  expect(viewport.removeNode).not.toHaveBeenCalled();
+  expect(viewport.toggleEditor).not.toHaveBeenCalled();
+});
+
+test.each([
+  ["w", "ArrowUp"], ["a", "ArrowLeft"],
+  ["s", "ArrowDown"], ["d", "ArrowRight"],
+])("View mode %s pans exactly like %s", (letter, arrow) => {
+  viewport.rendering = () => ({ showingUI: () => false });
+  expect(key(canvas, "keydown", letter).defaultPrevented).toBe(true);
+  advance(200);
+  key(window, "keyup", letter);
+  advance(1500);
+  const wasdPosition = [...position];
+  expect(frames.size).toBe(0);
+  position = [0, 0];
+  key(canvas, "keydown", arrow);
+  advance(200);
+  key(window, "keyup", arrow);
+  advance(1500);
+  expect(position[0]).toBeCloseTo(wasdPosition[0], 6);
+  expect(position[1]).toBeCloseTo(wasdPosition[1], 6);
+});
+
+test("WASD aliases release independently of arrows and do not skew diagonals", () => {
+  viewport.rendering = () => ({ showingUI: () => false });
+  key(canvas, "keydown", "w");
+  key(canvas, "keydown", "ArrowUp");
+  key(canvas, "keydown", "d");
+  advance(200);
+  expect(position[1]).toBeCloseTo(-position[0], 6);
+  key(window, "keyup", "w");
+  key(window, "keyup", "d");
+  advance(1500);
+  expect(frames.size).toBe(1);
+  key(window, "keyup", "ArrowUp");
+  advance(1500);
+  expect(frames.size).toBe(0);
+});
+
+test("uppercase WASD releases even if Shift is released first", () => {
+  viewport.rendering = () => ({ showingUI: () => false });
+  key(canvas, "keydown", "W", { shiftKey: true });
+  advance(200);
+  expect(position[1]).toBeGreaterThan(0);
+  key(window, "keyup", "w");
+  advance(1500);
+  expect(frames.size).toBe(0);
+});
+
+test.each(["ctrlKey", "metaKey", "altKey"])("View mode preserves %s shortcuts", (modifier) => {
+  viewport.rendering = () => ({ showingUI: () => false });
+  expect(key(canvas, "keydown", "w", { [modifier]: true }).defaultPrevented).toBe(false);
+  advance(200);
+  expect(position).toEqual([0, 0]);
+});
+
+test.each([
+  ["w", Direction.UPWARD], ["a", Direction.BACKWARD],
+  ["s", Direction.DOWNWARD], ["d", Direction.FORWARD],
+])("Edit mode keeps %s as a node editing shortcut", (letter, direction) => {
+  viewport.spawnMove = jest.fn();
+  key(canvas, "keydown", letter);
+  advance(200);
+  expect(viewport.spawnMove).toHaveBeenCalledWith(direction, false, true);
+  expect(position).toEqual([0, 0]);
+});
+
+test("WASD is not intercepted while editing text", () => {
+  viewport.rendering = () => ({ showingUI: () => false });
+  viewport.showingEditor = () => true;
+  expect(key(canvas, "keydown", "w").defaultPrevented).toBe(false);
+  advance(200);
+  expect(position).toEqual([0, 0]);
+});
+
+test("navigation requires a loaded graph even in View mode", () => {
+  viewport.rendering = () => ({ showingUI: () => false });
+  viewport.hasWidget = () => false;
+  expect(key(canvas, "keydown", "ArrowLeft").defaultPrevented).toBe(false);
+  advance(200);
+  expect(position).toEqual([0, 0]);
 });
 
 test("dragging outside the canvas continues, releases, and does not select a node", () => {
@@ -125,6 +266,7 @@ test("returning after a missed mouseup does not drag the graph", () => {
   mouse(canvas, "mousedown", 10);
   advance(20);
   mouse(canvas, "mousemove", 30);
+  advance(1200);
   mouse(canvas, "mousemove", 100, 0);
   advance(200);
   expect(position).toEqual([20, 0]);

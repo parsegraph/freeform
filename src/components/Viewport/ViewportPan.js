@@ -5,6 +5,7 @@ const FRICTION = 8;
 const STOP_SPEED = 5;
 const MAX_FLING_SPEED = 2400;
 const DRAG_SAMPLE_MS = 80;
+const RELEASE_DECAY_MS = 160;
 const KEY_DIRECTIONS = new Map([
   ["ArrowLeft", [1, 0]],
   ["ArrowRight", [-1, 0]],
@@ -15,7 +16,7 @@ const KEY_DIRECTIONS = new Map([
 export default class ViewportPan {
   constructor(viewport) {
     this._viewport = viewport;
-    this._keys = new Set();
+    this._keys = new Map();
     this._velocity = [0, 0];
     this._frame = null;
     this._samples = null;
@@ -31,12 +32,12 @@ export default class ViewportPan {
     this._samples = null;
   }
 
-  keyDown(key) {
-    if (!KEY_DIRECTIONS.has(key)) {
+  keyDown(key, direction = key) {
+    if (!KEY_DIRECTIONS.has(direction)) {
       return false;
     }
     if (!this._samples) {
-      this._keys.add(key);
+      this._keys.set(key, direction);
       this.schedule();
     }
     return true;
@@ -65,7 +66,8 @@ export default class ViewportPan {
     this._lastFrame = time;
     let x = 0;
     let y = 0;
-    this._keys.forEach((key) => {
+    // Aliases can be held together without doubling a direction's influence.
+    new Set(this._keys.values()).forEach((key) => {
       const direction = KEY_DIRECTIONS.get(key);
       x += direction[0];
       y += direction[1];
@@ -96,25 +98,25 @@ export default class ViewportPan {
     this._viewport.refresh();
   }
 
-  beginDrag() {
+  beginDrag(time = performance.now()) {
     this.stop();
-    this._samples = [{ time: performance.now(), x: 0, y: 0 }];
+    this._samples = [{ time, x: 0, y: 0 }];
   }
 
-  dragBy(dx, dy) {
-    if (!this._samples) {
+  dragBy(dx, dy, time = performance.now()) {
+    if (!this._samples || (!dx && !dy)) {
       return;
     }
     this.move(dx, dy);
-    const time = performance.now();
     const last = this._samples[this._samples.length - 1];
     this._samples.push({ time, x: last.x + dx, y: last.y + dy });
-    while (this._samples.length > 1 && this._samples[0].time < time - DRAG_SAMPLE_MS) {
+    // Keep the sample preceding the window, including at low event rates.
+    while (this._samples.length > 2 && this._samples[1].time < time - DRAG_SAMPLE_MS) {
       this._samples.shift();
     }
   }
 
-  endDrag() {
+  endDrag(time = performance.now()) {
     const samples = this._samples;
     this._samples = null;
     if (!samples || samples.length < 2) {
@@ -122,18 +124,14 @@ export default class ViewportPan {
     }
     const first = samples[0];
     const last = samples[samples.length - 1];
-    const time = performance.now();
-    if (time - last.time > DRAG_SAMPLE_MS) {
-      return;
-    }
-    const dt = (time - first.time) / 1000;
-    if (dt <= 0) {
-      return;
-    }
+    // Event timestamps preserve flick speed when rendering delays input handling.
+    // Coarse clocks can still give equal timestamps; cap the resulting speed below.
+    const dt = Math.max(1, last.time - first.time) / 1000;
     const vx = (last.x - first.x) / dt;
     const vy = (last.y - first.y) / dt;
     const limit = Math.min(1, MAX_FLING_SPEED / Math.hypot(vx, vy));
-    this._velocity = [vx * limit, vy * limit];
+    const decay = Math.exp(-Math.max(0, time - last.time) / RELEASE_DECAY_MS);
+    this._velocity = [vx * limit * decay, vy * limit * decay];
     if (Math.hypot(...this._velocity) > STOP_SPEED) {
       this.schedule();
     }

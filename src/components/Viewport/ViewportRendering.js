@@ -44,10 +44,11 @@ import { WorldLabels } from "../WorldLabel";
 import { createLayoutPainter } from "./createLayoutPainter";
 import DocumentFont from "./DocumentFont";
 import ViewportFrameBuffer, { viewportFrameTransform } from "./ViewportFrameBuffer";
-import { documentState, writeGraph } from "../../graphDocument";
+import { documentState, nodeLabel, writeGraph } from "../../graphDocument";
 import { drawDocumentLabel } from "../../graphPresentation";
 import { jsonNodeKind } from "../../structuredJsonAppearance";
-import { drawJsonNodeBorder } from "../../structuredJsonBorders";
+import { isStructuredJson } from "../../structuredJson";
+import { drawJsonNodeBorder, hasJsonNodeBorder, JSON_BORDER_PADDING } from "../../structuredJsonBorders";
 import {
   annotateBenchmark,
   benchmarkFor,
@@ -901,7 +902,8 @@ export default class ViewportRendering {
         (node) => this.viewport().getNodeStyle(node),
         this.viewport().presentation(),
         this._benchmark,
-        this._documentFont.get(root, provider, this._benchmark)
+        this._documentFont.get(root, provider, this._benchmark),
+        isStructuredJson(root) ? (node) => jsonNodeKind(root, node) : undefined
       )
     );
   }
@@ -911,6 +913,24 @@ export default class ViewportRendering {
       this._layout = this.createLayout();
     }
     return this._layout.crank();
+  }
+
+  collectWorldLabel(node, label, camera, renderData, fontSize = FONT_SIZE) {
+    if (!this._showWorldLabels || !label) return false;
+    const layout = node.layout();
+    // Presentation documents can choose a different font size. Promote text
+    // based on its displayed size, including the scale of nested content.
+    const textScale = layout.absoluteScale() * fontSize / FONT_SIZE;
+    if (textScale * camera.scale() >= LABEL_IS_VISIBLE_SCALE) return false;
+    const firstLine = label.split("\n", 1)[0];
+    if (!firstLine) return false;
+    this._worldLabels ??= new WorldLabels(minVisibleTextScale);
+    this._worldLabels.draw(
+      firstLine, layout.absoluteX(), layout.absoluteY(),
+      WORLD_LABEL_SIZE, textScale
+    );
+    ++renderData.k;
+    return true;
   }
 
   renderPaintGroupText(paintGroup, renderData) {
@@ -938,15 +958,22 @@ export default class ViewportRendering {
 
     const presentation = this.viewport().presentation();
     if (presentation) {
-      pg.siblings().forEach((node) => {
+      let dirty = false;
+      measureBenchmark(this._benchmark, "Label collection and enqueue", () => pg.siblings().forEach((node) => {
+        if (node.layout().needsAbsolutePos()) {
+          dirty = true;
+          return;
+        }
         const style = this.viewport().getNodeStyle(node);
-        drawDocumentLabel(ctx, node, cam, presentation, style);
-        drawJsonNodeBorder(ctx, node, cam, jsonNodeKind(this.widget(), node), style);
-      });
-      return false;
+        if (style.textAlpha > 0 && this.collectWorldLabel(
+          node, nodeLabel(node, presentation), cam, renderData, presentation.text.fontSize
+        )) return;
+        const sidePadding = hasJsonNodeBorder(jsonNodeKind(this.widget(), node)) ? JSON_BORDER_PADDING : 0;
+        drawDocumentLabel(ctx, node, cam, presentation, style, sidePadding);
+      }));
+      return dirty;
     }
 
-    const gl = this.glProvider().gl();
     const { glyphPainter } = this._painters.get(pg);
     if (!glyphPainter) {
       return false;
@@ -965,9 +992,6 @@ export default class ViewportRendering {
     // eslint-disable-next-line no-loop-func
     let dirty = false;
     measureBenchmark(this._benchmark, "Label collection and enqueue", () => pg.siblings().forEach((node) => {
-        if (!this._worldLabels) {
-          this._worldLabels = new WorldLabels(minVisibleTextScale);
-        }
         if (node.layout().needsAbsolutePos()) {
           dirty = true;
           return;
@@ -976,27 +1000,7 @@ export default class ViewportRendering {
           return;
         }
         const kind = jsonNodeKind(this.widget(), node);
-        if (kind) drawJsonNodeBorder(ctx, node, cam, kind, this.viewport().getNodeStyle(node));
-        const lines = node.value().toString().split("\n");
-        if (
-          this._showWorldLabels &&
-          node.layout().absoluteScale() * cam.scale() <
-          LABEL_IS_VISIBLE_SCALE
-        ) {
-          if (!this._worldLabels) {
-            this._worldLabels = new WorldLabels(minVisibleTextScale);
-          }
-          ++renderData.k;
-          this._worldLabels.draw(
-            lines[0],
-            node.layout().absoluteX(),
-            node.layout().absoluteY(),
-            WORLD_LABEL_SIZE,
-            node.layout().absoluteScale(),
-            new Color(1, 1, 1, 1),
-            new Color(0, 0, 0, 1)
-          );
-        } else if (!this._frame?.textImage) {
+        if (!this.collectWorldLabel(node, node.value().toString(), cam, renderData) && !this._frame?.textImage) {
           const style = this.viewport().getNodeStyle(node);
           const nodeSize = [0, 0];
           node.layout().size(nodeSize);
@@ -1011,14 +1015,15 @@ export default class ViewportRendering {
               .asRGBA(),
             node.neighbors().hasNode(Direction.INWARD),
             nodeSize,
-            node.neighbors().getAlignment(Direction.INWARD) === Alignment.INWARD_VERTICAL
+            node.neighbors().getAlignment(Direction.INWARD) === Alignment.INWARD_VERTICAL,
+            hasJsonNodeBorder(kind) ? JSON_BORDER_PADDING : 0
           );
         }
     }));
     return dirty;
   }
 
-  drawText(text, worldX, worldY, worldScale, font, fillStyle, hasInward, nodeSize, inwardVertical)
+  drawText(text, worldX, worldY, worldScale, font, fillStyle, hasInward, nodeSize, inwardVertical, nodeLabelPadding = 0)
   {
     if (!this._textRenderer) {
       return;
@@ -1033,14 +1038,15 @@ export default class ViewportRendering {
       fillStyle,
       hasInward,
       nodeSize,
-      inwardVertical
+      inwardVertical,
+      nodeLabelPadding
     });
   }
 
   renderPaintGroup(paintGroup, worldMatrix, renderData) {
     const pg = paintGroup;
 
-    const { painter, spotlightPainter } = this._painters.get(pg);
+    const { painter, spotlightPainter, typedShapes } = this._painters.get(pg);
     if (pg.layout().needsCommit() || pg.layout().needsAbsolutePos()) {
       renderData.dirtyGroups++;
       pg.neighbors().root().invalidate();
@@ -1076,7 +1082,8 @@ export default class ViewportRendering {
       if (this.renderingSpotlights()) {
         spotlightPainter.render(pgMatrix);
       }
-      painter.render(pgMatrix);
+      if (typedShapes) painter.render(pgMatrix, cam.scale() * pg.layout().absoluteScale());
+      else painter.render(pgMatrix);
     });
 
     return false;
@@ -1272,7 +1279,15 @@ export default class ViewportRendering {
           : caretColor.asRGBA();
       const bodySize = [0, 0];
       layout.size(bodySize);
-      if (this.viewport().showingCaret()) {
+      const kind = jsonNodeKind(this.widget(), this.node());
+      if (hasJsonNodeBorder(kind)) {
+        if (this.viewport().showingCaret()) {
+          const color = hovered === this.node() ? caretHighlightColor : caretColor;
+          drawJsonNodeBorder(ctx, this.node(), cam, kind, {
+            borderColor: color.asHex(), borderAlpha: color.a(),
+          });
+        }
+      } else if (this.viewport().showingCaret()) {
         if (
           nodeHasValue(this.node()) ||
           this.node().neighbors().hasNode(Direction.INWARD)
@@ -1352,6 +1367,14 @@ export default class ViewportRendering {
     }
     const layout = node.layout();
     if (layout.needsCommit() || layout.needsAbsolutePos()) {
+      return;
+    }
+
+    const kind = jsonNodeKind(this.widget(), node);
+    if (hasJsonNodeBorder(kind)) {
+      drawJsonNodeBorder(ctx, node, cam, kind, {
+        borderColor: highlightColor.asHex(), borderAlpha: highlightColor.a(),
+      });
       return;
     }
 

@@ -31,7 +31,7 @@ function init(camData) {
     ctx.translate(cam.x(), cam.y());
 }
 
-function text({worldX, worldY, worldScale, text, font, fillStyle, hasInward, nodeSize, inwardVertical}) {
+function text({worldX, worldY, worldScale, text, font, fillStyle, hasInward, nodeSize, inwardVertical, nodeLabelPadding = 0}) {
     if (!ctx) {
         throw new Error("Not initialized");
     }
@@ -60,7 +60,7 @@ function text({worldX, worldY, worldScale, text, font, fillStyle, hasInward, nod
           ctx.textAlign = "left";
           ctx.textBaseline = "top";
           ctx.translate(
-            worldX - (worldScale * nodeSize[0]) / 2 + worldScale*INWARD_SEPARATION/4,
+            worldX - (worldScale * nodeSize[0]) / 2 + worldScale*(INWARD_SEPARATION/4 + nodeLabelPadding),
             worldY
           );
           ctx.translate(
@@ -69,10 +69,11 @@ function text({worldX, worldY, worldScale, text, font, fillStyle, hasInward, nod
           );
         }
     } else {
-        ctx.textAlign = "left";
+        ctx.textAlign = nodeLabelPadding > 0 ? "center" : "left";
         ctx.textBaseline = "hanging";
         ctx.translate(
-          worldX - (worldScale * nodeSize[0]) / 2 + worldScale*INWARD_SEPARATION/4,
+          nodeLabelPadding > 0 ? worldX :
+            worldX - (worldScale * nodeSize[0]) / 2 + worldScale*INWARD_SEPARATION/4,
           worldY - worldScale * textHeight/2
         );
     }

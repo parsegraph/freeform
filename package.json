@@ -36,10 +36,12 @@
     "web-vitals": "^2.1.4"
   },
   "scripts": {
+    "prestart": "npm run build:workers",
     "start": "react-scripts start",
+    "prebuild": "npm run build:workers",
     "build": "react-scripts build",
-    "build:workers": "npm --prefix occluder run build -- --output-path ../public --output-filename occluder.js && npm --prefix textrenderer run build",
-    "build:deploy": "npm run build:workers && npm run build",
+    "build:workers": "node scripts/build-workers.js",
+    "build:deploy": "npm run build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
     "prettier": "prettier --write src",

@@ -1,7 +1,11 @@
 import Camera from "parsegraph-camera";
+import Rect from "parsegraph-rect";
 import ViewportRendering from "./ViewportRendering";
 import DocumentFont from "./DocumentFont";
-import { Direction, DirectionNode, LayoutPhase } from "parsegraph";
+import { createPresentation, Direction, DirectionNode, LayoutPhase } from "parsegraph";
+import { createStructuredJson } from "../../structuredJson";
+import { graphNodes } from "../../graphDocument";
+import { WorldLabels } from "../WorldLabel";
 import { attachBenchmark, beginBenchmark, benchmarkFor, cancelBenchmark, getBenchmarkRuns } from "../../benchmark";
 import {
   getInteractionEvents,
@@ -15,6 +19,208 @@ function node(x, scale = 1) {
     absoluteSize: (size) => { size[0] = 100 * scale; size[1] = 50 * scale; },
   }) };
 }
+
+function labelRenderer(root, presentation, { scale = 0.5, fontSize = 10, enabled = true } = {}) {
+  const camera = new Camera();
+  camera.setSize(800, 600);
+  camera.setOrigin(400, 300);
+  camera.setScale(1);
+  if (presentation) presentation.text.fontSize = fontSize;
+  const nodes = graphNodes(root);
+  nodes.forEach((item, index) => jest.spyOn(item, "layout").mockReturnValue({
+    needsCommit: () => false, needsAbsolutePos: () => false,
+    absoluteX: () => index * 30, absoluteY: () => 0, absoluteScale: () => scale,
+    size: (out) => { out[0] = 100; out[1] = 50; },
+  }));
+  const ctx = Object.fromEntries([
+    "save", "restore", "resetTransform", "scale", "translate", "fillText",
+  ].map((name) => [name, jest.fn()]));
+  const renderer = Object.create(ViewportRendering.prototype);
+  renderer._viewport = {
+    widget: () => root, camera: () => camera, presentation: () => presentation,
+    getNodeStyle: () => ({ textColor: "#123456", textAlpha: 1 }),
+  };
+  renderer._ctx = ctx;
+  renderer._frame = { camera, textImage: {} };
+  renderer._worldLabels = new WorldLabels(1);
+  renderer._showWorldLabels = enabled;
+  renderer._painters = new WeakMap();
+  renderer._bounds = new WeakMap();
+  root.paintGroup().forEach((pg) => {
+    renderer._painters.set(pg, { glyphPainter: { render: jest.fn() } });
+    renderer._bounds.set(pg, { bounds: new Rect(0, 0, 200, 100) });
+  });
+  renderer.drawText = jest.fn();
+  const data = { k: 0 };
+  return {
+    renderer, ctx, data,
+    draw: () => root.paintGroup().forEach((pg) =>
+      expect(renderer.renderPaintGroupText(pg, data)).toBe(false)
+    ),
+    restore: () => nodes.forEach((item) => item.layout.mockRestore()),
+  };
+}
+
+test("nested JSON labels are collected even with a cached text frame, and the Labels toggle disables them", () => {
+  const root = createStructuredJson({ name: "Alice" });
+  const harness = labelRenderer(root);
+  harness.draw();
+  expect(harness.renderer._worldLabels.labels().map((label) => label.text()))
+    .toEqual(expect.arrayContaining(["{}", '"name"', '"Alice"']));
+  expect(harness.data.k).toBe(3); // Organizing buds never get labels.
+  expect(harness.renderer.drawText).not.toHaveBeenCalled();
+  harness.renderer._worldLabels.clear();
+  harness.renderer.toggleWorldLabels();
+  harness.draw();
+  expect(harness.renderer._worldLabels.labels()).toEqual([]);
+  harness.restore();
+});
+
+test.each([
+  ["small text", 0.5, 10, true, true],
+  ["normal zoom", 1, 10, true, false],
+  ["larger presentation font", 0.5, 40, true, false],
+  ["smaller presentation font", 1, 5, true, true],
+  ["Labels disabled", 0.5, 10, false, false],
+])("presentation documents use WorldLabels for %s only when needed", (name, scale, fontSize, enabled, promoted) => {
+  const root = new DirectionNode("first\r\nsecond");
+  const harness = labelRenderer(root, createPresentation(), { scale, fontSize, enabled });
+  harness.draw();
+  expect(harness.data.k).toBe(promoted ? 1 : 0);
+  if (promoted) {
+    const [label] = harness.renderer._worldLabels.labels();
+    expect(label.text()).toBe("first");
+    expect(label.fontSize()).toBe(15);
+    expect(label.scale()).toBe(scale * fontSize / 10);
+    expect(harness.ctx.fillText).not.toHaveBeenCalled();
+  } else {
+    expect(harness.renderer._worldLabels.labels()).toEqual([]);
+    expect(harness.ctx.fillText.mock.calls.map(([line]) => line)).toEqual(["first", "second"]);
+  }
+  harness.restore();
+});
+
+test.each([undefined, "", { text: "unsupported" }])("presentation value %p does not produce an empty or invented WorldLabel", (value) => {
+  const harness = labelRenderer(new DirectionNode(value), createPresentation());
+  harness.draw();
+  expect(harness.renderer._worldLabels.labels()).toEqual([]);
+  expect(harness.data.k).toBe(0);
+  harness.restore();
+});
+
+test("transparent presentation text stays hidden at WorldLabel zoom", () => {
+  const harness = labelRenderer(new DirectionNode("hidden"), createPresentation());
+  harness.renderer._viewport.getNodeStyle = () => ({ textColor: "#123456", textAlpha: 0 });
+  harness.draw();
+  expect(harness.renderer._worldLabels.labels()).toEqual([]);
+  expect(harness.ctx.fillStyle).toBe("rgba(18, 52, 86, 0)");
+  harness.restore();
+});
+
+test("typed paint groups use CSS camera scale while ordinary painters keep their render path", () => {
+  const root = new DirectionNode("node");
+  jest.spyOn(root, "layout").mockReturnValue({
+    needsCommit: () => false, needsAbsolutePos: () => false,
+    absoluteScale: () => 0.5, absoluteX: () => 0, absoluteY: () => 0,
+  });
+  const camera = new Camera();
+  camera.setSize(800, 600);
+  camera.setOrigin(100, 75);
+  camera.setScale(4);
+  const painter = { render: jest.fn() };
+  const data = { painter, spotlightPainter: {}, typedShapes: true };
+  const renderer = Object.create(ViewportRendering.prototype);
+  renderer._viewport = { camera: () => camera };
+  renderer._painters = new WeakMap([[root, data]]);
+  renderer._bounds = new WeakMap([[root, { bounds: new Rect(0, 0, 10, 10) }]]);
+  renderer.renderingSpotlights = () => false;
+  expect(renderer.renderPaintGroup(root, camera.project(), { i: 0 })).toBe(false);
+  expect(painter.render.mock.calls[0][1]).toBe(2);
+  camera.setScale(8);
+  camera.setOrigin(50, 37.5);
+  renderer.renderPaintGroup(root, camera.project(), { i: 0 });
+  expect(painter.render.mock.calls[1][1]).toBe(4);
+  data.typedShapes = false;
+  renderer.renderPaintGroup(root, camera.project(), { i: 0 });
+  expect(painter.render.mock.calls[2]).toHaveLength(1);
+  root.layout.mockRestore();
+});
+
+test("cached text does not draw a second custom border over the GPU shape", () => {
+  const root = createStructuredJson(true);
+  jest.spyOn(root, "layout").mockReturnValue({
+    needsCommit: () => false, needsAbsolutePos: () => false,
+    absoluteScale: () => 1, absoluteX: () => 0, absoluteY: () => 0,
+  });
+  const camera = new Camera();
+  camera.setSize(800, 600);
+  camera.setOrigin(400, 300);
+  const ctx = { beginPath: jest.fn(), stroke: jest.fn() };
+  const renderer = Object.create(ViewportRendering.prototype);
+  renderer._viewport = {
+    widget: () => root, camera: () => camera, presentation: () => undefined,
+  };
+  renderer._frame = { camera, textImage: {} };
+  renderer._worldLabels = {};
+  renderer._glProvider = { gl: () => ({}) };
+  renderer._ctx = ctx;
+  renderer._painters = new WeakMap([[root, { glyphPainter: {} }]]);
+  renderer._bounds = new WeakMap([[root, { bounds: new Rect(0, 0, 10, 10) }]]);
+  expect(renderer.renderPaintGroupText(root, { k: 0 })).toBe(false);
+  expect(ctx.beginPath).not.toHaveBeenCalled();
+  expect(ctx.stroke).not.toHaveBeenCalled();
+  root.layout.mockRestore();
+});
+
+test("typed selection and hover highlights follow the custom outline", () => {
+  const root = createStructuredJson([true, "text"]);
+  const bool = graphNodes(root).find((item) => item.value() === "true");
+  const string = graphNodes(root).find((item) => item.value() === '"text"');
+  const geometry = {
+    absoluteX: () => 0, absoluteY: () => 0, absoluteScale: () => 1,
+    size: (size) => { size[0] = 100; size[1] = 50; },
+    needsCommit: () => false, needsAbsolutePos: () => false,
+  };
+  for (const item of [root, bool, string]) jest.spyOn(item, "layout").mockReturnValue(geometry);
+  const ctx = Object.fromEntries([
+    "save", "restore", "resetTransform", "beginPath", "moveTo", "lineTo",
+    "quadraticCurveTo", "closePath", "stroke", "roundRect", "strokeRect", "scale", "translate",
+  ].map((name) => [name, jest.fn()]));
+  const camera = new Camera();
+  camera.setSize(800, 600);
+  camera.setOrigin(400, 300);
+  let selected = root;
+  let hovered = bool;
+  let showingCaret = true;
+  const renderer = Object.create(ViewportRendering.prototype);
+  renderer._viewport = {
+    widget: () => root, node: () => selected, layout: () => selected.layout(),
+    camera: () => camera, input: () => ({ hoveredNode: () => hovered }),
+    showingCaret: () => showingCaret, showNodeActions: () => false,
+  };
+  renderer.ctx = () => ctx;
+  renderer.carouselContainer = () => ({ style: {} });
+  renderer.renderCaret();
+  expect(ctx.closePath).toHaveBeenCalledTimes(1);
+  expect(ctx.roundRect).not.toHaveBeenCalled();
+  renderer.renderHovered();
+  expect(ctx.closePath).toHaveBeenCalledTimes(2);
+  expect(ctx.roundRect).not.toHaveBeenCalled();
+  showingCaret = false;
+  renderer.renderCaret();
+  expect(ctx.strokeRect).not.toHaveBeenCalled();
+  expect(ctx.closePath).toHaveBeenCalledTimes(2);
+  // Ordinary scalar highlights retain their existing rounded shape.
+  selected = string;
+  showingCaret = true;
+  renderer.renderCaret();
+  expect(ctx.roundRect).toHaveBeenCalledTimes(1);
+  hovered = string;
+  selected = bool;
+  renderer.renderHovered();
+  expect(ctx.roundRect).toHaveBeenCalledTimes(2);
+  for (const item of [root, bool, string]) item.layout.mockRestore();
+});
 
 test("neighbor focus schedules travel once and rapid moves use the planned zoom", () => {
   const camera = new Camera();

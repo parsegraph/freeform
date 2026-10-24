@@ -1,4 +1,4 @@
-import { CommitLayout } from "parsegraph";
+import { Alignment, CommitLayout, createPresentation } from "parsegraph";
 import { readGraph, documentState, graphNodes } from "./graphDocument";
 import { createDocumentLayout, drawDocumentLabel } from "./graphPresentation";
 import standard from "./fixtures/v1/proportion-standard.json";
@@ -91,6 +91,50 @@ test("text drawing and measurement use the same newline, font, and line-height p
     { textColor: "#123456", textAlpha: 1 }
   );
   expect(ctx.fillText).not.toHaveBeenCalled();
+});
+
+test.each([
+  ["default horizontal inward", true, false, false, undefined, -47, 0, "left"],
+  ["padded horizontal inward", true, false, false, 8, -39, 0, "left"],
+  ["padded square horizontal inward", true, false, true, 8, -39, 0, "left"],
+  ["default vertical inward", true, true, false, undefined, 0, -42.5, "center"],
+  ["padded vertical inward", true, true, false, 8, 0, -42.5, "center"],
+  ["default square vertical inward", true, true, true, undefined, 0, -42.5, "center"],
+  ["padded square vertical inward", true, true, true, 8, 0, -34.5, "center"],
+  ["padded leaf", false, false, false, 8, 0, 0, "center"],
+])("presentation label coordinates respect side padding for %s", (
+  name, hasInward, vertical, square, padding, x, y, textAlign
+) => {
+  const presentation = createPresentation();
+  presentation.styles.custom = { ...presentation.styles.block, square };
+  presentation.nodeStyles.label = "custom";
+  const node = {
+    id: () => "label",
+    value: () => "label",
+    layout: () => ({
+      size: (out) => { out[0] = 100; out[1] = 100; },
+      absoluteX: () => 20,
+      absoluteY: () => 30,
+      absoluteScale: () => 0.5,
+    }),
+    neighbors: () => ({
+      hasNode: () => hasInward,
+      getAlignment: () => vertical ? Alignment.INWARD_VERTICAL : Alignment.NONE,
+    }),
+  };
+  const ctx = context();
+  drawDocumentLabel(
+    ctx,
+    node,
+    { scale: () => 2, x: () => 10, y: () => -10 },
+    presentation,
+    { textColor: "#123456", textAlpha: 1 },
+    padding
+  );
+  expect(ctx.fillText).toHaveBeenCalledWith("label", x, y);
+  expect(ctx.textAlign).toBe(textAlign);
+  expect(ctx.translate.mock.calls).toEqual([[10, -10], [20, 30]]);
+  expect(ctx.scale.mock.calls).toEqual([[2, 2], [0.5, 0.5]]);
 });
 
 test("Memory Piers keeps static slider geometry and its original recipe after edits", () => {

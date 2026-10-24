@@ -26,7 +26,7 @@ export function createDocumentLayout(presentation, ctx) {
   );
 }
 
-export function drawDocumentLabel(ctx, node, camera, presentation, appearance) {
+export function drawDocumentLabel(ctx, node, camera, presentation, appearance, sidePadding = 0) {
   const label = nodeLabel(node, presentation);
   if (label === null) return;
   const layout = node.layout();
@@ -43,9 +43,10 @@ export function drawDocumentLabel(ctx, node, camera, presentation, appearance) {
       node.neighbors().getAlignment(Direction.INWARD) ===
       Alignment.INWARD_VERTICAL
     ) {
-      y = -size[1] / 2 + style.paddingY + lineHeight / 2;
+      y = -size[1] / 2 + style.paddingY + lineHeight / 2 +
+        (style.square ? sidePadding : 0);
     } else {
-      x = -size[0] / 2 + style.paddingX;
+      x = -size[0] / 2 + style.paddingX + sidePadding;
       align = "left";
     }
   }

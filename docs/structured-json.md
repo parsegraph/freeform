@@ -9,10 +9,18 @@ The JSON sidebar appears in Edit mode. Unfinished slots use amber blocks; the
 sidebar's diagnostics also select the corresponding node directly.
 
 Node types have a shared color scheme in the graph and type-choice buttons.
-Objects, arrays, and booleans also have curly, square, and angle border cues.
-These side accents are capped at 8 screen pixels wide, so tall or large
-containers do not acquire oversized brackets. They currently sit inside the
-ordinary block outline.
+Objects, arrays, and booleans use curly, square, and angle outlines in place of
+the ordinary rounded border. The shaped sides are capped at 32 screen pixels
+wide, with extra side padding for labels and contained nodes. At small zoom
+levels the shape depth and stroke shrink to fit that reserved space. Fills and
+outlines use the same contour in one GPU draw, so angled/curly nodes have no
+rounded background leaking outside their shape. Selection and hover follow
+the same contour. Mixed shapes retain their drawing order within each paint
+group, keeping container backgrounds behind their children.
+
+The **Labels** toggle enables WorldLabels: when node text becomes too small,
+readable labels remain over the graph, with overlapping labels filtered out.
+This also works with v1 presentation settings and their chosen font size.
 
 ## Slots and document states
 
@@ -138,6 +146,17 @@ Containers connect INWARD to a vertical multislot: empty buds form a DOWNWARD
 spine, with FORWARD prongs. Array prongs hold values. Object prongs hold keys,
 with each key's value DOWNWARD. Prongs are centered and buds pull toward their
 children. Nested containers apply the same mapping.
+
+Each container shrinks its first INWARD bud with `DirectionCaret.shrink()`
+(currently 0.85). The whole multislot inherits that scale: sibling entries stay
+the same size, and an object's key and value shrink together. Each further
+container adds one nesting level of shrink. The document root stays full size.
+
+The actual node scales survive native saves, recovery, and undo. The metadata's
+`innerScale` records the generation default so edits can preserve manual scale
+adjustments while moving the automatic shrink to a new first bud after
+insertion, deletion, or reordering. Older drafts without this field use a
+baseline of 1 and adopt the new default on their next structured edit.
 
 The structured JSON adapter interprets selected nodes, enumerates applicable
 actions, applies edits, validates the graph, and exports complete JSON. The

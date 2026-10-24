@@ -159,7 +159,9 @@ change host nginx. A failed attempt remains available for diagnosis; retry with
 a new attempt name.
 
 `public/occluder.js` and `public/textrenderer.js` are generated, ignored files;
-a plain app build in a fresh checkout will not create them. The JSON/Lisp sample
+`yarn start` and `yarn build` now build both automatically using the root app's
+installed webpack. `yarn build:workers` rebuilds them independently, and
+`yarn build:deploy` uses the same complete production build. The JSON/Lisp sample
 files live under `public/examples/`. Preserve the `/freeform/` prefix when serving
 the artifact, including workers, samples, and the revision marker.
 

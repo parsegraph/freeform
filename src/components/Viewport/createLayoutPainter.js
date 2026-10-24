@@ -18,11 +18,14 @@ import {
   nodeHasValue,
 } from "../../settings";
 import { WebGLBlockPainter } from "parsegraph-blockpainter";
+import TypedBlockPainter from "./TypedBlockPainter";
 import Color from "parsegraph-color";
 import SpotlightPainter from "parsegraph-spotlightpainter";
 import Rect from "parsegraph-rect";
 import { Label, GlyphPainter, GL_TEXTURE_SIZE } from 'parsegraph-glyphpainter';
 import { createDocumentLayout } from "../../graphPresentation";
+import { presentationStyle } from "../../graphDocument";
+import { hasJsonNodeBorder, JSON_BORDER_PADDING } from "../../structuredJsonBorders";
 import { measureBenchmark } from "../../benchmark";
 import { recordInteractionGroup } from "../../interactionBenchmark";
 
@@ -91,18 +94,22 @@ const getSeparation = (node, axis) => {
   return NODE_SEPARATION;
 };
 
-const paint = (pg, painters, bounds, glProvider, getNodeStyle, presentation, glyphFont) => {
+const paint = (pg, painters, bounds, glProvider, getNodeStyle, presentation, glyphFont, getNodeShape) => {
   if (!painters.has(pg)) {
     painters.set(pg, {});
   }
   let painterData = painters.get(pg);
   let { painter, spotlightPainter, glyphPainter } = painterData;
-  if (!painter || painter.glProvider() !== glProvider) {
-    painter = new WebGLBlockPainter(glProvider);
+  const Painter = getNodeShape ? TypedBlockPainter : WebGLBlockPainter;
+  if (!painter || painter.glProvider() !== glProvider || painterData.painterType !== Painter) {
+    painter?.clear();
+    painter = new Painter(glProvider);
     painterData.painter = painter;
+    painterData.painterType = Painter;
   } else {
     painter.clear();
   }
+  painterData.typedShapes = !!getNodeShape;
   if (!spotlightPainter || spotlightPainter._window !== glProvider) {
     spotlightPainter = new SpotlightPainter(glProvider);
     painterData.spotlightPainter = spotlightPainter;
@@ -139,6 +146,8 @@ const paint = (pg, painters, bounds, glProvider, getNodeStyle, presentation, gly
 
   pg.siblings().forEach((node) => {
     const style = getNodeStyle(node);
+    const kind = getNodeShape?.(node);
+    const sidePadding = hasJsonNodeBorder(kind) ? JSON_BORDER_PADDING : 0;
 
     paintNodeLines(node, LINE_THICKNESS / 2, (x, y, w, h) => {
       b.include(x, y, w, h);
@@ -152,9 +161,8 @@ const paint = (pg, painters, bounds, glProvider, getNodeStyle, presentation, gly
     });
     paintNodeBounds(node, (x, y, w, h) => {
       b.include(x, y, w, h);
-      painter.setBackgroundColor(
-        Color.fromHex(style.backgroundColor).setA(style.backgroundAlpha)
-      );
+      const background = Color.fromHex(style.backgroundColor).setA(style.backgroundAlpha);
+      painter.setBackgroundColor(background);
       painter.setBorderColor(
         Color.fromHex(style.borderColor).setA(style.borderAlpha)
       );
@@ -166,7 +174,9 @@ const paint = (pg, painters, bounds, glProvider, getNodeStyle, presentation, gly
           w,
           h,
           Math.min(BORDER_ROUNDEDNESS * scale, w / 2, h / 2),
-          Math.min(BORDER_THICKNESS * scale, w / 2, h / 2)
+          Math.min(BORDER_THICKNESS * scale, w / 2, h / 2),
+          kind,
+          scale
         );
         if (!presentation && nodeHasValue(node) && node.value() !== "") {
           label.setText("" + node.value());
@@ -196,7 +206,7 @@ const paint = (pg, painters, bounds, glProvider, getNodeStyle, presentation, gly
             });
           } else {
             label.paint(
-              x - w/2 + scale*INWARD_SEPARATION/4,
+              x - w/2 + scale*(INWARD_SEPARATION/4 + sidePadding),
               y - (scale/FONT_UPSCALE)*label.height()/2,
               scale/FONT_UPSCALE,
               (glyph, x, y, scale) => {
@@ -225,7 +235,8 @@ const createLayoutPainter = (
   getNodeStyle,
   presentation,
   benchmark,
-  glyphFont
+  glyphFont,
+  getNodeShape
 ) => {
   if (!getNodeStyle) {
     throw new Error("getNodeStyle is not defined");
@@ -236,10 +247,27 @@ const createLayoutPainter = (
   const geometry = presentation ? createDocumentLayout(presentation, ctx) : {
     size: (node, size) => getNodeSize(node, size, ctx), getSeparation,
   };
-  const painter = {
+  const shaped = (node) => hasJsonNodeBorder(getNodeShape?.(node));
+  const square = (node) => presentation && presentationStyle(presentation, node).square;
+  const paddedGeometry = !getNodeShape ? geometry : {
     ...geometry,
+    size: (node, size) => {
+      geometry.size(node, size);
+      if (!shaped(node)) return;
+      size[0] += 2 * JSON_BORDER_PADDING;
+      if (square(node)) size[1] += 2 * JSON_BORDER_PADDING;
+    },
+    getSeparation: (node, axis, ...args) => {
+      const separation = geometry.getSeparation(node, axis, ...args);
+      if (axis !== Axis.Z || !shaped(node)) return separation;
+      const vertical = node.neighbors().getAlignment(Direction.INWARD) === Alignment.INWARD_VERTICAL;
+      return separation + (!vertical || square(node) ? 2 * JSON_BORDER_PADDING : 0);
+    },
+  };
+  const painter = {
+    ...paddedGeometry,
     paint: (pg) => recordInteractionGroup(pg, "repaint", () =>
-      paint(pg, painters, bounds, glProvider, getNodeStyle, presentation, glyphFont)
+      paint(pg, painters, bounds, glProvider, getNodeStyle, presentation, glyphFont, getNodeShape)
     ),
   };
   if (!benchmark) return painter;

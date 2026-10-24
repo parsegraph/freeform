@@ -1,4 +1,11 @@
-import { Alignment, Direction, DirectionNode, Fit } from "parsegraph";
+import {
+  Alignment,
+  Direction,
+  DirectionCaret,
+  DirectionNode,
+  Fit,
+  SHRINK_SCALE,
+} from "parsegraph";
 import { documentState, graphNodes } from "./graphDocument";
 
 // The graph stores content and order; metadata supplies its language roles.
@@ -53,6 +60,12 @@ function decode(root) {
       "$",
       "Unsupported or missing structured JSON draft metadata."
     );
+  }
+  if (
+    metadata.innerScale !== undefined &&
+    (!Number.isFinite(metadata.innerScale) || metadata.innerScale <= 0)
+  ) {
+    invalid(root, "$", "Invalid inner-content scale baseline.");
   }
   const seen = new Set();
   const contexts = new Map();
@@ -367,6 +380,10 @@ function build(tree, previousRoot, selected) {
         if (previousBud) previousBud.connect(Direction.DOWNWARD, bud);
         else {
           node.connect(Direction.INWARD, bud);
+          // Shrink the whole multislot once, keeping sibling entries and an
+          // object's key/value pair at the same scale. Nested containers repeat
+          // this at their own INWARD boundary.
+          new DirectionCaret(node).shrink(Direction.INWARD);
           bud.paintGroups().crease();
         }
         let prong;
@@ -395,10 +412,26 @@ function build(tree, previousRoot, selected) {
   // Preserve edge settings only when the same parent/child pair still occupies
   // that direction; new and reordered connections use the grammar's defaults.
   if (previousRoot) {
+    const previousMetadata = metadataOf(previousRoot);
+    // Older drafts were built with unscaled content. Record the structural
+    // default separately from actual node scales so a manual grow/shrink is
+    // preserved, while promoting or demoting the first bud moves the automatic
+    // shrink rather than accumulating it down the spine.
+    const previousInnerScale = previousMetadata.innerScale ?? 1;
     for (const before of graphNodes(previousRoot)) {
       const after = physical.get(before.id());
       if (!after) continue;
-      after.setScale(before.scale());
+      const oldDefault =
+        previousMetadata.nodes[before.id()].kind === "entry" &&
+        before.neighbors().parentDirection() === Direction.OUTWARD
+          ? previousInnerScale
+          : 1;
+      const newDefault = after.scale();
+      after.setScale(
+        oldDefault === newDefault
+          ? before.scale()
+          : (before.scale() * newDefault) / oldDefault
+      );
       after.setNodeFit(before.nodeFit());
       after.setRightToLeft(before.rightToLeft());
       after
@@ -429,7 +462,7 @@ function build(tree, previousRoot, selected) {
   const metadata = copy(previous?.metadata ?? {});
   metadata.freeform = {
     ...(record(metadata.freeform) ? metadata.freeform : {}),
-    structuredJson: { version: 1, nodes },
+    structuredJson: { version: 1, innerScale: SHRINK_SCALE, nodes },
   };
   Object.defineProperty(root, DOCUMENT_STATE, {
     configurable: true,

@@ -1,4 +1,10 @@
-import { Alignment, Direction, DirectionNode, Fit } from "parsegraph";
+import {
+  Alignment,
+  Direction,
+  DirectionNode,
+  Fit,
+  SHRINK_SCALE,
+} from "parsegraph";
 import GraphStack from "./GraphStack";
 import {
   documentState,
@@ -22,6 +28,25 @@ const inward = (node) => node.neighbors().nodeAt(Direction.INWARD);
 const forward = (node) => node.neighbors().nodeAt(Direction.FORWARD);
 const down = (node) => node.neighbors().nodeAt(Direction.DOWNWARD);
 const first = (root) => forward(inward(root));
+const entryBuds = (container) => {
+  const buds = [];
+  let bud = container.neighbors().hasChild(Direction.INWARD)
+    ? inward(container)
+    : null;
+  while (bud) {
+    buds.push(bud);
+    bud = bud.neighbors().hasChild(Direction.DOWNWARD) ? down(bud) : null;
+  }
+  return buds;
+};
+const effectiveScale = (node) => {
+  let scale = 1;
+  while (!node.neighbors().isRoot()) {
+    scale *= node.scale();
+    node = node.neighbors().parentNode();
+  }
+  return scale;
+};
 const nodesOfKind = (root, kind) =>
   graphNodes(root).filter(
     (node) =>
@@ -501,6 +526,171 @@ test("semantic edits preserve surviving node scale, fit, and edge alignment", ()
     Alignment.POSITIVE
   );
   expect(exportStructuredJson(result.root)).toEqual({ renamed: [1, 2] });
+});
+
+test("container contents shrink once per nesting level, with equally sized siblings and key/value pairs", () => {
+  const root = createStructuredJson([1, { items: [2, 3] }, 4]);
+  const outerBuds = entryBuds(root);
+  expect(root.scale()).toBe(1);
+  expect(outerBuds.map((bud) => bud.scale())).toEqual([SHRINK_SCALE, 1, 1]);
+  outerBuds.forEach((bud) => {
+    expect(forward(bud).scale()).toBe(1);
+    expect(effectiveScale(forward(bud))).toBeCloseTo(SHRINK_SCALE);
+  });
+  const object = forward(outerBuds[1]);
+  const key = first(object);
+  const array = down(key);
+  expect(key.scale()).toBe(1);
+  expect(array.scale()).toBe(1);
+  expect(effectiveScale(key)).toBeCloseTo(SHRINK_SCALE ** 2);
+  expect(effectiveScale(array)).toBeCloseTo(SHRINK_SCALE ** 2);
+  expect(entryBuds(array).map((bud) => bud.scale())).toEqual([SHRINK_SCALE, 1]);
+  entryBuds(array).forEach((bud) => {
+    expect(effectiveScale(forward(bud))).toBeCloseTo(SHRINK_SCALE ** 3);
+  });
+  expect(effectiveScale(down(first(createJsonDraft())))).toBeCloseTo(
+    SHRINK_SCALE
+  );
+  expect(exportStructuredJson(root)).toEqual([1, { items: [2, 3] }, 4]);
+});
+
+test("repeated text edits and changing the first entry keep one shared content shrink", () => {
+  let root = createStructuredJson([1, 2, 3]);
+  const originalFirstId = first(root).id();
+  const expectUniformContents = () => {
+    const buds = entryBuds(root);
+    expect(buds.map((bud) => bud.scale())).toEqual([
+      SHRINK_SCALE,
+      ...buds.slice(1).map(() => 1),
+    ]);
+    buds.forEach((bud) => {
+      expect(effectiveScale(forward(bud))).toBeCloseTo(SHRINK_SCALE);
+    });
+  };
+  for (const text of ["10", "11", "12"]) {
+    root = applyJsonCommand(root, originalFirstId, {
+      type: "setText",
+      text,
+    }).root;
+    expectUniformContents();
+  }
+  const inserted = applyJsonCommand(root, originalFirstId, {
+    type: "insertSibling",
+    offset: -1,
+  });
+  root = inserted.root;
+  const insertedId = inserted.selectedNode.id();
+  expectUniformContents();
+  root = applyJsonCommand(root, insertedId, { type: "move", offset: 1 }).root;
+  expectUniformContents();
+  root = applyJsonCommand(root, originalFirstId, { type: "remove" }).root;
+  expectUniformContents();
+  root = applyJsonCommand(root, insertedId, { type: "remove" }).root;
+  expectUniformContents();
+  expect(exportStructuredJson(root)).toEqual([2, 3]);
+});
+
+test("adding to an empty container, pasting, and wrapping apply each new nesting scale", () => {
+  const added = applyJsonCommand(createStructuredJson([]), undefined, {
+    type: "add",
+  });
+  expect(effectiveScale(added.selectedNode)).toBeCloseTo(SHRINK_SCALE);
+  let root = applyJsonCommand(added.root, added.selectedNode, {
+    type: "paste",
+    text: '{"items":[1,2]}',
+  }).root;
+  const object = first(root);
+  const array = down(first(object));
+  expect(effectiveScale(object)).toBeCloseTo(SHRINK_SCALE);
+  expect(effectiveScale(first(array))).toBeCloseTo(SHRINK_SCALE ** 3);
+  const originalId = root.id();
+  root.setScale(0.5);
+  root = applyJsonCommand(root, root, { type: "wrap", kind: "array" }).root;
+  expect(first(root).id()).toBe(originalId);
+  expect(first(root).scale()).toBe(0.5);
+  expect(effectiveScale(first(root))).toBeCloseTo(SHRINK_SCALE * 0.5);
+  const wrappedObject = first(first(root));
+  const wrappedArray = down(first(wrappedObject));
+  expect(effectiveScale(first(wrappedArray))).toBeCloseTo(
+    SHRINK_SCALE ** 4 * 0.5
+  );
+  expect(exportStructuredJson(root)).toEqual([[{ items: [1, 2] }]]);
+});
+
+test("manual scales retain their adjustment when entry buds gain or lose the first position", () => {
+  let root = createStructuredJson([1, 2]);
+  const [firstBud, secondBud] = entryBuds(root);
+  const firstId = first(root).id();
+  firstBud.setScale(0.5);
+  secondBud.setScale(0.6);
+  first(root).setScale(0.4);
+  root = applyJsonCommand(root, firstId, { type: "setText", text: "10" }).root;
+  expect(inward(root).scale()).toBe(0.5);
+  expect(down(inward(root)).scale()).toBe(0.6);
+  expect(first(root).scale()).toBe(0.4);
+  root = applyJsonCommand(root, firstId, { type: "move", offset: 1 }).root;
+  expect(inward(root).id()).toBe(secondBud.id());
+  expect(inward(root).scale()).toBeCloseTo(0.6 * SHRINK_SCALE);
+  expect(down(inward(root)).id()).toBe(firstBud.id());
+  expect(down(inward(root)).scale()).toBeCloseTo(0.5 / SHRINK_SCALE);
+  expect(forward(down(inward(root))).scale()).toBe(0.4);
+  root = applyJsonCommand(root, firstId, { type: "move", offset: -1 }).root;
+  expect(inward(root).scale()).toBeCloseTo(0.5);
+  expect(down(inward(root)).scale()).toBeCloseTo(0.6);
+  expect(first(root).scale()).toBe(0.4);
+});
+
+test("native saves and undo/redo retain nested shrink and remain stable after another edit", () => {
+  const original = createStructuredJson([[1], 2]);
+  const stack = new GraphStack();
+  stack.save(original, first(original));
+  const changed = applyJsonCommand(original, first(original), {
+    type: "move",
+    offset: 1,
+  });
+  stack.save(changed.root, changed.selectedNode);
+  stack.undo();
+  const undone = stack.widget();
+  expect(effectiveScale(first(first(undone)))).toBeCloseTo(SHRINK_SCALE ** 2);
+  stack.redo();
+  let restored = readGraph(
+    JSON.parse(JSON.stringify(writeGraph(stack.widget())))
+  );
+  let array = forward(down(inward(restored)));
+  expect(array.id()).toBe(first(original).id());
+  expect(effectiveScale(array)).toBeCloseTo(SHRINK_SCALE);
+  expect(effectiveScale(first(array))).toBeCloseTo(SHRINK_SCALE ** 2);
+  restored = applyJsonCommand(restored, first(array), {
+    type: "setText",
+    text: "3",
+  }).root;
+  array = forward(down(inward(restored)));
+  expect(effectiveScale(first(array))).toBeCloseTo(SHRINK_SCALE ** 2);
+  expect(exportStructuredJson(restored)).toEqual([2, [3]]);
+});
+
+test("legacy drafts acquire the content shrink once while retaining manual scale adjustments", () => {
+  let root = createStructuredJson({ items: [1, 2] });
+  delete documentState(root).metadata.freeform.structuredJson.innerScale;
+  const array = down(first(root));
+  inward(root).setScale(0.5);
+  inward(array).setScale(1);
+  first(array).setScale(0.5);
+  const numberId = first(array).id();
+  root = readGraph(JSON.parse(JSON.stringify(writeGraph(root))));
+  root = applyJsonCommand(root, numberId, { type: "setText", text: "3" }).root;
+  expect(documentState(root).metadata.freeform.structuredJson.innerScale).toBe(
+    SHRINK_SCALE
+  );
+  expect(inward(root).scale()).toBeCloseTo(0.5 * SHRINK_SCALE);
+  expect(inward(down(first(root))).scale()).toBe(SHRINK_SCALE);
+  expect(first(down(first(root))).scale()).toBe(0.5);
+  root = readGraph(JSON.parse(JSON.stringify(writeGraph(root))));
+  root = applyJsonCommand(root, numberId, { type: "setText", text: "4" }).root;
+  expect(inward(root).scale()).toBeCloseTo(0.5 * SHRINK_SCALE);
+  expect(inward(down(first(root))).scale()).toBe(SHRINK_SCALE);
+  expect(first(down(first(root))).scale()).toBe(0.5);
+  expect(exportStructuredJson(root)).toEqual({ items: [4, 2] });
 });
 
 test("slot paint hints distinguish placeholders and scalar drafts from complete empty values", () => {

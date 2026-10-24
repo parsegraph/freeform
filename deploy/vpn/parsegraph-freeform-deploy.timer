@@ -1,0 +1,12 @@
+# Managed by parsegraph-freeform VPN deployment
+[Unit]
+Description=Recover missed Freeform VPN deployment wakeups
+
+[Timer]
+OnBootSec=45s
+OnUnitInactiveSec=60s
+AccuracySec=5s
+Unit=parsegraph-freeform-deploy.service
+
+[Install]
+WantedBy=timers.target

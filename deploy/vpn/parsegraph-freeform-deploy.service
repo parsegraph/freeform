@@ -1,0 +1,17 @@
+# Managed by parsegraph-freeform VPN deployment
+[Unit]
+Description=Build and deploy queued Freeform VPN revision
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /home/dafrito/var/parsegraph-freeform/ops/deploy/vpn/pipeline.py --config /home/dafrito/.config/parsegraph-freeform/pipeline.json worker
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=PYTHONDONTWRITEBYTECODE=1
+TimeoutStartSec=50min
+TimeoutStopSec=30s
+KillMode=control-group
+MemoryMax=3G
+MemorySwapMax=1G
+UMask=0077
+# Build scripts are trusted code from refs/heads/freeform, running as repo owner.
+# Do not point this worker at pull-request refs or untrusted contributors.

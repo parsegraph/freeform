@@ -1,0 +1,4 @@
+#!/bin/sh
+# Managed by parsegraph-freeform VPN deployment
+# Installed in the bare Freeform repository. Builds run asynchronously in systemd.
+exec /usr/bin/python3 /home/dafrito/var/parsegraph-freeform/ops/deploy/vpn/pipeline.py --config /home/dafrito/.config/parsegraph-freeform/pipeline.json enqueue

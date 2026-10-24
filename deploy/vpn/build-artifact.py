@@ -13,7 +13,36 @@ import subprocess
 import tarfile
 
 
+def interrupted(signum, frame):
+    raise InterruptedError(f"Build interrupted by signal {signum}")
+
+
+def run_process(command, *, cwd, env, log, timeout=600):
+    """A timeout or controller interruption must also stop Yarn's descendants."""
+    process = subprocess.Popen(command, cwd=cwd, env=env, stdout=log,
+                               stderr=subprocess.STDOUT, start_new_session=True)
+    try:
+        return process.wait(timeout=timeout)
+    except BaseException:
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            pass
+        # The direct child may exit before a descendant that ignored SIGTERM.
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        process.wait()
+        raise
+
+
 def main():
+    signal.signal(signal.SIGTERM, interrupted)
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--artifact-dir", type=Path, required=True)
     args = parser.parse_args()
@@ -36,13 +65,9 @@ def main():
     def run(label, command, directory=source, extra=None):
         print(f"{label}: {' '.join(command)}", flush=True)
         with (logs / f"{label}.log").open("w") as log:
-            process = subprocess.Popen(command, cwd=directory, env={**env, **(extra or {})},
-                                       stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
             try:
-                result = process.wait(timeout=600)
+                result = run_process(command, cwd=directory, env={**env, **(extra or {})}, log=log)
             except subprocess.TimeoutExpired:
-                os.killpg(process.pid, signal.SIGKILL)
-                process.wait()
                 raise RuntimeError(f"{label} timed out; process group stopped; see {logs / (label + '.log')}")
         if result:
             raise RuntimeError(f"{label} failed; see {logs / (label + '.log')}")

@@ -1,0 +1,17 @@
+{
+  "bare_repo": "/home/dafrito/repo/freeform.git",
+  "ref": "refs/heads/freeform",
+  "state_dir": "/home/dafrito/.local/state/parsegraph-freeform/pipeline",
+  "build_root": "/home/dafrito/var/parsegraph-freeform/builds",
+  "container_dir": "/home/dafrito/var/parsegraph-freeform/ops/deploy/container",
+  "quadlet_file": "/home/dafrito/.config/containers/systemd/parsegraph-freeform.container",
+  "service_name": "parsegraph-freeform.service",
+  "local_url": "http://127.0.0.1:4351/freeform",
+  "public_url": "https://parsegraph.fritonet.home.arpa/freeform",
+  "ca_file": "/home/dafrito/.local/state/parsegraph-site/tls/parsegraph.xpc1go2t/ca.crt.pem",
+  "command_timeout": 600,
+  "build_timeout": 2400,
+  "health_timeout": 45,
+  "keep_records": 20,
+  "keep_artifacts": 5
+}

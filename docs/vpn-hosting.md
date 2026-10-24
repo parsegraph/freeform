@@ -7,12 +7,121 @@ listens on port 8080. The website remains independently deployed on port 4350.
 Freeform is a static browser application. Public rooms are disabled, and no
 Node server or writable application volume is needed at runtime.
 
-The first deployment is manual. A Git push stores source; it does not deploy
-Freeform. There is no Freeform receive hook or background deployment worker yet.
-The existing GitHub workflow deploys to production when branch `freeform` is
-pushed there, so this VPN deployment uses only the `fritolaptop` remote.
+The VPN deployment follows pushes to the `freeform` branch of
+`fritolaptop:repo/freeform.git`. The receive hook queues a revision and returns;
+a systemd user worker builds, tests, and deploys it asynchronously. A successful
+Git push means the repository accepted the commit, not that deployment passed.
+Other branches and branch deletion do not request deployment.
 
-## Source and build
+The existing GitHub workflow still deploys to production when branch `freeform`
+is pushed to GitHub. Use the `fritolaptop` remote for this VPN pipeline. It does
+not change that production workflow or require production credentials.
+
+## Deploy a change
+
+Commit the selected Freeform changes, then push the deployment branch:
+
+```sh
+git push fritolaptop freeform
+```
+
+The worker checks out the exact requested commit in a fresh directory on
+fritolaptop. It runs the committed `deploy/vpn/build-artifact.py`, which installs
+all three frozen Yarn lockfiles, runs application and deployment tests, builds
+both workers and the app for `/freeform`, and produces a versioned artifact.
+Builds stay on the host, not the MacBook or SSHFS. The service limits the complete
+worker to 3 GiB of memory and 1 GiB of swap; Node heaps are limited to 2 GiB.
+
+Before deployment, the controller verifies the acceptance report, revision,
+archive and file hashes. It packages the tested output using separately installed
+container templates, tests a candidate on an ephemeral loopback port, then
+updates the live Quadlet to the immutable image ID. Both loopback and trusted
+HTTPS must serve the expected revision, bytes, and content types. Workers retain
+revalidation caching, and missing assets return real 404s.
+
+Only one deployment worker runs at a time. New pushes replace the pending
+request. The worker checks the latest request and current branch head before
+starting the candidate and again before activation; an obsolete build is marked
+`superseded`. A build or candidate failure leaves the current runtime intact.
+Activation failure restores the previous Quadlet and deployment record. A
+journal lets the next worker recover an interrupted activation. Restarts and
+rollback can briefly interrupt requests; this is not a zero-downtime rollout.
+
+## Status, logs, and retries
+
+Run these on fritolaptop as `dafrito`, without sudo:
+
+```sh
+python3 ~/var/parsegraph-freeform/ops/deploy/vpn/pipeline.py \
+  --config ~/.config/parsegraph-freeform/pipeline.json status
+systemctl --user status parsegraph-freeform-deploy.service
+journalctl --user -u parsegraph-freeform-deploy.service -n 100 --no-pager
+```
+
+The worker is a oneshot, so it is normally inactive between deployments.
+Status distinguishes `building`, `deployed`, `failed`, and `superseded` attempts.
+`~/.local/state/parsegraph-freeform/pipeline/deployment.json` is authoritative for
+the automated runtime. The earlier `~/.local/state/parsegraph-freeform/deployment.json`
+is the historical manual deployment receipt, retained when automation adopts it.
+
+Pipeline state also holds `request.json`, `status.json`, per-attempt `records/`,
+controller `logs/`, and retained `artifacts/`. Build logs and the acceptance report
+are retained with the artifact. The default retention is 20 records/logs and five
+artifact sets, with deployed/recovery state protected. Successful runtime images
+remain available for rollback; prune old images deliberately after checking they
+are no longer referenced. Disposable source checkouts are removed after attempts.
+
+A failed attempt is not rebuilt every minute. Fix and push a new commit, or
+explicitly retry the current deployment branch after resolving a host problem:
+
+```sh
+python3 ~/var/parsegraph-freeform/ops/deploy/vpn/pipeline.py \
+  --config ~/.config/parsegraph-freeform/pipeline.json retry
+```
+
+The path watcher wakes the worker on a changed request. A timer checks every
+60 seconds as a fallback and after boot. To pause new scheduling:
+
+```sh
+systemctl --user disable --now parsegraph-freeform-deploy.path parsegraph-freeform-deploy.timer
+```
+
+Let an active worker finish before changing deployment files or running a manual
+build/activation. Stopping the watchers does not cancel an active worker. Resume
+with `systemctl --user enable --now parsegraph-freeform-deploy.path parsegraph-freeform-deploy.timer`.
+
+## Install or upgrade the pipeline
+
+The running Freeform service and HTTPS route must already be healthy. From a
+reviewed host-local Freeform checkout, install as `dafrito` without sudo:
+
+```sh
+python3 deploy/vpn/install-pipeline.py \
+  --ca-file ~/.local/state/parsegraph-site/tls/parsegraph.xpc1go2t/ca.crt.pem
+```
+
+The installer checks the existing deployment receipt, artifact hashes, immutable
+Quadlet and running image, and both HTTP/HTTPS routes before enabling automation.
+On first installation it adopts the actual currently deployed manual revision as
+the rollback baseline; it does not assume the initial release is still current.
+It refuses an active `freeform-build-*.scope`, a running pipeline worker, or an
+unfinished activation journal. Finish any other deployment and its handover first.
+
+The installer writes the hook in `~/repo/freeform.git/hooks/post-receive`, config
+in `~/.config/parsegraph-freeform/pipeline.json`, and controller/container files
+under `~/var/parsegraph-freeform/ops/deploy/`. User units are named
+`parsegraph-freeform-deploy.service`, `.path`, and `.timer`. It preserves unrelated
+hooks, custom Git hook paths, edited configuration and unrecognized controller
+files instead of silently replacing them. It enables the watchers but does not
+queue a deployment itself; push or explicitly retry afterward.
+
+Controller and container template upgrades require this separate reviewed
+installation. A pushed application commit does not replace the controller that
+is executing it. Build scripts do execute as `dafrito`, with that account's
+filesystem access, so this pipeline is for trusted pushes to `freeform`, not
+untrusted pull-request branches. The website's pipeline and runtime are separate.
+
+## Manual artifact build
 
 Commit the selected changes, including the exact `parsegraph@7.0.1` dependency
 and lockfile, without collecting unrelated work. Push the reviewed commit to
@@ -54,7 +163,7 @@ a plain app build in a fresh checkout will not create them. The JSON/Lisp sample
 files live under `public/examples/`. Preserve the `/freeform/` prefix when serving
 the artifact, including workers, samples, and the revision marker.
 
-## Runtime and activation
+## Manual runtime and activation
 
 Assemble a minimal image context containing only the tested `build/` directory
 and `deploy/container/nginx.conf`, then build with
@@ -131,7 +240,7 @@ samples. Check visible labels, pan/zoom, refresh, and a small edit/undo or
 import/export round-trip. Confirm workers load under `/freeform/` without errors.
 The Back action returns to the larger website at `/`.
 
-## Operation and rollback
+## Runtime operation and rollback
 
 ```sh
 journalctl --user -u parsegraph-freeform.service -n 80 --no-pager
@@ -139,14 +248,18 @@ podman inspect --format '{{.State.Health.Status}}' parsegraph-freeform
 systemctl --user restart parsegraph-freeform.service
 ```
 
-For rollback, restore the saved previous Quadlet containing its immutable image
-ID, run `daemon-reload` and restart, then repeat upstream and HTTPS checks. Keep
-that previous image locally until the replacement is verified. A restart can
-briefly interrupt requests. On the first deployment, there is no prior image;
-undoing activation means stopping the new service and removing its host proxy
-locations, with nginx validation before reload. The website's container stays
-independent throughout.
+For a code rollback, revert the unwanted change in Git and push the new commit
+through the same pipeline. For an operational rollback, pause scheduling and
+wait for the worker to finish, restore the previous immutable image in the
+Quadlet, then run `daemon-reload`, restart and verify loopback/HTTPS. Restore the
+matching full record from `pipeline/artifacts/<attempt>/deployment.json` to
+`pipeline/deployment.json` too, so future recovery refers to the runtime you
+restored. For the original adopted manual deployment, the first successful
+pipeline record also retains its complete rollback fields in `previous`.
+Resolve the intended branch head and pending request before resuming scheduling;
+otherwise an already queued build can reapply an unwanted revision. Keep the previous image until its
+replacement is verified. A restart can briefly interrupt requests.
 
-Future automation includes a receive hook, a serialized build queue, automatic
-recovery, retention, and consolidated status reporting. Production deployment is
-a separate release decision; this VPN setup does not publish to EC2.
+The website remains independent. Production release automation and modernization
+of the older GitHub workflows are separate work; this VPN pipeline does not
+publish to EC2 or run those workflows.

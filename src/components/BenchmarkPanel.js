@@ -6,6 +6,7 @@ import {
   subscribeBenchmarks,
 } from "../benchmark";
 import "./BenchmarkPanel.css";
+import InteractionBenchmarkPanel from "./InteractionBenchmarkPanel";
 
 function milliseconds(value) {
   return Number.isFinite(value) ? `${value.toFixed(1)} ms` : "—";
@@ -209,6 +210,7 @@ function EnabledBenchmarkPanel() {
             </details>
           </>
         )}
+        <InteractionBenchmarkPanel />
         <details
           className="benchmark-notes"
           onToggle={(event) => setTraceOpen(event.currentTarget.open)}

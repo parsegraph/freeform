@@ -79,6 +79,7 @@ export class WorldLabels {
 
   clear() {
     this._labels = [];
+    this._drawnLabels = null;
     this._workerKey = null;
     this._workerCallback = null;
   }
@@ -140,7 +141,8 @@ export class WorldLabels {
       return true;
     });
 
-    this._workerKey = Math.random() + "-" + Date.now();
+    const workerKey = Math.random() + "-" + Date.now();
+    this._workerKey = workerKey;
     this._workerCallback = (data) => {
       this._drawnLabels = data.map((index) => filteredLabels[index]);
       onFinish();
@@ -155,9 +157,12 @@ export class WorldLabels {
         if (e.data.key !== this._workerKey) {
           return;
         }
-        if (this._workerCallback) {
-          this._workerCallback(e.data.labels);
-        }
+        const callback = this._workerCallback;
+        // Release this request before delivery: completion may start a newer
+        // request, and duplicate worker responses must not deliver it twice.
+        this._workerKey = null;
+        this._workerCallback = null;
+        callback?.(e.data.labels);
       };
     }
 
@@ -181,7 +186,13 @@ export class WorldLabels {
       this._workerKey,
     ]);
 
-    return () => {};
+    return () => {
+      if (this._workerKey !== workerKey) {
+        return;
+      }
+      this._workerKey = null;
+      this._workerCallback = null;
+    };
   }
 
   clone() {

@@ -60,7 +60,12 @@ describe("animation lifecycle", () => {
     camera = new Camera();
     camera.setSize(1000, 1000);
     camera.setOrigin(500, 500);
-    viewport = { camera: () => camera, hasWidget: () => true, refresh: jest.fn() };
+    viewport = {
+      camera: () => camera,
+      hasWidget: () => true,
+      refresh: jest.fn(),
+      refreshCamera: jest.fn(),
+    };
     travel = new ViewportCameraTravel(viewport);
   });
   afterEach(() => jest.restoreAllMocks());
@@ -81,6 +86,8 @@ describe("animation lifecycle", () => {
     expect(cameraPose(camera)).toEqual(to);
     expect(travel.active()).toBe(false);
     expect(frames.size).toBe(0);
+    expect(viewport.refreshCamera).toHaveBeenCalledTimes(2);
+    expect(viewport.refresh).not.toHaveBeenCalled();
   });
 
   test("retargeting starts at the current pose and cancellation freezes it", () => {

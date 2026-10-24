@@ -3,6 +3,11 @@ import ViewportRendering from "./ViewportRendering";
 import DocumentFont from "./DocumentFont";
 import { Direction, DirectionNode, LayoutPhase } from "parsegraph";
 import { attachBenchmark, beginBenchmark, benchmarkFor, cancelBenchmark, getBenchmarkRuns } from "../../benchmark";
+import {
+  getInteractionEvents,
+  startInteractionBenchmark,
+  stopInteractionBenchmark,
+} from "../../interactionBenchmark";
 
 function node(x, scale = 1) {
   return { layout: () => ({
@@ -85,6 +90,91 @@ test("initial render timing follows all phases and detaches before later worker 
     expect(getBenchmarkRuns().at(-1)).toBe(report);
   } finally {
     cancelBenchmark(run);
+    jest.useRealTimers();
+    window.history.replaceState({}, "", "/");
+  }
+});
+
+test("interaction restarts preserve unfinished block counts and distinguish untouched and completed passes", () => {
+  jest.useFakeTimers();
+  window.history.replaceState({}, "", "/?benchmark=1");
+  startInteractionBenchmark({ label: "Renderer restart regression" });
+  try {
+    const root = new DirectionNode();
+    const camera = new Camera();
+    camera.setSize(1000, 600);
+    camera.setOrigin(40, 50);
+    camera.setScale(0.5);
+    const renderer = Object.create(ViewportRendering.prototype);
+    renderer._viewport = { widget: () => root, camera: () => camera };
+    renderer._steps = [
+      ["Painting graph"],
+      ["Focusing camera"],
+      ["Clearing background"],
+      ["Rendering blocks"],
+    ];
+    renderer._renderPass = 12;
+    renderer._phase = 3;
+    renderer._cranks = 20;
+    renderer._paintGroupCount = 8;
+    renderer._renderData = {
+      allGroups: 3,
+      i: 2,
+      offscreenGroups: 1,
+      dirtyGroups: 0,
+      textVisited: 0,
+    };
+
+    renderer.restart();
+    expect(renderer.interactionState()).toMatchObject({
+      pass: 13,
+      phase: 0,
+      blocksVisited: 0,
+      blocksDrawn: 0,
+      culled: 0,
+      totalGroups: null,
+    });
+    // scheduleRepaint can restart again before any new work has run.
+    renderer.restart();
+
+    renderer._phase = renderer._steps.length;
+    renderer._renderData.allGroups = 8;
+    renderer._renderData.i = 5;
+    renderer._renderData.offscreenGroups = 3;
+    renderer.restart();
+    stopInteractionBenchmark();
+
+    const restarts = getInteractionEvents().filter((event) => event.type === "restart");
+    expect(restarts).toHaveLength(3);
+    expect(restarts[0]).toMatchObject({
+      pass: 12,
+      phase: 3,
+      phaseName: "Rendering blocks",
+      complete: false,
+      blocksVisited: 3,
+      blocksDrawn: 2,
+      culled: 1,
+      totalGroups: 8,
+      camera: { x: 40, y: 50, scale: 0.5, version: camera.changeVersion() },
+    });
+    expect(restarts[1]).toMatchObject({
+      pass: 13,
+      phase: 0,
+      phaseName: "Painting graph",
+      complete: false,
+      blocksVisited: 0,
+    });
+    expect(restarts[2]).toMatchObject({
+      pass: 14,
+      phaseName: "Finished",
+      complete: true,
+      blocksVisited: 8,
+      blocksDrawn: 5,
+      culled: 3,
+    });
+    expect(restarts.filter((event) => event.phaseName === "Rendering blocks" && !event.complete)).toHaveLength(1);
+  } finally {
+    stopInteractionBenchmark();
     jest.useRealTimers();
     window.history.replaceState({}, "", "/");
   }
@@ -183,4 +273,129 @@ test("returning to a committed root rebinds every group without invalidating rou
   expect(firstRoot.layout().needsCommit()).toBe(true);
   expect(firstChild.layout().needsCommit()).toBe(true);
   expect(resource.isFor(firstRoot, renderer._glProvider)).toBe(true);
+});
+
+function markGraphCommitted(root) {
+  root.paintGroup().forEach((group) => {
+    group.siblings().forEach((node) => {
+      node.layout().setPhase(LayoutPhase.COMMITTED);
+    });
+  });
+}
+
+function progressRenderer(getRoot) {
+  const renderer = Object.create(ViewportRendering.prototype);
+  const camera = new Camera();
+  camera.setSize(1000, 600);
+  renderer._viewport = { widget: getRoot, camera: () => camera };
+  renderer._phase = 0;
+  renderer._cranks = 0;
+  renderer._steps = [
+    ["Painting graph", () => false, () => renderer.allNodeCount()],
+    ["Rendering blocks", () => false, () => renderer.allPaintGroupCount()],
+    ["Rendering text", () => false, () => renderer.allNodeCount()],
+  ];
+  renderer.resetCounts();
+  jest.spyOn(renderer, "countGraph");
+  return renderer;
+}
+
+test("camera redraws reuse graph counts while resetting pass progress", () => {
+  const root = new DirectionNode("root");
+  const child = new DirectionNode("child");
+  root.connect(Direction.FORWARD, child);
+  child.paintGroups().crease();
+  markGraphCommitted(root);
+  const renderer = progressRenderer(() => root);
+
+  expect(renderer.allNodeCount()).toBe(2);
+  expect(renderer.allPaintGroupCount()).toBe(2);
+  for (let frame = 1; frame <= 4; frame++) {
+    renderer.camera().setOrigin(frame * 10, frame * 20);
+    renderer.camera().setScale(1 + frame / 10);
+    renderer._cranks = 3;
+    renderer._startTime = 123;
+    renderer.restart();
+    expect(renderer.progress()).toBe(0);
+    expect(renderer.cranksComplete()).toBe(0);
+    expect(renderer._startTime).toBeNaN();
+    expect(renderer.allNodeCount()).toBe(2);
+    expect(renderer.allPaintGroupCount()).toBe(2);
+  }
+  expect(renderer.countGraph).toHaveBeenCalledTimes(1);
+});
+
+test("graph edits refresh counts before layout clears their dirty flags", () => {
+  const root = new DirectionNode("root");
+  const child = new DirectionNode("child");
+  root.connect(Direction.FORWARD, child);
+  markGraphCommitted(root);
+  const renderer = progressRenderer(() => root);
+  expect(renderer.allNodeCount()).toBe(2);
+  expect(renderer.allPaintGroupCount()).toBe(1);
+
+  const verifyAfterEdit = (nodes, paintGroups) => {
+    expect(root.layout().needsCommit()).toBe(true);
+    renderer.restart();
+    // Status can run after layout has already committed the changed graph.
+    markGraphCommitted(root);
+    expect(renderer.allNodeCount()).toBe(nodes);
+    expect(renderer.allPaintGroupCount()).toBe(paintGroups);
+  };
+
+  const grandchild = new DirectionNode("grandchild");
+  child.connect(Direction.DOWNWARD, grandchild);
+  verifyAfterEdit(3, 1);
+  child.paintGroups().crease();
+  verifyAfterEdit(3, 2);
+  child.paintGroups().uncrease();
+  verifyAfterEdit(3, 1);
+  grandchild.disconnect();
+  verifyAfterEdit(2, 1);
+  expect(renderer.countGraph).toHaveBeenCalledTimes(5);
+});
+
+test("switching between committed roots replaces the cached census", () => {
+  const firstRoot = new DirectionNode("first");
+  const child = new DirectionNode("child");
+  firstRoot.connect(Direction.FORWARD, child);
+  child.paintGroups().crease();
+  const secondRoot = new DirectionNode("second");
+  markGraphCommitted(firstRoot);
+  markGraphCommitted(secondRoot);
+  let currentRoot = firstRoot;
+  const renderer = progressRenderer(() => currentRoot);
+  expect(renderer.allNodeCount()).toBe(2);
+  expect(renderer.allPaintGroupCount()).toBe(2);
+
+  currentRoot = secondRoot;
+  renderer.restart();
+  expect(renderer.allNodeCount()).toBe(1);
+  expect(renderer.allPaintGroupCount()).toBe(1);
+  currentRoot = firstRoot;
+  renderer.restart();
+  expect(renderer.allNodeCount()).toBe(2);
+  expect(renderer.allPaintGroupCount()).toBe(2);
+  expect(renderer.countGraph).toHaveBeenCalledTimes(3);
+});
+
+test("an edit during an incomplete layout invalidates counts even without needsCommit on the root", () => {
+  const root = new DirectionNode("root");
+  const child = new DirectionNode("child");
+  root.connect(Direction.FORWARD, child);
+  markGraphCommitted(root);
+  const renderer = progressRenderer(() => root);
+  expect(renderer.allNodeCount()).toBe(2);
+
+  root.layout().setPhase(LayoutPhase.IN_COMMIT);
+  child.layout().setPhase(LayoutPhase.NEEDS_COMMIT);
+  child.connect(Direction.DOWNWARD, new DirectionNode("grandchild"));
+  // Invalidation stops at the already dirty child, leaving the root mid-commit.
+  expect(root.layout().phase()).toBe(LayoutPhase.IN_COMMIT);
+  expect(root.layout().needsCommit()).toBe(false);
+  renderer.restart();
+  markGraphCommitted(root);
+  expect(renderer.allNodeCount()).toBe(3);
+  expect(renderer.allPaintGroupCount()).toBe(1);
+  expect(renderer.countGraph).toHaveBeenCalledTimes(2);
 });

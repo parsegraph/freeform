@@ -32,6 +32,8 @@ beforeEach(() => {
   const cam = {
     scale: () => 1,
     transform: (x, y) => [x, y],
+    zoomToPoint: jest.fn(),
+    setSize: jest.fn(),
     adjustOrigin: (x, y) => {
       position[0] += x;
       position[1] += y;
@@ -46,6 +48,9 @@ beforeEach(() => {
     caret: () => ({ root: () => root, node: () => node }),
     camera: () => cam,
     refresh: jest.fn(),
+    refreshCamera: jest.fn(),
+    refreshOverlay: jest.fn(),
+    checkScale: jest.fn(),
     hideEditor: jest.fn(),
     toggleEditor: jest.fn(),
     repaint: jest.fn(),
@@ -105,6 +110,9 @@ test("a fast flick reported at mouseup pans and glides without waiting for grace
   advance(100);
   expect(position[0]).toBeGreaterThan(30);
   expect(viewport.toggleEditor).not.toHaveBeenCalled();
+  expect(viewport.refreshCamera).toHaveBeenCalled();
+  expect(viewport.refreshOverlay).toHaveBeenCalledTimes(1);
+  expect(viewport.refresh).not.toHaveBeenCalled();
 });
 
 test("a released-button move before mouseup preserves the flick", () => {
@@ -239,6 +247,54 @@ test("View-mode touch taps select on release, while drags only pan", () => {
   expect(position).toEqual([30, 0]);
   expect(viewport.selectNode).not.toHaveBeenCalled();
   expect(viewport.toggleEditor).not.toHaveBeenCalled();
+  expect(viewport.refreshCamera).toHaveBeenCalledTimes(1);
+  expect(viewport.refresh).not.toHaveBeenCalled();
+});
+
+test("hover changes only refresh the overlay while a graph frame can finish", () => {
+  const hovered = {};
+  viewport.caret = () => ({
+    root: () => ({ layout: () => ({ nodeUnderCoords: () => hovered }) }),
+  });
+  viewport.refreshOverlay.mockImplementation(() => {
+    expect(input.hoveredNode()).toBe(hovered);
+  });
+  mouse(canvas, "mousemove", 20, 0);
+  mouse(canvas, "mousemove", 30, 0);
+  expect(input.hoveredNode()).toBe(hovered);
+  expect(viewport.refreshOverlay).toHaveBeenCalledTimes(1);
+  expect(viewport.refresh).not.toHaveBeenCalled();
+  expect(viewport.refreshCamera).not.toHaveBeenCalled();
+});
+
+test("wheel zoom requests a camera update and scale check without restarting graph drawing", () => {
+  mouse(canvas, "mousemove", 40, 0);
+  const event = new WheelEvent("wheel", {
+    deltaY: 100, deltaMode: 0, bubbles: true, cancelable: true,
+  });
+  canvas.dispatchEvent(event);
+  expect(event.defaultPrevented).toBe(true);
+  expect(viewport.camera().zoomToPoint).toHaveBeenCalledWith(1 / 1.1, 40, 50);
+  expect(viewport.refreshCamera).toHaveBeenCalledWith(true);
+  expect(viewport.checkScale).not.toHaveBeenCalled();
+  expect(viewport.refresh).not.toHaveBeenCalled();
+});
+
+test("pinch zoom coalesces camera updates without restarting graph drawing", () => {
+  viewport.rendering = () => ({ showingUI: () => false });
+  touch("touchstart", [[1, 0, 10], [2, 20, 10]]);
+  touch("touchmove", [[2, 40, 10]]);
+  expect(viewport.camera().zoomToPoint).toHaveBeenCalledWith(2, 20, 10);
+  expect(viewport.refreshCamera).toHaveBeenCalledWith(true);
+  expect(viewport.checkScale).not.toHaveBeenCalled();
+  expect(viewport.refresh).not.toHaveBeenCalled();
+});
+
+test("resize still invalidates rendering instead of reusing the previous frame dimensions", () => {
+  window.ResizeObserver.mock.calls[0][0]();
+  expect(viewport.camera().setSize).toHaveBeenCalledWith(canvas.offsetWidth, canvas.offsetHeight);
+  expect(viewport.checkScale).toHaveBeenCalledTimes(1);
+  expect(viewport.refreshCamera).not.toHaveBeenCalled();
 });
 
 test("a pinch or canceled touch never selects a node", () => {

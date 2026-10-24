@@ -102,7 +102,7 @@ export default class ViewportPan {
     }
     const cam = this._viewport.camera();
     cam.adjustOrigin(dx / cam.scale(), dy / cam.scale());
-    this._viewport.refresh();
+    this._viewport.refreshCamera();
   }
 
   beginDrag(time = performance.now()) {

@@ -15,7 +15,7 @@ test("a slider tunes the active drag controller and saves the value", () => {
   const adjustOrigin = jest.fn();
   const pan = new ViewportPan({
     camera: () => ({ scale: () => 1, adjustOrigin }),
-    refresh: jest.fn(),
+    refreshCamera: jest.fn(),
   });
   render(<MousePanControls />);
   fireEvent.click(screen.getByText("Mouse feel"));

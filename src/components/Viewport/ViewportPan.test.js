@@ -24,6 +24,7 @@ beforeEach(() => {
     hasWidget: () => true,
     showingEditor: () => false,
     refresh: jest.fn(),
+    refreshCamera: jest.fn(),
     camera: () => ({
       scale: () => scale,
       adjustOrigin: (x, y) => {
@@ -60,6 +61,8 @@ test.each([
   advance(200);
   expect(position[axis] * sign - initialDistance).toBeGreaterThan(initialDistance);
   expect(position[1 - axis]).toBe(0);
+  expect(viewport.refreshCamera).toHaveBeenCalled();
+  expect(viewport.refresh).not.toHaveBeenCalled();
 });
 
 test("repeated keydown events do not change held-key speed", () => {

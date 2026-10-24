@@ -1,6 +1,7 @@
 import {
   Direction,
   CommitLayout,
+  LayoutPhase,
   Alignment,
   Axis,
   getDirectionAxis,
@@ -42,6 +43,7 @@ import {
 import { WorldLabels } from "../WorldLabel";
 import { createLayoutPainter } from "./createLayoutPainter";
 import DocumentFont from "./DocumentFont";
+import ViewportFrameBuffer, { viewportFrameTransform } from "./ViewportFrameBuffer";
 import { documentState, writeGraph } from "../../graphDocument";
 import { drawDocumentLabel } from "../../graphPresentation";
 import {
@@ -51,6 +53,25 @@ import {
   failBenchmark,
   measureBenchmark,
 } from "../../benchmark";
+import {
+  interactionRecording,
+  measureInteraction,
+  recordInteraction,
+  recordInteractionGroup,
+} from "../../interactionBenchmark";
+
+const sameCamera = (a, b) => a && b &&
+  a.x() === b.x() && a.y() === b.y() && a.scale() === b.scale() &&
+  a.width() === b.width() && a.height() === b.height();
+
+function frameCanvas(className) {
+  const canvas = document.createElement("canvas");
+  canvas.className = className;
+  Object.assign(canvas.style, {
+    position: "fixed", inset: "0", transformOrigin: "0 0", pointerEvents: "none",
+  });
+  return canvas;
+}
 
 const minVisibleTextScale = 1;
 const initialScale = 8;
@@ -81,15 +102,15 @@ export default class ViewportRendering {
         () => this.renderExtents(this.camera().project()),
         () => 1,
       ],
-      ["Rendering UI", () => this.renderUI(), () => 1],
+      ["Rendering UI", () => false, () => 1],
       ["Post-rendering", () => this.postRender(), () => 1],
       ["Post-rendering text", () => this.postRenderText(), () => 1],
       ["Persisting graph", () => this.persist(), () => 1],
       ["Rendering metrics", () => this.renderMetrics(), () => 1],
+      ["Presenting frame", () => this.publishFrame(), () => 1],
     ];
 
     this._phase = 0;
-    this._scheduledPostRender = null;
 
     this._showingUI = false;
 
@@ -100,21 +121,15 @@ export default class ViewportRendering {
     container.style.background = this._pageBackgroundColor.asRGBA();
     //canvas.style.overflow = 'hidden';
 
-    const textCanvas = document.createElement("canvas");
-    textCanvas.className = "viewport-text-canvas";
-    textCanvas.style.position = "fixed";
-    textCanvas.style.inset = 0;
+    const textCanvas = frameCanvas("viewport-text-canvas");
+    const labelsCanvas = frameCanvas("viewport-labels-canvas");
     this._textCanvas = textCanvas;
-
-    this._ctx = textCanvas.getContext("2d");
-
-    const labelsCanvas = document.createElement("canvas");
-    labelsCanvas.className = "viewport-labels-canvas";
-    labelsCanvas.style.position = "fixed";
-    labelsCanvas.style.inset = 0;
     this._labelsCanvas = labelsCanvas;
-
     this._ctx = textCanvas.getContext("2d");
+    this._overlayCanvas = frameCanvas("viewport-overlay-canvas");
+    this._revision = 0;
+    this._textRequests = new Map();
+
     const glProvider = new BasicGLProvider();
     glProvider.canvas().getContext("webgl", {
       preserveDrawingBuffer: true
@@ -122,13 +137,16 @@ export default class ViewportRendering {
     glProvider.container();
     glProvider.container().className = "viewport-webgl-container";
     glProvider.canvas().className = "viewport-webgl-canvas";
+    glProvider.canvas().style.transformOrigin = "0 0";
     glProvider.container().style.position = "fixed";
     glProvider.container().style.inset = 0;
     container.appendChild(glProvider.container());
     this._glProvider = glProvider;
-    container.appendChild(textCanvas);
+
 
     this._extentGlProvider = new BasicGLProvider();
+    this._extentGlProvider.canvas().getContext("webgl", { preserveDrawingBuffer: true });
+    this._extentGlProvider.canvas().style.transformOrigin = "0 0";
     this._extentGlProvider.container();
     this._extentGlProvider.container().style.position = "fixed";
     this._extentGlProvider.container().style.inset = 0;
@@ -137,7 +155,7 @@ export default class ViewportRendering {
     this._extentGlProvider.canvas().className = "viewport-extent-canvas";
     container.appendChild(this._extentGlProvider.container());
 
-    container.appendChild(labelsCanvas);
+    container.appendChild(this._overlayCanvas);
 
     this._viewport = viewport;
 
@@ -154,7 +172,20 @@ export default class ViewportRendering {
     this._textRenderer = null;
 
     this.resetCounts();
+    this._cranks = 0;
+    this._startTime = NaN;
     glProvider.setOnContextChanged((isLost) => this.contextChanged(isLost));
+    this._extentGlProvider.setOnContextChanged((isLost) => {
+      this._extentContextLost = isLost;
+      if (isLost) {
+        this._extentBuffer?.contextLost();
+        this._extentBuffer = null;
+        this._extentPainter = null;
+        if (this._frame) this._frame.hasExtents = false;
+      } else {
+        this.viewport().refresh();
+      }
+    });
   }
 
   contextChanged(isLost) {
@@ -165,6 +196,9 @@ export default class ViewportRendering {
       this._painters = new WeakMap();
       this._bounds = new WeakMap();
       this._layout = null;
+      this._frameBuffer?.contextLost();
+      this._frameBuffer = null;
+      this.discardFrames();
     } else {
       // Every group lost GPU buffers, including groups with committed geometry.
       this.widget()?.paintGroup().forEach((pg) => pg.invalidate());
@@ -174,25 +208,34 @@ export default class ViewportRendering {
 
   initializeText() {
     if (this.viewport().presentation()) return false;
+    const frame = this._frame;
+    if (this._textCache?.revision === this._revision &&
+        sameCamera(this._textCache.camera, frame.camera)) {
+      frame.textImage = this._textCache.canvas;
+      return false;
+    }
     if (!this._textRenderer) {
       this._textRenderer = new Worker("textrenderer.js");
       this._textRenderer.addEventListener("message", (e) => {
-        if (e.data.key !== this._renderTextKey) {
-          return;
+        const requested = this._textRequests.get(e.data.key);
+        this._textRequests.delete(e.data.key);
+        if (this.validFrame(requested)) {
+          const canvas = document.createElement("canvas");
+          canvas.width = requested.camera.width();
+          canvas.height = requested.camera.height();
+          canvas.getContext("2d").drawImage(e.data.image, 0, 0);
+          this._textCache = { camera: requested.camera, revision: this._revision, canvas };
+          // Refine text in a subsequent complete frame. Never interrupt a pass
+          // or apply pixels generated for one camera to another camera's frame.
+          if (this.isDone() && sameCamera(requested.camera, this.viewport().camera())) {
+            this.cameraChanged();
+            this.viewport().scheduleRender();
+          }
         }
-        this._renderedTextImage = e.data.image;
-        this.viewport().scheduleRender();
+        e.data.image.close?.();
       });
     }
-    if (this._renderedTextImage && this.camera().changeVersion() === this._renderedTextVersion) {
-      // Already ready
-      return false;
-    }
-    this._renderedTextVersion = this.camera().changeVersion();
-    this._textRenderer.postMessage({
-      event: "init",
-      camera: this.camera().toJSON()
-    });
+    this._textRenderer.postMessage({ event: "init", camera: frame.camera.toJSON() });
     return false;
   }
 
@@ -200,8 +243,7 @@ export default class ViewportRendering {
     this._cameraNode = null;
     this._cameraNodeScale = null;
     this._pageBackgroundColor = PAGE_BACKGROUND_COLOR;
-    this._worldLabels = null;
-    this._renderedWorldLabels = null;
+    this._worldLabels?.clear();
   }
 
   extentGlProvider() {
@@ -213,17 +255,20 @@ export default class ViewportRendering {
   }
 
   resetCounts() {
+    this._countedRoot = null;
     this._nodeCount = NaN;
     this._paintGroupCount = NaN;
-    this._cranks = 0;
-    this._startTime = NaN;
   }
 
   runCount() {
+    return measureInteraction("Counting graph for progress", () => this.countGraph());
+  }
+
+  countGraph() {
+    const root = this.widget();
     this._nodeCount = 0;
     this._paintGroupCount = 0;
-    this.viewport()
-      .widget()
+    root
       .paintGroup()
       .forEach((pg) => {
         this._paintGroupCount++;
@@ -231,6 +276,7 @@ export default class ViewportRendering {
           ++this._nodeCount;
         });
       });
+    this._countedRoot = root;
   }
 
   allPaintGroupCount() {
@@ -291,11 +337,9 @@ export default class ViewportRendering {
   }
 
   focusCamera() {
-    if (!this.camera().canProject()) {
-      return true;
-    }
     const viewport = this.viewport();
-    const camera = this.camera();
+    const camera = viewport.camera();
+    if (!camera.canProject()) return true;
     const previousNode = this._cameraNode;
     const previousScale = this._cameraNodeScale;
     const layout = this.node().layout();
@@ -472,44 +516,177 @@ export default class ViewportRendering {
   }
 
   ctx() {
-    return this._ctx;
+    return this._drawingOverlay ? this._overlayCanvas.getContext("2d") : this._ctx;
   }
 
   clearBackground() {
-    if (!this.glProvider().canProject()) {
-      throw new Error("Cannot project");
+    const cam = new Camera();
+    cam.copy(this.viewport().camera());
+    if (!cam.canProject() || cam.width() <= 0 || cam.height() <= 0) return true;
+    const oldFront = this._frontFrame;
+    if (oldFront && !this.sameSize(oldFront.camera, cam)) this.discardFrames();
+    const provider = this.glProvider();
+    provider.render();
+    this._frameBuffer ??= new ViewportFrameBuffer(provider.gl());
+    this._frameBuffer.begin(cam.width(), cam.height());
+    this._drawingTargetBound = true;
+    // Two canvas pairs are reused. Unfinished layers are never attached to DOM.
+    const layers = this._spareLayers ?? {
+      text: this._textCanvas, labels: this._labelsCanvas,
+    };
+    this._spareLayers = null;
+    this._textCanvas = layers.text;
+    this._labelsCanvas = layers.labels;
+    for (const canvas of [layers.text, layers.labels]) {
+      canvas.width = cam.width();
+      canvas.height = cam.height();
+      canvas.style.transform = "";
     }
-    this.viewport().container().style.background =
-      this._pageBackgroundColor.asRGBA();
-
-    const glProvider = this.glProvider();
-    const cam = this.camera();
-    const ctx = this.ctx();
-    const gl = glProvider.gl();
-    glProvider.render();
-    gl.viewport(0, 0, cam.width(), cam.height());
-
-    // The page's CSS background carries alpha once, behind transparent canvases.
-    gl.clearColor(0, 0, 0, 0);
-    gl.enable(gl.BLEND);
-    gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-    gl.clear(gl.COLOR_BUFFER_BIT);
-
-    this._textCanvas.width = cam.width();
-    this._textCanvas.height = cam.height();
-    ctx.resetTransform();
-    ctx.clearRect(0, 0, this._textCanvas.width, this._textCanvas.height);
-
-    if (this._labelsCanvas.width !== cam.width()) {
-      this._labelsCanvas.width = cam.width();
-    }
-    if (this._labelsCanvas.height !== cam.height()) {
-      this._labelsCanvas.height = cam.height();
-    }
+    this._ctx = layers.text.getContext("2d");
+    this._worldLabels ??= new WorldLabels(minVisibleTextScale);
+    this._worldLabels.clear();
+    this._frame = {
+      camera: cam, root: this.widget(), revision: this._revision,
+      pass: this._renderPass, started: performance.now(),
+      text: layers.text, labels: layers.labels, worldLabels: this._worldLabels,
+    };
+    if (interactionRecording()) recordInteraction("clear", this.interactionState());
+    return false;
   }
 
   camera() {
-    return this.viewport().camera();
+    return this._drawingOverlay ? this.viewport().camera()
+      : this._frame?.camera ?? this.viewport().camera();
+  }
+
+  sameSize(a, b) {
+    return a.width() === b.width() && a.height() === b.height();
+  }
+
+  validFrame(frame) {
+    return !!frame && !frame.released && frame.revision === this._revision &&
+      frame.root === this.widget() &&
+      (frame === this._frame || frame === this._frontFrame);
+  }
+
+  releaseFrame(frame) {
+    frame.released = true;
+    frame.cancelLabels?.();
+    this._textRequests?.delete(frame.textKey);
+  }
+
+  discardFrames() {
+    if (this._frame) this.releaseFrame(this._frame);
+    if (this._frontFrame) {
+      this.releaseFrame(this._frontFrame);
+      this._frontFrame.text.remove();
+      this._frontFrame.labels.remove();
+      this._spareLayers = { text: this._frontFrame.text, labels: this._frontFrame.labels };
+    }
+    this._frame = null;
+    this._frontFrame = null;
+    this._frameBuffer?.discard();
+    this._extentBuffer?.discard();
+    this.resetText();
+  }
+
+  cameraChanged(checkScale = false) {
+    if (checkScale) {
+      this.viewport()._checkScale = true;
+      // Zoom limits change the live camera, never the immutable drawing pose.
+      if (this.widget()?.layout().phase() === LayoutPhase.COMMITTED) this.focusCamera();
+    }
+    if (this.isDone()) this.restart();
+  }
+
+  continueLatestFrame() {
+    if (!this.isDone() || !this._frontFrame) return false;
+    const front = this._frontFrame;
+    const textReady = !front.textImage && this._textCache?.revision === this._revision &&
+      sameCamera(this._textCache.camera, this.viewport().camera());
+    if (!sameCamera(front.camera, this.viewport().camera()) || textReady ||
+        this.viewport().checkingScale()) {
+      this.restart();
+      return true;
+    }
+    return false;
+  }
+
+  publishFrame() {
+    const frame = this._frame;
+    if (!this.validFrame(frame)) return false;
+    const data = this._renderData;
+    frame.offscreen = data.i === 0 && data.dirtyGroups === 0 &&
+      data.offscreenGroups === data.allGroups && data.allGroups > 0;
+    this._frameBuffer.publish();
+    if (frame.hasExtents && !this._extentContextLost) this._extentBuffer?.publish();
+    else this._extentBuffer?.discard();
+    const previous = this._frontFrame;
+    if (previous) {
+      this.releaseFrame(previous);
+      previous.text.remove();
+      previous.labels.remove();
+      this._spareLayers = { text: previous.text, labels: previous.labels };
+    } else {
+      this._spareLayers = {
+        text: frameCanvas("viewport-text-canvas"), labels: frameCanvas("viewport-labels-canvas"),
+      };
+    }
+    this._frontFrame = frame;
+    const container = this.viewport().container();
+    container.insertBefore(frame.text, this.extentGlProvider().container());
+    container.insertBefore(frame.labels, this._overlayCanvas);
+    container.style.background = this._pageBackgroundColor.asRGBA();
+    if (interactionRecording()) {
+      recordInteraction("present", {
+        ...this.interactionState(), ageMs: performance.now() - frame.started,
+        liveCamera: cameraPose(this.viewport().camera()),
+      });
+    }
+    return false;
+  }
+
+  present() {
+    if (this._contextLost) return;
+    const cam = this.viewport().camera();
+    const front = this._frontFrame;
+    this._offscreenHandler?.(!!front?.offscreen && sameCamera(front.camera, cam));
+    // Keep the published default canvases intact while drawing to the FBOs.
+    // Camera-only updates are compositor transforms, with no GL submission.
+    if (this._presentedFrame !== front) {
+      this._drawingTargetBound = false;
+      this._frameBuffer?.present(front?.camera ?? cam, front?.camera);
+      this._extentBuffer?.present(front?.camera ?? cam, front?.camera);
+      this._presentedFrame = front;
+    }
+    const graphCanvas = this.glProvider().canvas();
+    const extentCanvas = this.extentGlProvider().canvas();
+    if (front) {
+      const { scale, x, y } = viewportFrameTransform(cam, front.camera);
+      const transform = `translate(${x}px, ${y}px) scale(${scale})`;
+      front.text.style.transform = transform;
+      front.labels.style.transform = transform;
+      graphCanvas.style.transform = transform;
+      extentCanvas.style.transform = transform;
+    } else {
+      graphCanvas.style.transform = "";
+      extentCanvas.style.transform = "";
+    }
+    const overlay = this._overlayCanvas;
+    if (!overlay || !cam.canProject()) return;
+    if (overlay.width !== cam.width()) overlay.width = cam.width();
+    if (overlay.height !== cam.height()) overlay.height = cam.height();
+    const ctx = overlay.getContext("2d");
+    ctx.resetTransform();
+    ctx.clearRect(0, 0, overlay.width, overlay.height);
+    this._drawingOverlay = true;
+    try {
+      if (this.node() && !this.layout().needsCommit() && !this.layout().needsAbsolutePos()) {
+        this.renderUI();
+      }
+    } finally {
+      this._drawingOverlay = false;
+    }
   }
 
   widget() {
@@ -525,16 +702,28 @@ export default class ViewportRendering {
   }
 
   resetText() {
-    this._renderTextKey = NaN;
-    this._renderedTextImage = null;
-    this._renderedTextVersion = NaN;
+    this._textCache = null;
+    this._textRequests?.clear();
   }
 
   restart() {
+    if (interactionRecording()) {
+      recordInteraction("restart", this.interactionState());
+    }
+    if (this._frame && this._frame !== this._frontFrame) this.releaseFrame(this._frame);
+    this._frame = null;
+    this._renderPass = (this._renderPass ?? 0) + 1;
     this._benchmark = benchmarkFor(this.widget());
     this.pushPastCrank(!this.isDone());
     this._phase = 0;
-    this.resetCounts();
+    const root = this.widget();
+    // Graph edits invalidate layout through the root; camera movement does not.
+    // Keep the census across clean redraws, but recount changed/replaced graphs.
+    if (root !== this._countedRoot || root?.layout().phase() !== LayoutPhase.COMMITTED) {
+      this.resetCounts();
+    }
+    this._cranks = 0;
+    this._startTime = NaN;
     this._layout = null;
     this._currentPaintGroup = null;
     this._renderData = {
@@ -544,10 +733,34 @@ export default class ViewportRendering {
       allGroups: 0,
       dirtyGroups: 0,
       offscreenGroups: 0,
+      textVisited: 0,
+    };
+  }
+
+  interactionState() {
+    const data = this._renderData;
+    const cam = this.camera();
+    return {
+      pass: this._renderPass ?? 0,
+      phase: this.phase(),
+      phaseName: this.phaseName(),
+      complete: this.isDone(),
+      blocksVisited: data?.allGroups ?? 0,
+      blocksDrawn: data?.i ?? 0,
+      culled: data?.offscreenGroups ?? 0,
+      dirtyGroups: data?.dirtyGroups ?? 0,
+      textVisited: data?.textVisited ?? 0,
+      totalGroups: Number.isFinite(this._paintGroupCount) ? this._paintGroupCount : null,
+      camera: { x: cam.x(), y: cam.y(), scale: cam.scale(), version: cam.changeVersion() },
     };
   }
 
   reset() {
+    this._revision = (this._revision ?? 0) + 1;
+    if (this._frontFrame && (this._frontFrame.root !== this.widget() ||
+        !this.sameSize(this._frontFrame.camera, this.viewport().camera()))) {
+      this.discardFrames();
+    }
     this.restart();
     this.resetText();
     if (this._worldLabels) {
@@ -570,19 +783,36 @@ export default class ViewportRendering {
       return false;
     }
 
+    const pass = this._renderPass;
     let more;
     try {
+      // Presentation binds the default framebuffer between slices. Restore the
+      // unfinished target before any subsequent graph/glyph drawing.
+      if (this._frame && !this.isDone() && !this._drawingTargetBound) {
+        this._frameBuffer?.drawTarget();
+        this._drawingTargetBound = true;
+      }
+      const phaseName = this.phase() === 0
+        ? "Layout + paint preparation" : step[0];
       more = measureBenchmark(
         this._benchmark,
-        this.phase() === 0 ? "Layout + paint preparation" : step[0],
-        step[1]
+        phaseName,
+        interactionRecording()
+          ? () => measureInteraction(phaseName, step[1])
+          : step[1]
       );
     } catch (error) {
       failBenchmark(this._benchmark, error);
       throw error;
     }
+    // A dirty group can request a fresh layout while this step is running.
+    // Do not advance the newly restarted pass past its layout phase.
+    if (pass !== this._renderPass) return true;
     if (!more) {
       this.nextPhase();
+      if (this.isDone() && interactionRecording()) {
+        recordInteraction("pass-complete", this.interactionState());
+      }
       if (this.isDone() && this._benchmark) {
         const state = documentState(this.widget());
         const counts = measureBenchmark(
@@ -700,7 +930,7 @@ export default class ViewportRendering {
     }
 
     const layout = paintGroup.layout();
-    measureBenchmark(this._benchmark, "Glyph rendering", () => glyphPainter.render(
+    if (!this._frame?.textImage) measureBenchmark(this._benchmark, "Glyph rendering", () => glyphPainter.render(
       matrixMultiply3x3(
         makeScale3x3(layout.absoluteScale()),
         makeTranslation3x3(layout.absoluteX(), layout.absoluteY()),
@@ -741,7 +971,7 @@ export default class ViewportRendering {
             new Color(1, 1, 1, 1),
             new Color(0, 0, 0, 1)
           );
-        } else if (!this._renderedTextImage) {
+        } else if (!this._frame?.textImage) {
           const style = this.viewport().getNodeStyle(node);
           const nodeSize = [0, 0];
           node.layout().size(nodeSize);
@@ -817,10 +1047,12 @@ export default class ViewportRendering {
       makeTranslation3x3(pg.layout().absoluteX(), pg.layout().absoluteY()),
       worldMatrix
     );
-    if (this.renderingSpotlights()) {
-      spotlightPainter.render(pgMatrix);
-    }
-    painter.render(pgMatrix);
+    recordInteractionGroup(pg, "draw", () => {
+      if (this.renderingSpotlights()) {
+        spotlightPainter.render(pgMatrix);
+      }
+      painter.render(pgMatrix);
+    });
 
     return false;
   }
@@ -860,8 +1092,8 @@ export default class ViewportRendering {
   }
 
   renderUI() {
-    const ctx = this.ctx();
-    const cam = this.camera();
+    const ctx = this._overlayCanvas.getContext("2d");
+    const cam = this.viewport().camera();
     if (cam.canProject()) {
       ctx.resetTransform();
       ctx.scale(cam.scale(), cam.scale());
@@ -871,16 +1103,6 @@ export default class ViewportRendering {
       if (this.showingUI() || this.viewport().navigatingNodes()) {
         this.renderCaret();
       }
-    }
-
-    if (this._offscreenHandler) {
-      const renderData = this._renderData;
-      const isOffscreen =
-        renderData.i === 0 &&
-        renderData.dirtyGroups === 0 &&
-        renderData.offscreenGroups === renderData.allGroups &&
-        renderData.allGroups > 0;
-      this._offscreenHandler(isOffscreen);
     }
 
     return false;
@@ -980,11 +1202,11 @@ export default class ViewportRendering {
       return false;
     }
 
-    if (this._renderedTextImage) {
+    if (this._frame?.textImage && !this._frame.textImageDrawn) {
       const ctx = this.ctx();
       ctx.resetTransform();
-      ctx.drawImage(this._renderedTextImage, 0, 0);
-      return false;
+      ctx.drawImage(this._frame.textImage, 0, 0);
+      this._frame.textImageDrawn = true;
     }
 
     if (!this._currentPaintGroup) {
@@ -993,6 +1215,7 @@ export default class ViewportRendering {
     let pg = this._currentPaintGroup;
 
     const renderData = this._renderData;
+    ++renderData.textVisited;
     if (this.renderPaintGroupText(pg, renderData)) {
       this.viewport().refresh();
       return false;
@@ -1154,88 +1377,37 @@ export default class ViewportRendering {
     return this.viewport().input().carouselContainer();
   }
 
-  cancelPostRender() {
-    if (this._scheduledPostRender === null) {
-      return;
-    }
-    this._scheduledPostRender();
-    this._scheduledPostRender = null;
-  }
-
-  labelsCtx() {
-    return this._labelsCanvas.getContext("2d");
-  }
-
-  clearLabelsCtx() {
-    const ctx = this.labelsCtx();
-    ctx.save();
-    ctx.resetTransform();
-    ctx.clearRect(0, 0, this._labelsCanvas.width, this._labelsCanvas.height);
-    ctx.restore();
-  }
-
   postRender() {
-    this.cancelPostRender();
-    this.schedulePostRender();
-
-    if (this._renderedWorldLabels) {
-      const cam = this.camera();
-      const ctx = this.labelsCtx();
-      ctx.resetTransform();
-      ctx.scale(cam.scale(), cam.scale());
-      ctx.translate(cam.x(), cam.y());
-      this.clearLabelsCtx();
-      if (this._showWorldLabels) {
-        this._renderedWorldLabels.render(
-          ctx,
-          this.pageBackgroundColor(),
-          cam.scale()
-        );
+    const frame = this._frame;
+    if (!frame.worldLabels.labels().length) return false;
+    const cam = frame.camera;
+    const ctx = frame.labels.getContext("2d");
+    frame.cancelLabels = frame.worldLabels.prepareRender(
+      ctx, cam.x(), cam.y(), cam.width(), cam.height(), cam.scale(), () => {
+        if (!this.validFrame(frame)) return;
+        ctx.resetTransform();
+        ctx.clearRect(0, 0, frame.labels.width, frame.labels.height);
+        ctx.scale(cam.scale(), cam.scale());
+        ctx.translate(cam.x(), cam.y());
+        if (this._showWorldLabels) {
+          frame.worldLabels.render(ctx, this.pageBackgroundColor(), cam.scale());
+        }
       }
-    }
+    );
     return false;
   }
 
   postRenderText() {
-    if (this.viewport().presentation()) return false;
-    if (this._textRenderer && !this._renderedTextImage) {
-      this._renderTextKey = Math.random() + " " + Date.now();
-      this._textRenderer.postMessage({event: "render", key: this._renderTextKey});
-    }
+    if (this.viewport().presentation() || this._frame.textImage || !this._textRenderer) return false;
+    const key = `${this._revision}:${this._renderPass}`;
+    this._frame.textKey = key;
+    this._textRequests.set(key, this._frame);
+    this._textRenderer.postMessage({ event: "render", key });
     return false;
   }
 
-  schedulePostRender() {
-    if (this._scheduledPostRender || !this._worldLabels) {
-      return;
-    }
-    const cam = this.camera();
-    const ctx = this.labelsCtx();
-
-    this._scheduledPostRender = this._worldLabels.prepareRender(
-      ctx,
-      cam.x(),
-      cam.y(),
-      cam.width(),
-      cam.height(),
-      cam.scale(),
-      () => {
-        requestAnimationFrame(() => {
-          this._scheduledPostRender = null;
-          this.clearLabelsCtx();
-          ctx.resetTransform();
-          ctx.scale(cam.scale(), cam.scale());
-          ctx.translate(cam.x(), cam.y());
-          if (this._showWorldLabels) {
-            this._worldLabels.render(ctx, this.pageBackgroundColor());
-          }
-          this._renderedWorldLabels = this._worldLabels.clone();
-        });
-      }
-    );
-  }
-
   renderExtents(worldMatrix) {
+    if (this._extentContextLost || !ENABLE_EXTENT_VIEWING) return false;
     if (!this.node()) {
       return false;
     }
@@ -1252,14 +1424,10 @@ export default class ViewportRendering {
 
     this.paintExtents();
     const layout = this.layout();
-    const gl = this.extentGlProvider().gl();
     const cam = this.camera();
-    gl.viewport(0, 0, cam.width(), cam.height());
-
-    gl.clearColor(0, 0, 0, 0);
-    gl.clear(gl.COLOR_BUFFER_BIT);
-    gl.enable(gl.BLEND);
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    this._extentBuffer ??= new ViewportFrameBuffer(this.extentGlProvider().gl());
+    this._extentBuffer.begin(cam.width(), cam.height());
+    this._frame.hasExtents = true;
     this._extentPainter.render(
       matrixMultiply3x3(
         makeScale3x3(layout.absoluteScale()),

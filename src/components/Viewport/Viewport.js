@@ -29,6 +29,7 @@ import ViewportCameraTravel from "./ViewportCameraTravel";
 import Carousel from "../Carousel";
 import { documentState, ensureStringIds } from "../../graphDocument";
 import { benchmarkFor, measureBenchmark } from "../../benchmark";
+import { interactionRecording, measureInteraction, recordInteraction } from "../../interactionBenchmark";
 
 const findNodeById = (root, id) => {
   let foundNode = null;
@@ -674,6 +675,15 @@ export default class Viewport {
     this.scheduleRepaint();
   }
 
+  refreshCamera(checkScale = false) {
+    this.rendering()?.cameraChanged(checkScale);
+    this.scheduleRender();
+  }
+
+  refreshOverlay() {
+    this.scheduleRender();
+  }
+
   scheduleRepaint() {
     this.rendering()?.reset();
     this.scheduleRender();
@@ -683,7 +693,6 @@ export default class Viewport {
     if (this._scheduledRender) {
       return;
     }
-    this.rendering()?.restart();
     if (SLOW_RENDER) {
       this.scheduleSlowRender();
     } else {
@@ -692,8 +701,10 @@ export default class Viewport {
   }
 
   updateStatus() {
-    this.setStatus(`${this.rendering().phaseName()}`);
-    this.updateRenderProgress();
+    measureInteraction("Progress/status", () => {
+      this.setStatus(`${this.rendering().phaseName()}`);
+      this.updateRenderProgress();
+    });
   }
 
   clearStatus() {
@@ -735,7 +746,9 @@ export default class Viewport {
       if (!this.canPaint()) {
         return false;
       }
-      if (this.rendering().crank()) {
+      const more = this.rendering().crank();
+      this.rendering().present();
+      if (more || this.rendering().continueLatestFrame()) {
         this.updateStatus();
         if (attempts++ > MAX_RENDER_ATTEMPTS) {
           throw new Error("Failed to render after " + attempts + " attempts");
@@ -781,15 +794,28 @@ export default class Viewport {
     if (!this.canPaint()) {
       return false;
     }
-    return measureBenchmark(benchmarkFor(this.widget()), "Render slice", () => {
+    const recording = interactionRecording();
+    const before = recording ? this.rendering().interactionState() : null;
+    const sliceStart = recording ? performance.now() : 0;
+    const more = measureBenchmark(benchmarkFor(this.widget()), "Render slice", () => {
       const start = Date.now();
       while (this.rendering().crank()) {
         if (Date.now() - start > MAX_PAINT_TIME_MS) {
           return true;
         }
       }
-      return false;
+      return this.rendering().continueLatestFrame();
     });
+    measureInteraction("Frame presentation", () => this.rendering().present());
+    if (recording) {
+      recordInteraction("slice", {
+        durationMs: performance.now() - sliceStart,
+        before,
+        after: this.rendering().interactionState(),
+        more,
+      });
+    }
+    return more;
   }
 
   node() {

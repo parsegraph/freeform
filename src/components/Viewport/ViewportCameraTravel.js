@@ -114,6 +114,6 @@ export default class ViewportCameraTravel {
     this.apply(sampleTravel(this._plan, progress));
     if (progress >= 1) this._plan = null;
     else this._frame = requestAnimationFrame((next) => this.tick(next));
-    this._viewport.refresh();
+    this._viewport.refreshCamera();
   }
 }

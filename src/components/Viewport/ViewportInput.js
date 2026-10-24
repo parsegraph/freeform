@@ -198,14 +198,13 @@ class ViewportGamepad {
           if (dy && gamepad.buttons[1].pressed) {
             const [x, y] = matrixTransform2D(cam.project(), layout.absoluteX(), layout.absoluteY());
             cam.zoomToPoint(Math.pow(1.1, elapsedMs*delta*ZOOM_SPEED), x + cam.width()/2, y+cam.height()/2);
-            this.viewport().checkScale();
-            this.viewport().refresh();
+            this.viewport().refreshCamera(true);
             changed = true;
             return;
           }
 
           this.viewport().camera().adjustOrigin(MOVE_SPEED * (elapsedMs/1000) * dx, MOVE_SPEED * (elapsedMs/1000) * dy);
-          this.viewport().refresh();
+          this.viewport().refreshCamera();
           console.log("Changed");
           changed = true;
         }
@@ -436,7 +435,7 @@ export default class ViewportInput {
       touchingNode = false;
       isDown = null;
       [mouseX, mouseY] = [NaN, NaN];
-      viewport.refresh();
+      viewport.refreshOverlay();
     };
     window.addEventListener("mouseup", onMouseUp);
 
@@ -465,9 +464,9 @@ export default class ViewportInput {
             .layout()
             .nodeUnderCoords(worldX, worldY, 1, size);
           if (this._hoveredNode !== hoveredNode) {
-            viewport.refresh();
+            this._hoveredNode = hoveredNode;
+            viewport.refreshOverlay();
           }
-          this._hoveredNode = hoveredNode;
         }
       }
       [mouseX, mouseY] = [e.clientX, e.clientY];
@@ -731,7 +730,7 @@ export default class ViewportInput {
           newDistance / origDistance,
           ...midPoint(first.mouseX, first.mouseY, second.mouseX, second.mouseY)
         );
-        viewport.checkScale();
+        viewport.refreshCamera(true);
         return;
       }
 
@@ -745,7 +744,7 @@ export default class ViewportInput {
         const dy = touch.clientY - touchData.mouseY;
         if (!touchingNode) {
           cam.adjustOrigin(dx / cam.scale(), dy / cam.scale());
-          viewport.refresh();
+          viewport.refreshCamera();
         }
         touchData.mouseX = touch.clientX;
         touchData.mouseY = touch.clientY;
@@ -772,7 +771,7 @@ export default class ViewportInput {
       viewport.camera().zoomToPoint(
         Math.exp(-delta * WHEEL_ZOOM_SENSITIVITY), mouseX, mouseY
       );
-      viewport.checkScale();
+      viewport.refreshCamera(true);
     };
     canvas.addEventListener("wheel", handleWheel, { passive: false });
     this._uninstallers.push(() => {

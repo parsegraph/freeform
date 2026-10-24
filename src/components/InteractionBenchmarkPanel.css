@@ -1,0 +1,32 @@
+.interaction-benchmark {
+  margin: 14px 0;
+  padding-top: 12px;
+  border-top: 1px solid #555963;
+}
+
+.interaction-benchmark > summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.interaction-benchmark-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.interaction-benchmark-label input {
+  min-width: 0;
+  padding: 5px;
+  color: #f1f1f1;
+  background: #3b3b3b;
+  border: 1px solid #555963;
+  font: inherit;
+}
+
+.interaction-benchmark-timing {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}

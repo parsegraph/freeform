@@ -26,6 +26,7 @@ beforeEach(() => {
   viewport.hasWidget = () => true;
   viewport._input = { stopPan: jest.fn() };
   viewport.refresh = jest.fn();
+  viewport.refreshCamera = jest.fn();
   viewport.repaint = () => { viewport._ensureVisible = true; };
   viewport.camera().setSize(1000, 1000);
   viewport.camera().setOrigin(500, 500);

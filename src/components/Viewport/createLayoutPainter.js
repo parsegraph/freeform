@@ -24,6 +24,7 @@ import Rect from "parsegraph-rect";
 import { Label, GlyphPainter, GL_TEXTURE_SIZE } from 'parsegraph-glyphpainter';
 import { createDocumentLayout } from "../../graphPresentation";
 import { measureBenchmark } from "../../benchmark";
+import { recordInteractionGroup } from "../../interactionBenchmark";
 
 const getNodeSize = (node, size, ctx) => {
   size[0] = FONT_SIZE;
@@ -237,7 +238,9 @@ const createLayoutPainter = (
   };
   const painter = {
     ...geometry,
-    paint: (pg) => paint(pg, painters, bounds, glProvider, getNodeStyle, presentation, glyphFont),
+    paint: (pg) => recordInteractionGroup(pg, "repaint", () =>
+      paint(pg, painters, bounds, glProvider, getNodeStyle, presentation, glyphFont)
+    ),
   };
   if (!benchmark) return painter;
   return {

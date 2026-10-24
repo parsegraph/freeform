@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { readGraph, graphViewport, graphSelection } from "../graphDocument";
+import { createJsonDraft, createStructuredJson } from "../structuredJson";
 
 import * as importers from "../importers";
 
@@ -69,7 +70,14 @@ function ImportFromFile({ openGraph, onClose }) {
             const data = measureBenchmark(benchmark, "JSON parsing", () =>
               JSON.parse(text)
             );
-            openGraph(build(() => importers.graphJson(data)));
+            openGraph(
+              build(() => createStructuredJson(data)),
+              null,
+              null,
+              undefined,
+              null,
+              true
+            );
             break;
           }
           case "xml":
@@ -204,17 +212,15 @@ function ImportFromFile({ openGraph, onClose }) {
           <option value="jpeg">JPEG</option>
         </select>
       </label>
-      {importType === "xml" && <p>
-        Preserves text and whitespace. External DOCTYPEs are kept as data;
-        custom DTDs and entity declarations are unsupported.
-      </p>}
+      {importType === "xml" && (
+        <p>
+          Preserves text and whitespace. External DOCTYPEs are kept as data;
+          custom DTDs and entity declarations are unsupported.
+        </p>
+      )}
       {importError && <p role="alert">Could not open file: {importError}</p>}
       <div className="buttons">
-        <input
-          type="submit"
-          style={{ flexGrow: "1" }}
-          value="Import"
-        />
+        <input type="submit" style={{ flexGrow: "1" }} value="Import" />
         {onClose && (
           <button type="button" style={{ flexGrow: "1" }} onClick={onClose}>
             Cancel
@@ -229,12 +235,7 @@ const loadRoom = (openGraph, roomName) => {
   return fetch("/public/" + roomName)
     .then((resp) => resp.json())
     .then((roomData) => {
-      openGraph(
-        readGraph(roomData),
-        null,
-        roomName,
-        graphViewport(roomData)
-      );
+      openGraph(readGraph(roomData), null, roomName, graphViewport(roomData));
     });
 };
 
@@ -380,7 +381,9 @@ function ImportFromTemplate({ openGraph, onClose }) {
           <option value="rainbow_random">Random Colors</option>
           <option value="cross">Recursive cross</option>
           <option value="proportion_v1">Proportion (v1)</option>
-          <option value="proportion_standard_v1">Proportion, standard (v1)</option>
+          <option value="proportion_standard_v1">
+            Proportion, standard (v1)
+          </option>
           <option value="proportion_math_v1">Proportion, math (v1)</option>
           <option value="appearance_v1">Appearance colors (v1)</option>
           <option value="memory_piers_v1">Memory Piers (v1, seed 42)</option>
@@ -444,7 +447,14 @@ function ImportFromTemplate({ openGraph, onClose }) {
   );
 }
 
-export default function ImportModal({ onClose, openGraph, initialSession }) {
+export default function ImportModal({
+  onClose,
+  openGraph,
+  initialSession,
+  recovery,
+  recoveryError,
+  onRestoreRecovery,
+}) {
   const [activeTab, setActiveTab] = useState("template");
   const [loadError, setLoadError] = useState(null);
 
@@ -516,6 +526,12 @@ export default function ImportModal({ onClose, openGraph, initialSession }) {
         Parsegraph
       </h3>
       {loadError && <p role="alert">{loadError}</p>}
+      {recoveryError && <p role="alert">{recoveryError}</p>}
+      {recovery && (
+        <button type="button" onClick={onRestoreRecovery}>
+          Recover JSON draft
+        </button>
+      )}
       <div className="tabs" style={{ display: "flex", gap: "5px" }}>
         <button
           className={activeTab === "template" ? "active" : null}
@@ -544,6 +560,16 @@ export default function ImportModal({ onClose, openGraph, initialSession }) {
           </button>
         )}
       </div>
+      {activeTab === "template" && (
+        <button
+          type="button"
+          onClick={() =>
+            openGraph(createJsonDraft(), null, null, undefined, null, true)
+          }
+        >
+          New JSON document
+        </button>
+      )}
       {activeTab === "template" && (
         <ImportFromTemplate openGraph={openGraph} onClose={onClose} />
       )}

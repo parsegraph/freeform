@@ -46,6 +46,8 @@ import DocumentFont from "./DocumentFont";
 import ViewportFrameBuffer, { viewportFrameTransform } from "./ViewportFrameBuffer";
 import { documentState, writeGraph } from "../../graphDocument";
 import { drawDocumentLabel } from "../../graphPresentation";
+import { jsonNodeKind } from "../../structuredJsonAppearance";
+import { drawJsonNodeBorder } from "../../structuredJsonBorders";
 import {
   annotateBenchmark,
   benchmarkFor,
@@ -240,6 +242,7 @@ export default class ViewportRendering {
   }
 
   resetSettings() {
+    this._retainedEditRoot = null;
     this._cameraNode = null;
     this._cameraNodeScale = null;
     this._pageBackgroundColor = PAGE_BACKGROUND_COLOR;
@@ -569,6 +572,21 @@ export default class ViewportRendering {
       (frame === this._frame || frame === this._frontFrame);
   }
 
+  publishedRoot() {
+    return this._frontFrame?.root;
+  }
+
+  // A semantic edit can replace every DirectionNode while still belonging to
+  // the same document. Keep the last complete frame until its successor is
+  // ready; actual document switches still discard via resetSettings().
+  replaceDocumentRoot() {
+    this._retainedEditRoot = this.widget();
+    if (this._cameraNode?.id?.() === this.node()?.id?.()) {
+      this._cameraNode = this.node();
+    }
+    this.reset();
+  }
+
   releaseFrame(frame) {
     frame.released = true;
     frame.cancelLabels?.();
@@ -633,6 +651,7 @@ export default class ViewportRendering {
       };
     }
     this._frontFrame = frame;
+    this._retainedEditRoot = null;
     const container = this.viewport().container();
     container.insertBefore(frame.text, this.extentGlProvider().container());
     container.insertBefore(frame.labels, this._overlayCanvas);
@@ -757,7 +776,8 @@ export default class ViewportRendering {
 
   reset() {
     this._revision = (this._revision ?? 0) + 1;
-    if (this._frontFrame && (this._frontFrame.root !== this.widget() ||
+    if (this._frontFrame && ((this._frontFrame.root !== this.widget() &&
+        this._retainedEditRoot !== this.widget()) ||
         !this.sameSize(this._frontFrame.camera, this.viewport().camera()))) {
       this.discardFrames();
     }
@@ -918,8 +938,11 @@ export default class ViewportRendering {
 
     const presentation = this.viewport().presentation();
     if (presentation) {
-      pg.siblings().forEach((node) => drawDocumentLabel(ctx, node, cam, presentation,
-        this.viewport().getNodeStyle(node)));
+      pg.siblings().forEach((node) => {
+        const style = this.viewport().getNodeStyle(node);
+        drawDocumentLabel(ctx, node, cam, presentation, style);
+        drawJsonNodeBorder(ctx, node, cam, jsonNodeKind(this.widget(), node), style);
+      });
       return false;
     }
 
@@ -952,6 +975,8 @@ export default class ViewportRendering {
         if (!nodeHasValue(node)) {
           return;
         }
+        const kind = jsonNodeKind(this.widget(), node);
+        if (kind) drawJsonNodeBorder(ctx, node, cam, kind, this.viewport().getNodeStyle(node));
         const lines = node.value().toString().split("\n");
         if (
           this._showWorldLabels &&

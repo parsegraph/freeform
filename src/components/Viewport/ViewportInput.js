@@ -785,6 +785,27 @@ export default class ViewportInput {
         return;
       }
 
+      // Native editing, browser shortcuts, and composition never fall through
+      // to single-character graph commands or camera movement.
+      if (e.isComposing || e.keyCode === 229 || e.ctrlKey || e.metaKey || e.altKey ||
+          e.target?.closest?.("input, textarea, select, [contenteditable]")) return;
+
+      if (viewport.handleStructuredKey?.(e)) {
+        pan.stop();
+        this.keystrokes()?.handleKey(e.key);
+        e.preventDefault();
+        return;
+      }
+
+      if (!e.isComposing && !e.ctrlKey && !e.metaKey && !e.altKey &&
+          (this.canInteract() || viewport.navigatingNodes()) &&
+          (e.key === "Enter" || e.key === "Insert") && viewport.canEditStructuredValue?.()) {
+        pan.stop();
+        if (!e.repeat) viewport.toggleEditor();
+        e.preventDefault();
+        return;
+      }
+
       const key = e.key.toLowerCase();
       const direction = !viewport.rendering().showingUI() &&
         !e.ctrlKey && !e.metaKey && !e.altKey

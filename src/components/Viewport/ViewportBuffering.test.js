@@ -180,6 +180,61 @@ test("graph edits keep the last complete image but invalidate drawing and async 
   expect(renderer._frameBuffer.discard).not.toHaveBeenCalled();
 });
 
+test("semantic root replacements retain the published frame through repeated resets until complete", () => {
+  const { renderer, viewport, root } = setup();
+  root.setId("selected");
+  renderer._cameraNode = root;
+  beginFrame(renderer);
+  const front = finishFrame(renderer);
+  const replacement = new DirectionNode("long edited text");
+  replacement.setId("selected");
+  viewport._root = replacement;
+
+  renderer.replaceDocumentRoot();
+  expect(renderer.publishedRoot()).toBe(root);
+  expect(renderer._cameraNode).toBe(replacement);
+  expect(renderer._frontFrame).toBe(front);
+  expect(renderer.validFrame(front)).toBe(false);
+  expect(front.text.parentElement).toBe(viewport.container());
+  expect(renderer._frameBuffer.discard).not.toHaveBeenCalled();
+  // Another repaint/selection notification must not undo retention before the
+  // replacement root has finished its own layout and rendering phases.
+  renderer.reset();
+  expect(renderer._frontFrame).toBe(front);
+  const pending = beginFrame(renderer);
+  renderer.present();
+  expect(renderer.publishedRoot()).toBe(root);
+  expect(pending.text.parentElement).toBeNull();
+  finishFrame(renderer);
+  expect(renderer.publishedRoot()).toBe(replacement);
+  expect(front.text.parentElement).toBeNull();
+  expect(pending.text.parentElement).toBe(viewport.container());
+});
+
+test("a semantic replacement never retains an incompatible viewport size", () => {
+  const { renderer, viewport, camera } = setup();
+  beginFrame(renderer);
+  finishFrame(renderer);
+  viewport._root = new DirectionNode("edit");
+  camera.setSize(1200, 700);
+  renderer.replaceDocumentRoot();
+  expect(renderer.publishedRoot()).toBeUndefined();
+  expect(renderer._frameBuffer.discard).toHaveBeenCalledTimes(1);
+});
+
+test("opening a different document ends any pending semantic frame retention", () => {
+  const { renderer, viewport } = setup();
+  beginFrame(renderer);
+  finishFrame(renderer);
+  viewport._root = new DirectionNode("first edit");
+  renderer.replaceDocumentRoot();
+  renderer.resetSettings();
+  viewport._root = new DirectionNode("another document");
+  renderer.reset();
+  expect(renderer.publishedRoot()).toBeUndefined();
+  expect(renderer._frameBuffer.discard).toHaveBeenCalledTimes(1);
+});
+
 test.each(["root", "size"])("changing the %s discards incompatible front layers and async results", (change) => {
   const { renderer, viewport, camera } = setup();
   beginFrame(renderer);

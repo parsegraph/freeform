@@ -13,6 +13,19 @@ camera's current orientation.
 - **Bud**: an empty node, normally created with `new DirectionNode()`. It is a
   real, navigable node used to organize connections, rather than XML content.
 
+## Slots
+
+A **slot** is an editor-owned placeholder for unfinished content. Its expected
+contents come from the surrounding document grammar. A slot can retain partial
+input, such as an unfinished number. It is distinct from a layout bud, an empty
+string, `null`, or an empty container. Native editor drafts preserve slots even
+when the document cannot yet be exported to its source format. See the
+[structured JSON editor](structured-json.md) for the first implementation.
+
+A multislot's buds organize and offer positions for entries; the entries can
+contain complete content or unfinished slots. An empty bud alone does not imply
+a missing document value.
+
 ## Multislot
 
 A **multislot** is a fork-shaped structure for an ordered sequence of children.

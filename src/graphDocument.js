@@ -142,6 +142,11 @@ export function writeGraph(
       ? selectedNode.id()
       : selectedNode;
   if (version === 0) {
+    if (state?.metadata?.freeform?.structuredJson) {
+      throw new Error(
+        "Structured JSON drafts require Parsegraph v1 to preserve slots and node types."
+      );
+    }
     return {
       ...serializeParsegraph(root),
       ...(selection !== undefined ? { selectedNode: selection } : {}),

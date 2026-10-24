@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import * as exporters from "../exporters";
 import { writeGraph, documentState } from "../graphDocument";
+import { isStructuredJson } from "../structuredJson";
 
 import "./modal.css";
 import { PUBLIC_SERVERS } from "../settings";
@@ -38,10 +39,18 @@ const addExtension = (name, ext) => {
   return name + "." + ext;
 };
 
-function ExportForm({ viewport, graph, onExport, onClose }) {
-  const [exportType, setExportType] = useState("parsegraph");
-  const [name, setName] = useState(typeof graph.value() === "string" || typeof graph.value() === "number"
-    ? graph.value() === "#document" ? "document" : String(graph.value()) : "graph");
+function ExportForm({ viewport, graph, onExport, onClose, initialFormat }) {
+  const structured = isStructuredJson(graph);
+  const [exportType, setExportType] = useState(initialFormat || "parsegraph");
+  const [name, setName] = useState(
+    structured
+      ? "document"
+      : typeof graph.value() === "string" || typeof graph.value() === "number"
+      ? graph.value() === "#document"
+        ? "document"
+        : String(graph.value())
+      : "graph"
+  );
   const [exportError, setExportError] = useState(null);
 
   const exportParsegraph = (version = 1) =>
@@ -59,14 +68,27 @@ function ExportForm({ viewport, graph, onExport, onClose }) {
         case "json":
           download(
             addExtension(name, ".json"),
-            JSON.stringify(exporters.exportGraphToJson(graph))
+            JSON.stringify(
+              exporters.exportGraphToJson(graph),
+              null,
+              structured ? 2 : undefined
+            ),
+            "application/json"
           );
           break;
         case "xml":
-          download(addExtension(name, ".xml"), exporters.exportGraphToXml(graph), "application/xml");
+          download(
+            addExtension(name, ".xml"),
+            exporters.exportGraphToXml(graph),
+            "application/xml"
+          );
           break;
         case "svg":
-          download(addExtension(name, ".svg"), exporters.exportGraphToSvg(graph), "image/svg+xml");
+          download(
+            addExtension(name, ".svg"),
+            exporters.exportGraphToSvg(graph),
+            "image/svg+xml"
+          );
           break;
         case "parsegraph":
           download(
@@ -75,7 +97,10 @@ function ExportForm({ viewport, graph, onExport, onClose }) {
           );
           break;
         case "parsegraph-v0":
-          download(addExtension(name, ".parsegraph"), JSON.stringify(exportParsegraph(0)));
+          download(
+            addExtension(name, ".parsegraph"),
+            JSON.stringify(exportParsegraph(0))
+          );
           break;
         case "words":
           download(
@@ -141,33 +166,64 @@ function ExportForm({ viewport, graph, onExport, onClose }) {
           value={exportType}
           onChange={(e) => setExportType(e.target.value)}
         >
-          <option value="parsegraph">Parsegraph v1</option>
-          <option value="parsegraph-v0">Parsegraph v0 (legacy; loses capabilities)</option>
-          <option value="words">Words</option>
-          <option value="lines">Lines</option>
-          <option value="lisp">Lisp</option>
+          <option value="parsegraph">
+            {structured
+              ? "Parsegraph v1 draft (preserves slots)"
+              : "Parsegraph v1"}
+          </option>
+          {!structured && (
+            <>
+              <option value="parsegraph-v0">
+                Parsegraph v0 (legacy; loses capabilities)
+              </option>
+              <option value="words">Words</option>
+              <option value="lines">Lines</option>
+              <option value="lisp">Lisp</option>
+              <option value="xml">XML</option>
+              <option value="svg">SVG (from XML graph)</option>
+            </>
+          )}
           <option value="json">JSON</option>
-          <option value="xml">XML</option>
-          <option value="svg">SVG (from XML graph)</option>
           {PUBLIC_SERVERS && <option value="public">Public</option>}
         </select>
       </label>
-      {(exportType === "xml" || exportType === "svg") && <p>
-        Exports the XML tree and its edits as UTF-8, preserving content whitespace.
-        SVG requires an svg root in the SVG namespace.
-      </p>}
+      {structured && (
+        <p>
+          A Parsegraph draft preserves unfinished slots and editing state. JSON
+          export requires complete values and writes formatted source.
+        </p>
+      )}
+      {(exportType === "xml" || exportType === "svg") && (
+        <p>
+          Exports the XML tree and its edits as UTF-8, preserving content
+          whitespace. SVG requires an svg root in the SVG namespace.
+        </p>
+      )}
       {exportError && <p role="alert">Could not export: {exportError}</p>}
-      {exportType === "parsegraph-v0" && documentState(graph)?.version === 1 &&
-        <p role="status">Legacy export discards presentation, appearance, generation recipes, and other v1 capabilities.</p>}
+      {exportType === "parsegraph-v0" &&
+        documentState(graph)?.version === 1 && (
+          <p role="status">
+            Legacy export discards presentation, appearance, generation recipes,
+            and other v1 capabilities.
+          </p>
+        )}
       <div className="buttons">
         <input type="submit" value="Save" />
-        <button type="button" onClick={onClose}>Cancel</button>
+        <button type="button" onClick={onClose}>
+          Cancel
+        </button>
       </div>
     </form>
   );
 }
 
-export default function ExportModal({ onExport, onClose, graph, viewport }) {
+export default function ExportModal({
+  onExport,
+  onClose,
+  graph,
+  viewport,
+  initialFormat,
+}) {
   const [activeTab] = useState("export");
 
   return (
@@ -188,6 +244,7 @@ export default function ExportModal({ onExport, onClose, graph, viewport }) {
       {activeTab === "export" && (
         <ExportForm
           viewport={viewport}
+          initialFormat={initialFormat}
           graph={graph}
           onExport={onExport}
           onClose={onClose}

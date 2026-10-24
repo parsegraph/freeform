@@ -7,6 +7,7 @@ import { documentState } from "../graphDocument";
 import { exportGraphToSvg } from "../xmlGraph";
 import { TextDecoder, TextEncoder } from "util";
 import { benchmarkFor, cancelBenchmark, getBenchmarkRuns } from "../benchmark";
+import { exportStructuredJson, isStructuredJson, structuredJsonStatus } from "../structuredJson";
 
 jest.mock("../examples", () => ({
   createExample: jest.fn((type, options) => ({ type, ...options })),
@@ -46,6 +47,29 @@ test("creating a template passes its recipe with the graph", async () => {
   await waitFor(() => expect(openGraph).toHaveBeenCalled());
   expect(createExample).toHaveBeenCalledWith("cross", { rounds: 5, vertical: false });
   expect(openGraph).toHaveBeenCalledWith(loaded.graph, null, null, loaded.viewportData, example);
+});
+
+test("new JSON documents start with explicit key and value slots in edit mode", () => {
+  const openGraph = jest.fn();
+  render(<ImportModal openGraph={openGraph} />);
+  fireEvent.click(screen.getByRole("button", { name: "New JSON document" }));
+  const call = openGraph.mock.calls[0];
+  expect(isStructuredJson(call[0])).toBe(true);
+  expect(structuredJsonStatus(call[0])).toMatchObject({ complete: false, slotCount: 2 });
+  expect(call[5]).toBe(true);
+});
+
+test("JSON file import retains empty containers and opens with grammar-aware editing", async () => {
+  const openGraph = jest.fn();
+  render(<ImportModal openGraph={openGraph} />);
+  fireEvent.click(screen.getByRole("button", { name: "Open", exact: true }));
+  const file = new File([""], "empty.json");
+  file.text = jest.fn().mockResolvedValue('{"object":{},"array":[],"text":"","value":null}');
+  fireEvent.change(screen.getByLabelText("Choose file"), { target: { files: [file] } });
+  fireEvent.click(screen.getByRole("button", { name: "Import", exact: true }));
+  await waitFor(() => expect(openGraph).toHaveBeenCalledTimes(1));
+  expect(exportStructuredJson(openGraph.mock.calls[0][0])).toEqual({ object: {}, array: [], text: "", value: null });
+  expect(openGraph.mock.calls[0][5]).toBe(true);
 });
 
 test("a cancelled example load cannot replace a subsequently opened file", async () => {

@@ -26,10 +26,22 @@ import {
 import ViewportRendering from "./ViewportRendering";
 import ViewportInput from "./ViewportInput";
 import ViewportCameraTravel from "./ViewportCameraTravel";
+import ViewportInlineEditor from "./ViewportInlineEditor";
+import { handleStructuredJsonKey } from "./structuredJsonKeys";
 import Carousel from "../Carousel";
 import { documentState, ensureStringIds } from "../../graphDocument";
+import {
+  applyJsonCommand,
+  inspectJsonSelection,
+  isStructuredJson,
+} from "../../structuredJson";
+import { jsonNodeAppearance } from "../../structuredJsonAppearance";
 import { benchmarkFor, measureBenchmark } from "../../benchmark";
-import { interactionRecording, measureInteraction, recordInteraction } from "../../interactionBenchmark";
+import {
+  interactionRecording,
+  measureInteraction,
+  recordInteraction,
+} from "../../interactionBenchmark";
 
 const findNodeById = (root, id) => {
   let foundNode = null;
@@ -290,6 +302,57 @@ export default class Viewport {
     this._saveGraph = saveGraph;
   }
 
+  setOnDocumentChange(listener) {
+    this._onDocumentChange = listener;
+    this.notifyDocumentChange(true);
+  }
+
+  notifyDocumentChange(force = false) {
+    this._inlineEditor?.update();
+    if (!this._onDocumentChange) return;
+    const root = this.widget();
+    const node = root ? this.node() : null;
+    if (!force && root === this._notifiedRoot && node === this._notifiedNode)
+      return;
+    this._notifiedRoot = root;
+    this._notifiedNode = node;
+    this._onDocumentChange(root, node);
+  }
+
+  applyStructuredCommand(command, nodeId) {
+    const root = this.widget();
+    const currentId = this.node().id();
+    const target =
+      nodeId === undefined ? this.node() : findNodeById(root, nodeId);
+    if (!target) throw new Error("This entry is no longer in the document.");
+    const result = applyJsonCommand(root, target, command);
+    if (command.type === "setText") this.cancelCameraTravel();
+    const keepSelection = nodeId !== undefined && nodeId !== currentId;
+    // A semantic edit stays in the current document. Retain its camera and
+    // completed display while laying out the replacement graph.
+    const styles = new Map();
+    root.paintGroup().forEach((group) => group.siblings().forEach((node) => {
+      if (this._nodeStyles.has(node)) styles.set(node.id(), this._nodeStyles.get(node));
+    }));
+    this._userCaret = new DirectionCaret(result.root);
+    result.root.paintGroup().forEach((group) => group.siblings().forEach((node) => {
+      if (styles.has(node.id())) this._nodeStyles.set(node, styles.get(node.id()));
+    }));
+    const selection = findNodeById(result.root, keepSelection ? currentId : result.selectedNode.id());
+    if (selection) this._userCaret.moveTo(selection);
+    this._nodeNavigationRequested = false;
+    this._showInCamera = false;
+    this._checkScale = false;
+    this._ensureVisible = command.type !== "setText";
+    const renderer = this.rendering();
+    renderer?.replaceDocumentRoot?.();
+    this.save();
+    // replaceDocumentRoot already invalidates the drawing; schedule it once.
+    if (renderer?.replaceDocumentRoot) this.scheduleRender();
+    else this.refresh();
+    return result;
+  }
+
   moveToId(id) {
     const root = this.widget();
     const selectedNode = findNodeById(root, id);
@@ -332,6 +395,7 @@ export default class Viewport {
     if (this._saveGraph) {
       this._saveGraph(this.widget(), this.caret().node());
     }
+    this.notifyDocumentChange(true);
   }
 
   showInCamera() {
@@ -340,6 +404,15 @@ export default class Viewport {
   }
 
   removeNode() {
+    if (isStructuredJson(this.widget())) {
+      try {
+        const selected = inspectJsonSelection(this.widget(), this.node());
+        this.applyStructuredCommand({ type: selected.removeAction || "clear" });
+      } catch (error) {
+        this.logMessage(error.message);
+      }
+      return;
+    }
     if (this.node().neighbors().isRoot()) {
       this.node().setValue(undefined);
       this.save();
@@ -400,7 +473,7 @@ export default class Viewport {
       car.moveTo(car.node().siblings().prev());
     }
     this.repaint();
-  };
+  }
 
   movePaintGroup(reverse) {
     const car = this.caret();
@@ -410,9 +483,15 @@ export default class Viewport {
       car.moveTo(car.node().paintGroup().prev());
     }
     this.repaint();
-  };
+  }
 
   spawnMove(dir, pullIfOccupied, dontTouchCamera) {
+    if (isStructuredJson(this.widget())) {
+      // Directional input navigates the representation; only semantic commands
+      // create content in a structured document.
+      this.moveToNeighbor(dir);
+      return;
+    }
     if (this.node().neighbors().hasNode(dir)) {
       if (pullIfOccupied && !this.node().neighbors().isRoot()) {
         const parentDir = this.node().neighbors().parentDirection();
@@ -497,7 +576,8 @@ export default class Viewport {
   }
 
   toJSON() {
-    if (documentState(this.widget())?.version === 1) ensureStringIds(this.widget());
+    if (documentState(this.widget())?.version === 1)
+      ensureStringIds(this.widget());
     const styles = Object.create(null);
     this._userCaret
       .root()
@@ -533,13 +613,18 @@ export default class Viewport {
     const destination = this._cameraTravel.destination();
     if (destination && !this._cameraZoomTarget) {
       target.setScale(destination.scale);
-      target.setOrigin(target.width() / (2 * destination.scale) - destination.x,
-        target.height() / (2 * destination.scale) - destination.y);
+      target.setOrigin(
+        target.width() / (2 * destination.scale) - destination.x,
+        target.height() / (2 * destination.scale) - destination.y
+      );
     }
     this.cancelCameraTravel();
     this.input().stopPan();
-    target.zoomToPoint(factor, Number.isFinite(x) ? x : target.width() / 2,
-      Number.isFinite(y) ? y : target.height() / 2);
+    target.zoomToPoint(
+      factor,
+      Number.isFinite(x) ? x : target.width() / 2,
+      Number.isFinite(y) ? y : target.height() / 2
+    );
     this._cameraZoomTarget = target;
     this.checkScale();
   }
@@ -566,7 +651,12 @@ export default class Viewport {
         .paintGroup()
         .forEach((pg) => {
           pg.siblings().forEach((node) => {
-            if (Object.prototype.hasOwnProperty.call(viewportData.styles, node.id())) {
+            if (
+              Object.prototype.hasOwnProperty.call(
+                viewportData.styles,
+                node.id()
+              )
+            ) {
               this.updateNodeStyle(node, viewportData.styles[node.id()]);
             }
           });
@@ -672,6 +762,7 @@ export default class Viewport {
   }
 
   refresh() {
+    this.notifyDocumentChange();
     this.scheduleRepaint();
   }
 
@@ -748,6 +839,7 @@ export default class Viewport {
       }
       const more = this.rendering().crank();
       this.rendering().present();
+      this._inlineEditor?.update();
       if (more || this.rendering().continueLatestFrame()) {
         this.updateStatus();
         if (attempts++ > MAX_RENDER_ATTEMPTS) {
@@ -786,6 +878,7 @@ export default class Viewport {
   }
 
   repaint() {
+    this.notifyDocumentChange();
     this._ensureVisible = true;
     this.scheduleRepaint();
   }
@@ -797,16 +890,21 @@ export default class Viewport {
     const recording = interactionRecording();
     const before = recording ? this.rendering().interactionState() : null;
     const sliceStart = recording ? performance.now() : 0;
-    const more = measureBenchmark(benchmarkFor(this.widget()), "Render slice", () => {
-      const start = Date.now();
-      while (this.rendering().crank()) {
-        if (Date.now() - start > MAX_PAINT_TIME_MS) {
-          return true;
+    const more = measureBenchmark(
+      benchmarkFor(this.widget()),
+      "Render slice",
+      () => {
+        const start = Date.now();
+        while (this.rendering().crank()) {
+          if (Date.now() - start > MAX_PAINT_TIME_MS) {
+            return true;
+          }
         }
+        return this.rendering().continueLatestFrame();
       }
-      return this.rendering().continueLatestFrame();
-    });
+    );
     measureInteraction("Frame presentation", () => this.rendering().present());
+    this._inlineEditor?.update();
     if (recording) {
       recordInteraction("slice", {
         durationMs: performance.now() - sliceStart,
@@ -910,6 +1008,8 @@ export default class Viewport {
   }
 
   show(widget, viewport) {
+    this._inlineEditor?.close(false);
+    if (this._showEditor && this._editorContainer) this.hideEditor();
     if (!widget) {
       throw new Error("Refusing to show falsy widget");
     }
@@ -926,13 +1026,19 @@ export default class Viewport {
         defaultNodeStyle: appearance.defaults,
         styles: appearance.nodeStyles,
         pageBackgroundColor: Color.fromHex(appearance.pageBackgroundColor)
-          .setA(appearance.pageBackgroundAlpha).asRGBA(),
+          .setA(appearance.pageBackgroundAlpha)
+          .asRGBA(),
       });
     }
     if (viewport) {
       this.load(viewport);
     }
     this._appearanceChanged = false;
+    const structured = isStructuredJson(widget);
+    if (this._carouselRoot && this._carouselStructured !== structured) {
+      this._carouselStructured = structured;
+      this._carouselRoot.render(<Carousel viewport={this} />);
+    }
     this.refresh();
   }
 
@@ -959,7 +1065,6 @@ export default class Viewport {
     const saveBtn = document.createElement("button");
 
     const save = () => {
-      this.node().setValue(editor.value === "" ? undefined : editor.value);
       this.applyEditorValue();
       this.toggleEditor();
     };
@@ -982,6 +1087,17 @@ export default class Viewport {
   }
 
   applyEditorValue() {
+    if (isStructuredJson(this.widget())) {
+      try {
+        this.applyStructuredCommand({
+          type: "setText",
+          text: this._editor.value,
+        });
+      } catch (error) {
+        this.logMessage(error.message);
+      }
+      return;
+    }
     this.node().setValue(
       this._editor.value === "" ? undefined : this._editor.value
     );
@@ -1010,6 +1126,10 @@ export default class Viewport {
   }
 
   hideEditor() {
+    if (this._inlineEditor?.active()) {
+      this._inlineEditor.close(true);
+      return;
+    }
     if (!this.showingEditor()) {
       return;
     }
@@ -1023,6 +1143,13 @@ export default class Viewport {
   }
 
   showEditor() {
+    if (isStructuredJson(this.widget())) {
+      this._inlineEditor ??= new ViewportInlineEditor(this);
+      try {
+        if (!this._inlineEditor.open()) this.rendering()?.showUI();
+      } catch (error) { this.logMessage(error.message); }
+      return;
+    }
     if (this.showingEditor()) {
       return;
     }
@@ -1038,6 +1165,16 @@ export default class Viewport {
       this._editor.value = "";
     }
     this.refresh();
+  }
+
+  canEditStructuredValue() {
+    if (!isStructuredJson(this.widget())) return false;
+    try { return inspectJsonSelection(this.widget(), this.node()).canEdit; }
+    catch { return false; }
+  }
+
+  handleStructuredKey(event) {
+    return handleStructuredJsonKey(this, event);
   }
 
   toggleEditor() {
@@ -1070,11 +1207,13 @@ export default class Viewport {
   getNodeStyle(node) {
     node = node ?? this.node();
     let curStyle = this._nodeStyles.get(node);
-    if (curStyle === undefined) {
+    const appearance = jsonNodeAppearance(this.widget(), node);
+    if (curStyle === undefined && !appearance) {
       return this.defaultNodeStyle();
     }
     return {
       ...this.defaultNodeStyle(),
+      ...appearance,
       ...curStyle,
     };
   }
@@ -1093,10 +1232,18 @@ export default class Viewport {
 
     this._appearanceChanged = true;
     newRules = { ...newRules };
-    if (newRules.pageBackgroundColor !== undefined || newRules.pageBackgroundAlpha !== undefined) {
-      const color = newRules.pageBackgroundColor !== undefined
-        ? Color.fromHex(newRules.pageBackgroundColor) : this.rendering().pageBackgroundColor().clone();
-      color.setA(newRules.pageBackgroundAlpha ?? this.rendering().pageBackgroundColor().a());
+    if (
+      newRules.pageBackgroundColor !== undefined ||
+      newRules.pageBackgroundAlpha !== undefined
+    ) {
+      const color =
+        newRules.pageBackgroundColor !== undefined
+          ? Color.fromHex(newRules.pageBackgroundColor)
+          : this.rendering().pageBackgroundColor().clone();
+      color.setA(
+        newRules.pageBackgroundAlpha ??
+          this.rendering().pageBackgroundColor().a()
+      );
       this.rendering().setPageBackgroundColor(color);
       delete newRules.pageBackgroundColor;
       delete newRules.pageBackgroundAlpha;
@@ -1123,8 +1270,10 @@ export default class Viewport {
   }
 
   showingCaret() {
-    return !this._showingStyling &&
-      (this.rendering().showingUI() || this.navigatingNodes());
+    return (
+      !this._showingStyling &&
+      (this.rendering().showingUI() || this.navigatingNodes())
+    );
   }
 
   showNodeActions() {
@@ -1137,7 +1286,7 @@ export default class Viewport {
   }
 
   showingEditor() {
-    return this._showEditor;
+    return this._showEditor || !!this._inlineEditor?.active();
   }
 
   ensuringVisible() {

@@ -1,4 +1,5 @@
 import { DirectionCaret, Direction } from "parsegraph";
+import { exportStructuredJson, isStructuredJson } from "../structuredJson";
 
 function exportGraphToLines(root) {
   const car = new DirectionCaret(root);
@@ -74,6 +75,7 @@ function exportGraphToLisp(root, tokens) {
 }
 
 function exportGraphToJson(root) {
+  if (isStructuredJson(root)) return exportStructuredJson(root);
   if (root.neighbors().hasNode(Direction.INWARD)) {
     let inner = root.neighbors().nodeAt(Direction.INWARD);
     if (inner.neighbors().hasNode(Direction.BACKWARD)) {

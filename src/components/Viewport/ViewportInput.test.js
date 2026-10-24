@@ -78,6 +78,127 @@ function advance(ms) {
   }
 }
 
+test("Enter starts structured value editing even while the UI is hidden", () => {
+  viewport.rendering = () => ({ showingUI: () => false });
+  viewport.navigatingNodes = () => true;
+  viewport.canEditStructuredValue = () => true;
+  const event = key(canvas, "keydown", "Enter");
+  expect(event.defaultPrevented).toBe(true);
+  expect(viewport.toggleEditor).toHaveBeenCalledTimes(1);
+});
+
+test("Enter cannot reopen a stale structured selection after leaving View navigation", () => {
+  viewport.rendering = () => ({ showingUI: () => false });
+  viewport.canEditStructuredValue = () => true;
+  expect(key(canvas, "keydown", "Enter").defaultPrevented).toBe(false);
+  expect(viewport.toggleEditor).not.toHaveBeenCalled();
+});
+
+test("structured shortcuts run in View mode and stop an already moving camera", () => {
+  viewport.rendering = () => ({ showingUI: () => false });
+  viewport.handleStructuredKey = jest.fn(() => false);
+  key(canvas, "keydown", "ArrowRight");
+  advance(200);
+  expect(position[0]).toBeLessThan(0);
+  const before = [...position];
+  viewport.handleStructuredKey.mockReturnValue(true);
+  const event = key(canvas, "keydown", ",");
+  expect(viewport.handleStructuredKey).toHaveBeenLastCalledWith(event);
+  expect(event.defaultPrevented).toBe(true);
+  advance(200);
+  expect(position).toEqual(before);
+  expect(frames.size).toBe(0);
+  expect(viewport.moveToNeighbor).not.toHaveBeenCalled();
+});
+
+test("an unselected View-mode document keeps panning when its dispatcher declines a key", () => {
+  viewport.rendering = () => ({ showingUI: () => false });
+  viewport.handleStructuredKey = jest.fn(() => false);
+  viewport.navigatingNodes = () => false;
+  const event = key(canvas, "keydown", "d");
+  expect(viewport.handleStructuredKey).toHaveBeenCalledWith(event);
+  expect(event.defaultPrevented).toBe(true);
+  advance(200);
+  expect(position[0]).toBeLessThan(0);
+  expect(viewport.moveToNeighbor).not.toHaveBeenCalled();
+});
+
+test.each(["input", "textarea", "select", "contenteditable"])(
+  "native %s editing does not reach graph shortcuts or camera movement",
+  (type) => {
+    viewport.handleStructuredKey = jest.fn(() => true);
+    viewport.removeNode = jest.fn();
+    viewport.zoomCamera = jest.fn();
+    const field = document.createElement(type === "contenteditable" ? "div" : type);
+    canvas.appendChild(field);
+    let target = field;
+    if (type === "contenteditable") {
+      field.setAttribute("contenteditable", "true");
+      target = document.createElement("span");
+      field.appendChild(target);
+    }
+    for (const value of [",", "Backspace", "ArrowLeft", "Enter", "-"]) {
+      expect(key(target, "keydown", value).defaultPrevented).toBe(false);
+    }
+    advance(200);
+    expect(viewport.handleStructuredKey).not.toHaveBeenCalled();
+    expect(viewport.removeNode).not.toHaveBeenCalled();
+    expect(viewport.toggleEditor).not.toHaveBeenCalled();
+    expect(viewport.zoomCamera).not.toHaveBeenCalled();
+    expect(position).toEqual([0, 0]);
+    expect(frames.size).toBe(0);
+  }
+);
+
+test.each([
+  ["composition", { isComposing: true }],
+  ["legacy composition", { keyCode: 229 }],
+  ["Control", { ctrlKey: true }],
+  ["Meta", { metaKey: true }],
+  ["Alt", { altKey: true }],
+])("%s never reaches the structured dispatcher, generic commands, or camera", (_name, modifiers) => {
+  viewport.handleStructuredKey = jest.fn(() => true);
+  viewport.removeNode = jest.fn();
+  viewport.zoomCamera = jest.fn();
+  viewport.spawnMove = jest.fn();
+  for (const value of [",", "Backspace", "ArrowRight", "Enter", "-", "w"]) {
+    const event = key(canvas, "keydown", value, modifiers);
+    if (modifiers.keyCode) expect(event.keyCode).toBe(229);
+    if (modifiers.isComposing) expect(event.isComposing).toBe(true);
+    expect(event.defaultPrevented).toBe(false);
+  }
+  advance(200);
+  expect(viewport.handleStructuredKey).not.toHaveBeenCalled();
+  expect(viewport.removeNode).not.toHaveBeenCalled();
+  expect(viewport.toggleEditor).not.toHaveBeenCalled();
+  expect(viewport.zoomCamera).not.toHaveBeenCalled();
+  expect(viewport.spawnMove).not.toHaveBeenCalled();
+  expect(position).toEqual([0, 0]);
+  expect(frames.size).toBe(0);
+});
+
+test("holding Enter does not repeatedly toggle structured value editing", () => {
+  viewport.rendering = () => ({ showingUI: () => false });
+  viewport.navigatingNodes = () => true;
+  viewport.canEditStructuredValue = () => true;
+  expect(key(canvas, "keydown", "Enter").defaultPrevented).toBe(true);
+  expect(key(canvas, "keydown", "Enter", { repeat: true }).defaultPrevented).toBe(true);
+  expect(key(canvas, "keydown", "Enter", { repeat: true }).defaultPrevented).toBe(true);
+  expect(viewport.toggleEditor).toHaveBeenCalledTimes(1);
+});
+
+test("ordinary graphs retain comma as the keystroke display toggle", () => {
+  viewport.input = () => input;
+  viewport.logMessage = jest.fn();
+  const keystrokes = input.keystrokes();
+  jest.spyOn(keystrokes, "handleKey").mockImplementation(() => {});
+  const before = keystrokes.showingKeystrokes();
+  expect(key(canvas, "keydown", ",").defaultPrevented).toBe(true);
+  expect(keystrokes.showingKeystrokes()).toBe(!before);
+  expect(viewport.logMessage).toHaveBeenCalledWith("Toggling keystrokes");
+  expect(viewport.refresh).toHaveBeenCalledTimes(1);
+});
+
 function key(target, type, value, modifiers = {}) {
   const event = new KeyboardEvent(type, { key: value, bubbles: true, cancelable: true, ...modifiers });
   target.dispatchEvent(event);

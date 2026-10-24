@@ -1,0 +1,18 @@
+.graph-inline-editor {
+  position: fixed;
+  z-index: 20;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 3px 6px;
+  border: 2px solid;
+  border-radius: 6px;
+  outline: 2px solid #ffffffb3;
+  outline-offset: 2px;
+  font-family: sans-serif;
+  font-weight: normal;
+  text-align: center;
+  resize: none;
+  overflow: auto;
+  white-space: pre;
+  box-shadow: 0 2px 9px #0004;
+}

@@ -3,8 +3,40 @@ import ExportModal from "./ExportModal";
 import fixture from "../fixtures/v1/appearance-colors.json";
 import { readGraph } from "../graphDocument";
 import { graphXml } from "../xmlGraph";
+import { createJsonDraft, createStructuredJson, structuredJsonStatus } from "../structuredJson";
 
 afterEach(() => jest.restoreAllMocks());
+
+test("incomplete JSON blocks source export but can be downloaded as a recoverable v1 draft", () => {
+  const root = createJsonDraft();
+  const downloads = [];
+  jest.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function () {
+    downloads.push(JSON.parse(decodeURIComponent(this.getAttribute("href").split(",").slice(1).join(","))));
+  });
+  const onExport = jest.fn();
+  render(<ExportModal graph={root} viewport={{ node: () => root, toJSON: () => ({}) }} initialFormat="json" onExport={onExport} />);
+  fireEvent.click(screen.getByRole("button", { name: "Save", exact: true }));
+  expect(screen.getByRole("alert")).toHaveTextContent("Save a Parsegraph draft");
+  expect(downloads).toHaveLength(0);
+  expect(onExport).not.toHaveBeenCalled();
+  expect(screen.queryByRole("option", { name: /legacy/ })).not.toBeInTheDocument();
+  fireEvent.change(screen.getByRole("combobox"), { target: { value: "parsegraph" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save", exact: true }));
+  expect(downloads).toHaveLength(1);
+  expect(downloads[0].version).toBe(1);
+  expect(structuredJsonStatus(readGraph(downloads[0]))).toMatchObject({ complete: false, slotCount: 2 });
+});
+
+test("complete structured JSON exports its content rather than graph metadata", () => {
+  const root = createStructuredJson({ empty: [], object: {}, value: null, text: "" });
+  let downloaded;
+  jest.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function () {
+    downloaded = this.getAttribute("href");
+  });
+  render(<ExportModal graph={root} viewport={{}} initialFormat="json" />);
+  fireEvent.click(screen.getByRole("button", { name: "Save", exact: true }));
+  expect(downloaded).toBe(`data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ empty: [], object: {}, value: null, text: "" }, null, 2))}`);
+});
 
 test("export writes the edited v1 document and makes legacy export explicitly lossy", () => {
   const data = JSON.parse(JSON.stringify(fixture));

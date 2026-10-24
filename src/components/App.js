@@ -1,19 +1,36 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { readGraph, writeGraph, documentState } from "../graphDocument";
+import {
+  readGraph,
+  writeGraph,
+  documentState,
+  graphSelection,
+  graphViewport,
+} from "../graphDocument";
+import { isStructuredJson } from "../structuredJson";
+import { readJsonRecovery, writeJsonRecovery } from "../structuredJsonRecovery";
+import StructuredJsonPanel from "./StructuredJsonPanel";
 import GraphStack from "../GraphStack";
 import "./App.css";
 import Viewport from "./Viewport/Viewport";
 import ImportModal from "./ImportModal";
 import ExportModal from "./ExportModal";
-import { PRINT_PAINT_STATS, PUBLIC_SERVERS, SHOW_WORLD_LABELS } from "../settings";
+import {
+  PRINT_PAINT_STATS,
+  PUBLIC_SERVERS,
+  SHOW_WORLD_LABELS,
+} from "../settings";
 import NodeStylingModal from "./NodeStylingModal";
 import OffscreenModal from "./Viewport/OffscreenModal";
 import MousePanControls from "./MousePanControls";
 import CameraTravelControls from "./CameraTravelControls";
 import { attachBenchmark, benchmarkFor, measureBenchmark } from "../benchmark";
 import BenchmarkPanel from "./BenchmarkPanel";
-import { clearExampleSession, initialExampleSession, watchExampleSession } from "../exampleSession";
+import {
+  clearExampleSession,
+  initialExampleSession,
+  watchExampleSession,
+} from "../exampleSession";
 
 const sessionId = crypto.randomUUID();
 
@@ -45,18 +62,31 @@ const loadInitialRoom = (openGraph) => {
 function App() {
   const [viewport] = useState(() => new Viewport());
   const [graphs] = useState(() => new GraphStack());
-  const [initialSession, setInitialSession] = useState(() => initialExampleSession(window.location.search));
+  const [initialSession, setInitialSession] = useState(() =>
+    initialExampleSession(window.location.search)
+  );
   const [exampleSource, setExampleSource] = useState(null);
 
   const [needsSave, setNeedsSave] = useState(false);
 
   const [hasWidget, setHasWidget] = useState(false);
   const [documentInfo, setDocumentInfo] = useState(null);
+  const [structuredView, setStructuredView] = useState(null);
+  const [recoveryRevision, setRecoveryRevision] = useState(0);
+  const [recoveryState, setRecoveryState] = useState(() => {
+    try {
+      return { recovery: readJsonRecovery(), error: null };
+    } catch (error) {
+      return { recovery: null, error: error.message };
+    }
+  });
+  const [recoveryMessage, setRecoveryMessage] = useState("");
 
   const [autopublish, setAutopublish] = useState(false);
 
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [exportModalFormat, setExportModalFormat] = useState("parsegraph");
   const [nodeStylingModalOpen, setNodeStylingModalOpen] = useState(false);
 
   const urlParams = new URLSearchParams(window.location.search);
@@ -93,7 +123,9 @@ function App() {
       return;
     }
     fetch("/public/" + roomName + "?sid=" + sessionId, {
-      body: JSON.stringify(writeGraph(viewport.widget(), viewport.node(), viewport.toJSON())),
+      body: JSON.stringify(
+        writeGraph(viewport.widget(), viewport.node(), viewport.toJSON())
+      ),
       headers: {
         "Content-Type": "application/json",
       },
@@ -115,11 +147,67 @@ function App() {
   };
 
   const openExportModal = () => {
+    setExportModalFormat("parsegraph");
     setImportModalOpen(false);
     setExportModalOpen((old) => !old);
   };
 
   const [showNodeActions, setShowNodeActions] = useState(false);
+
+  useEffect(() => {
+    viewport.setOnDocumentChange?.((root, node) => {
+      setStructuredView(isStructuredJson(root) ? { root, node } : null);
+    });
+    return () => viewport.setOnDocumentChange?.(null);
+  }, [viewport]);
+
+  const persistJsonDraft = useCallback(() => {
+      const root = viewport.widget();
+      if (!isStructuredJson(root)) return;
+      try {
+        const document = writeGraph(
+          root,
+          viewport.node(),
+          viewport.toJSON(),
+          1
+        );
+        const savedAt = writeJsonRecovery(document);
+        setRecoveryState({ recovery: { document, savedAt }, error: null });
+        setRecoveryMessage("Draft recovery saved in this browser.");
+      } catch (error) {
+        setRecoveryMessage(
+          `Recovery could not be saved: ${error.message} Download a draft to keep your work.`
+        );
+      }
+  }, [viewport]);
+
+  const structuredRoot = structuredView?.root;
+  useEffect(() => {
+    if (!structuredRoot) return;
+    const timer = setTimeout(persistJsonDraft, 300);
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") persistJsonDraft();
+    };
+    window.addEventListener("pagehide", persistJsonDraft);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("pagehide", persistJsonDraft);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [structuredRoot, persistJsonDraft, recoveryRevision]);
+
+  const structuredCommand = useCallback(
+    (command, nodeId) => {
+      return viewport.applyStructuredCommand(command, nodeId);
+    },
+    [viewport]
+  );
+
+  const structuredExport = (format) => {
+    setExportModalFormat(format);
+    setExportModalOpen(true);
+  };
 
   useEffect(() => {
     if (!viewport) {
@@ -172,33 +260,45 @@ function App() {
     setRedoSize(0);
   };
 
-  const openGraph = useCallback((graph, selectedNode, roomName, viewportData, example = null, showingUI) => {
-    const benchmark = benchmarkFor(graph);
-    setInitialSession(null);
-    setRoomName(roomName);
-    setImportModalOpen(false);
-    setNeedsSave(false);
-    viewport.container()?.focus();
-    graphs.clear();
-    measureBenchmark(benchmark, "History serialization", () =>
-      graphs.save(graph, selectedNode, viewportData)
-    );
-    setUndoSize(0);
-    setRedoSize(0);
-    refresh(!!viewportData?.cam, benchmark);
-    if (showingUI === false) viewport.rendering().hideUI();
-    if (showingUI === true) viewport.rendering().showUI();
-    // Imported files must not reopen an unrelated example or inherit its camera.
-    clearExampleSession();
-    setExampleSource(example);
-    // Consume launch links so refresh follows the source opened most recently.
-    const url = new URL(window.location.href);
-    url.searchParams.delete("sample");
-    if (!roomName) url.searchParams.delete("public");
-    if (url.href !== window.location.href) {
-      window.history.replaceState(window.history.state, "", url);
-    }
-  }, [graphs, viewport, refresh]);
+  const openGraph = useCallback(
+    (
+      graph,
+      selectedNode,
+      roomName,
+      viewportData,
+      example = null,
+      showingUI
+    ) => {
+      // Flush before switching even when the debounced recovery write has not run.
+      persistJsonDraft();
+      const benchmark = benchmarkFor(graph);
+      setInitialSession(null);
+      setRoomName(roomName);
+      setImportModalOpen(false);
+      setNeedsSave(false);
+      viewport.container()?.focus();
+      graphs.clear();
+      measureBenchmark(benchmark, "History serialization", () =>
+        graphs.save(graph, selectedNode, viewportData)
+      );
+      setUndoSize(0);
+      setRedoSize(0);
+      refresh(!!viewportData?.cam, benchmark);
+      if (showingUI === false) viewport.rendering().hideUI();
+      if (showingUI === true) viewport.rendering().showUI();
+      // Imported files must not reopen an unrelated example or inherit its camera.
+      clearExampleSession();
+      setExampleSource(example);
+      // Consume launch links so refresh follows the source opened most recently.
+      const url = new URL(window.location.href);
+      url.searchParams.delete("sample");
+      if (!roomName) url.searchParams.delete("public");
+      if (url.href !== window.location.href) {
+        window.history.replaceState(window.history.state, "", url);
+      }
+    },
+    [graphs, viewport, refresh, persistJsonDraft]
+  );
 
   useEffect(() => {
     if (!exampleSource) return;
@@ -246,6 +346,8 @@ function App() {
       return;
     }
     viewport.setSaveGraph((graph, selectedNode) => {
+      if (isStructuredJson(graph))
+        setRecoveryRevision((revision) => revision + 1);
       if (!viewport.showingStyling()) {
         graphs.save(graph, selectedNode, viewport.toJSON());
         refreshUndoCounts();
@@ -267,7 +369,16 @@ function App() {
     const root = graphs.widget();
     viewport.show(root, graphs.viewportData());
     setDocumentInfo(documentState(root));
-  }, [graphs, viewport, refresh, autopublish, publish, undo, redo, refreshUndoCounts]);
+  }, [
+    graphs,
+    viewport,
+    refresh,
+    autopublish,
+    publish,
+    undo,
+    redo,
+    refreshUndoCounts,
+  ]);
 
   useEffect(() => {
     if (autopublish) {
@@ -305,7 +416,13 @@ function App() {
       }
       setNodeStylingModalOpen(showingStyling);
     });
-  }, [viewport, setNodeStylingModalOpen, setNodeStyling, graphs, refreshUndoCounts]);
+  }, [
+    viewport,
+    setNodeStylingModalOpen,
+    setNodeStyling,
+    graphs,
+    refreshUndoCounts,
+  ]);
 
   const updateNodeStyling = (newStyling) => {
     viewport.updateNodeStyle(newStyling);
@@ -426,6 +543,27 @@ function App() {
         {(!hasWidget || importModalOpen) && (
           <div className="modal">
             <ImportModal
+              recovery={recoveryState.recovery}
+              recoveryError={recoveryState.error}
+              onRestoreRecovery={() => {
+                try {
+                  const { document } = recoveryState.recovery;
+                  openGraph(
+                    readGraph(document),
+                    graphSelection(document),
+                    null,
+                    graphViewport(document),
+                    null,
+                    true
+                  );
+                  setNeedsSave(true);
+                } catch (error) {
+                  setRecoveryState((state) => ({
+                    ...state,
+                    error: error.message,
+                  }));
+                }
+              }}
               initialSession={initialSession}
               onClose={hasWidget ? () => setImportModalOpen(false) : null}
               openGraph={openGraph}
@@ -435,6 +573,7 @@ function App() {
         {exportModalOpen && hasWidget && (
           <div className="modal">
             <ExportModal
+              initialFormat={exportModalFormat}
               viewport={viewport}
               onExport={() => {
                 setNeedsSave(false);
@@ -457,17 +596,34 @@ function App() {
             />
           </div>
         )}
+        {hasWidget && structuredView && showingUI && (
+          <StructuredJsonPanel
+            root={structuredView.root}
+            selectedNode={structuredView.node}
+            onEditValue={(nodeId) => {
+              viewport.moveToId(nodeId);
+              viewport.showEditor();
+            }}
+            onFinishEditing={() => {
+              viewport.hideEditor();
+              viewport.container()?.focus();
+            }}
+            onCommand={structuredCommand}
+            onSelect={(nodeId) => viewport.moveToId(nodeId)}
+            onSaveDraft={() => structuredExport("parsegraph")}
+            onExportJson={() => structuredExport("json")}
+            recoveryMessage={recoveryMessage}
+          />
+        )}
         <div className="AppMenu">
           <div style={{ flexGrow: "1", display: "flex", gap: "5px" }}>
-            <button onClick={goBack}>
-              &lt;&lt;
-            </button>
-            {(hasWidget && showingUI) && !showNodeActions && (
+            <button onClick={goBack}>&lt;&lt;</button>
+            {hasWidget && showingUI && !showNodeActions && (
               <button tabIndex={0} onClick={openImportModal}>
                 Open
               </button>
             )}
-            {(hasWidget && showingUI) && (
+            {hasWidget && showingUI && (
               <div
                 style={{
                   flexGrow: "1",
@@ -476,32 +632,46 @@ function App() {
                 }}
               >
                 <div className="buttons" style={{ paddingTop: "0" }}>
-                  {hasWidget && <>
-                    <button onClick={() => viewport.toggleNodeStyling()}>
-                      Style
-                    </button>
-                    <button onClick={() => {
-                      viewport.rendering().toggleUI();
-                      viewport.refresh();
-                    }}>
-                      {viewport.rendering().showingUI() ? "View": "Edit" }
-                    </button>
-                    <button onClick={() => viewport.rendering().toggleSpotlights()}>
-                      Spotlights
-                    </button>
-                    {SHOW_WORLD_LABELS && <button onClick={() => {
-                      viewport.rendering().toggleWorldLabels();
-                      viewport.refresh();
-                    }}>
-                      Labels
-                    </button>}
-                    {PRINT_PAINT_STATS && <button onClick={() => {
-                      viewport.rendering().toggleStats();
-                      viewport.refresh();
-                    }}>
-                      Metrics 
-                    </button>}
-                  </>}
+                  {hasWidget && (
+                    <>
+                      <button onClick={() => viewport.toggleNodeStyling()}>
+                        Style
+                      </button>
+                      <button
+                        onClick={() => {
+                          viewport.rendering().toggleUI();
+                          viewport.refresh();
+                        }}
+                      >
+                        {viewport.rendering().showingUI() ? "View" : "Edit"}
+                      </button>
+                      <button
+                        onClick={() => viewport.rendering().toggleSpotlights()}
+                      >
+                        Spotlights
+                      </button>
+                      {SHOW_WORLD_LABELS && (
+                        <button
+                          onClick={() => {
+                            viewport.rendering().toggleWorldLabels();
+                            viewport.refresh();
+                          }}
+                        >
+                          Labels
+                        </button>
+                      )}
+                      {PRINT_PAINT_STATS && (
+                        <button
+                          onClick={() => {
+                            viewport.rendering().toggleStats();
+                            viewport.refresh();
+                          }}
+                        >
+                          Metrics
+                        </button>
+                      )}
+                    </>
+                  )}
                   {!showNodeActions && hasWidget && (
                     <>
                       <button onClick={() => viewport.showInCamera()}>
@@ -548,37 +718,64 @@ function App() {
                 <ParsegraphEditor viewport={viewport} />
               </div>
             )}
-            {(hasWidget && showingUI) && !showNodeActions && (
+            {hasWidget && showingUI && !showNodeActions && (
               <button onClick={openExportModal}>Save</button>
             )}
-            {(hasWidget && showingUI) && PUBLIC_SERVERS && roomName && (
+            {hasWidget && showingUI && PUBLIC_SERVERS && roomName && (
               <button onClick={() => publish()}>Publish to {roomName}</button>
             )}
           </div>
-          {showingUI && <>
-          <ParsegraphLog viewport={viewport} />
-          <ParsegraphStatus viewport={viewport} />
-          </>}
+          {showingUI && (
+            <>
+              <ParsegraphLog viewport={viewport} />
+              <ParsegraphStatus viewport={viewport} />
+            </>
+          )}
         </div>
-        {hasWidget && <div className="navigation-controls">
-          <MousePanControls />
-          <CameraTravelControls />
-          {documentInfo?.version === 1 && <details className="mouse-pan-controls">
-            <summary>Document capabilities</summary>
-            <div className="mouse-pan-controls-body">
-              <p>V1 document. {documentInfo.presentation ? "Presentation applied. " : "Local sizing. "}
-                {documentInfo.appearance ? "Appearance applied." : "Local colors."}</p>
-              {documentInfo.hasUnsupportedContent && <p>Non-text JSON values are preserved without text labels.</p>}
-              {documentInfo.ignoredCapabilities.length > 0 && <p>
-                Preserved without interpretation: {documentInfo.ignoredCapabilities.join(", ")}.
-                Generation recipes never replace edited nodes automatically.
-              </p>}
-            </div>
-          </details>}
-        </div>}
-        {!showingUI && <div>
-          <button style={{position: 'fixed', bottom: '3px', right: '3px'}} onClick={() => viewport.rendering().toggleUI()}>Edit</button>
-        </div>}
+        {hasWidget && (
+          <div className="navigation-controls">
+            <MousePanControls />
+            <CameraTravelControls />
+            {documentInfo?.version === 1 && (
+              <details className="mouse-pan-controls">
+                <summary>Document capabilities</summary>
+                <div className="mouse-pan-controls-body">
+                  <p>
+                    V1 document.{" "}
+                    {documentInfo.presentation
+                      ? "Presentation applied. "
+                      : "Local sizing. "}
+                    {documentInfo.appearance
+                      ? "Appearance applied."
+                      : "Local colors."}
+                  </p>
+                  {documentInfo.hasUnsupportedContent && (
+                    <p>
+                      Non-text JSON values are preserved without text labels.
+                    </p>
+                  )}
+                  {documentInfo.ignoredCapabilities.length > 0 && (
+                    <p>
+                      Preserved without interpretation:{" "}
+                      {documentInfo.ignoredCapabilities.join(", ")}. Generation
+                      recipes never replace edited nodes automatically.
+                    </p>
+                  )}
+                </div>
+              </details>
+            )}
+          </div>
+        )}
+        {!showingUI && (
+          <div>
+            <button
+              style={{ position: "fixed", bottom: "3px", right: "3px" }}
+              onClick={() => viewport.rendering().toggleUI()}
+            >
+              Edit
+            </button>
+          </div>
+        )}
       </div>
     </>
   );

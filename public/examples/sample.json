@@ -1,0 +1,8 @@
+{
+  "name": "Parsegraph",
+  "features": ["layout", "navigation", "editing"],
+  "example": {
+    "kind": "JSON",
+    "editable": true
+  }
+}

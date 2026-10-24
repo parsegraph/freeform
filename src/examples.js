@@ -94,7 +94,9 @@ export async function loadExample(value, benchmark) {
   let source;
   if (example.type === "json" || example.type === "lisp") {
     source = await measureBenchmarkAsync(benchmark, "Example fetch", async () => {
-      const response = await fetch(example.type === "json" ? "/package.json" : "/surface.lisp");
+      const base = (process.env.PUBLIC_URL || "").replace(/\/+$/, "");
+      const filename = example.type === "json" ? "sample.json" : "sample.lisp";
+      const response = await fetch(`${base}/examples/${filename}`);
       if (!response.ok) throw new Error("Could not load the example.");
       return response.text();
     });

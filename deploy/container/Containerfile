@@ -1,0 +1,17 @@
+# Assemble only the tested build/ output and nginx.conf, not the source tree.
+FROM docker.io/library/nginx@sha256:0985e772fb9f729e6fa0980da05fca5d9c468e870eed43071545afa9d2e27d94
+
+ARG SOURCE_REVISION
+LABEL org.opencontainers.image.title="Parsegraph Freeform" \
+      org.opencontainers.image.revision="${SOURCE_REVISION}"
+
+COPY nginx.conf /etc/nginx/nginx.conf
+COPY build/ /srv/freeform/
+
+# Match the existing website runtime: official nginx's unprivileged account,
+# writable /tmp only, and no upstream scripts that modify /etc/nginx.
+USER 101:101
+EXPOSE 8080
+STOPSIGNAL SIGQUIT
+ENTRYPOINT ["nginx"]
+CMD ["-g", "daemon off;"]

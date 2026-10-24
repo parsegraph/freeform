@@ -1,0 +1,30 @@
+[Unit]
+Description=Parsegraph Freeform VPN editor
+
+[Container]
+# The deployment installer replaces this with the tested immutable sha256 ID.
+# Do not install this template unchanged, or replace it with a mutable tag.
+Image=@IMAGE_ID@
+Pull=never
+ContainerName=parsegraph-freeform
+PublishPort=127.0.0.1:4351:8080
+ReadOnly=true
+ReadOnlyTmpfs=false
+Tmpfs=/tmp:rw,nosuid,nodev,noexec,size=16m,mode=1777
+DropCapability=all
+NoNewPrivileges=true
+HealthCmd=wget -q -O /dev/null http://127.0.0.1:8080/freeform/index.html
+HealthInterval=30s
+HealthTimeout=5s
+HealthRetries=3
+HealthOnFailure=kill
+LogDriver=journald
+
+[Service]
+Restart=on-failure
+RestartSec=5s
+TimeoutStartSec=60s
+TimeoutStopSec=30s
+
+[Install]
+WantedBy=default.target

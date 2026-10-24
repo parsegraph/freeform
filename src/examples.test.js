@@ -1,3 +1,6 @@
+import fs from "fs";
+import path from "path";
+import { Direction } from "parsegraph";
 import { createExample, exampleFromSample, loadExample } from "./examples";
 import * as builders from "./builders";
 
@@ -52,3 +55,35 @@ test("invalid or unbounded stored recipes are rejected or bounded", async () => 
   expect(createExample("grid", { size: -1 })).toBeNull();
   expect(createExample("cross", { rounds: 100000 }).rounds).toBe(11);
 });
+
+// Load the shipped assets through the real importers as well as checking URLs.
+test.each(["", "/freeform", "/freeform/"])(
+  "JSON and Lisp samples load under PUBLIC_URL=%s",
+  async (publicUrl) => {
+    const originalPublicUrl = process.env.PUBLIC_URL;
+    const originalFetch = global.fetch;
+    process.env.PUBLIC_URL = publicUrl;
+    global.fetch = jest.fn();
+    try {
+      for (const type of ["json", "lisp"]) {
+        const filename = `sample.${type}`;
+        const text = fs.readFileSync(
+          path.join(__dirname, "../public/examples", filename),
+          "utf8"
+        );
+        global.fetch.mockResolvedValueOnce({ ok: true, text: async () => text });
+        const result = await loadExample(createExample(type));
+        const expectedBase = publicUrl ? "/freeform" : "";
+        expect(global.fetch).toHaveBeenLastCalledWith(
+          `${expectedBase}/examples/${filename}`
+        );
+        expect(result.graph.neighbors().hasNode(Direction.INWARD)).toBe(true);
+      }
+    } finally {
+      if (originalPublicUrl === undefined) delete process.env.PUBLIC_URL;
+      else process.env.PUBLIC_URL = originalPublicUrl;
+      if (originalFetch === undefined) delete global.fetch;
+      else global.fetch = originalFetch;
+    }
+  }
+);

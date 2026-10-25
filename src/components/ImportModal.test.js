@@ -1,5 +1,5 @@
 import { StrictMode } from "react";
-import { render, screen, waitFor, fireEvent, act } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, createEvent, act } from "@testing-library/react";
 import ImportModal from "./ImportModal";
 import { createExample, loadExample } from "../examples";
 import fixture from "../fixtures/v1/appearance-colors.json";
@@ -21,6 +21,7 @@ beforeAll(() => { global.TextDecoder = TextDecoder; });
 
 beforeEach(() => {
   jest.clearAllMocks();
+  createExample.mockImplementation((type, options) => ({ type, ...options }));
   loadExample.mockResolvedValue(loaded);
 });
 
@@ -56,7 +57,7 @@ test("failed linked loads can retry, and abandoned downloads cannot replace anot
   expect(fetch.mock.calls[1][1].signal.aborted).toBe(true);
   await act(async () => finish({ ok: true, text: async () => JSON.stringify(fixture) }));
   expect(openGraph).not.toHaveBeenCalled();
-  expect(screen.getByRole("combobox", { name: "Template:" })).toBeInTheDocument();
+  expect(screen.getByRole("searchbox", { name: "Search templates" })).toBeInTheDocument();
 });
 
 test("restores camera and mode once even under StrictMode", async () => {
@@ -64,24 +65,198 @@ test("restores camera and mode once even under StrictMode", async () => {
   const cam = { cameraX: 10, cameraY: 20, scale: 0.5 };
   render(<StrictMode><ImportModal openGraph={openGraph} initialSession={{ example, cam, showingUI: false }} /></StrictMode>);
   await waitFor(() => expect(openGraph).toHaveBeenCalledTimes(1));
-  expect(openGraph).toHaveBeenCalledWith(loaded.graph, null, null, { styles: {}, cam }, example, false);
+  expect(openGraph).toHaveBeenCalledWith(loaded.graph, null, null, { styles: {}, cam }, example, false, null, "Recursive cross");
 });
 
 test("failed restoration offers the chooser instead of a permanent loading screen", async () => {
   loadExample.mockRejectedValue(new Error("offline"));
   render(<ImportModal openGraph={jest.fn()} initialSession={{ example: { type: "json" } }} />);
   expect(await screen.findByRole("alert")).toHaveTextContent("Could not restore");
-  expect(screen.getByRole("combobox", { name: "Template:" })).toBeInTheDocument();
+  expect(screen.getByRole("searchbox", { name: "Search templates" })).toBeInTheDocument();
 });
 
 test("creating a template passes its recipe with the graph", async () => {
   const openGraph = jest.fn();
   render(<ImportModal openGraph={openGraph} />);
-  fireEvent.change(screen.getByRole("combobox", { name: "Template:" }), { target: { value: "cross" } });
+  fireEvent.click(screen.getByRole("button", { name: "Recursive cross", exact: true }));
   fireEvent.click(screen.getByRole("button", { name: "Create" }));
   await waitFor(() => expect(openGraph).toHaveBeenCalled());
   expect(createExample).toHaveBeenCalledWith("cross", { rounds: 5, vertical: false });
-  expect(openGraph).toHaveBeenCalledWith(loaded.graph, null, null, loaded.viewportData, example);
+  expect(openGraph).toHaveBeenCalledWith(loaded.graph, null, null, loaded.viewportData, example, undefined, null, "Recursive cross");
+});
+
+test("gallery search and categories narrow choices without loading or losing the selected recipe", () => {
+  render(<ImportModal openGraph={jest.fn()} />);
+  const search = screen.getByRole("searchbox", { name: "Search templates" });
+  expect(screen.getByRole("button", { name: "Grid", exact: true })).toHaveAttribute("aria-pressed", "true");
+  fireEvent.click(screen.getByRole("button", { name: "Recursive cross", exact: true }));
+  expect(screen.getByRole("button", { name: "Recursive cross", exact: true })).toHaveAttribute("aria-pressed", "true");
+  expect(loadExample).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Planning", exact: true }));
+  expect(screen.getByRole("button", { name: "Planning", exact: true })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.queryByRole("button", { name: "Grid", exact: true })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Recursive cross", exact: true })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "All", exact: true }));
+  fireEvent.change(search, { target: { value: "recursive" } });
+  expect(screen.getByRole("button", { name: "Recursive cross", exact: true })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.queryByRole("button", { name: "Grid", exact: true })).not.toBeInTheDocument();
+  fireEvent.change(search, { target: { value: "no-such-template-xyz" } });
+  expect(screen.getByText(/No templates match/i)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Show all templates" }));
+  expect(search).toHaveValue("");
+  expect(screen.getByRole("button", { name: "All", exact: true })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("button", { name: "Recursive cross", exact: true })).toHaveAttribute("aria-pressed", "true");
+  expect(loadExample).not.toHaveBeenCalled();
+});
+
+test("the gallery keeps Proportion and appearance while removing the extra fixture cards", () => {
+  render(<ImportModal openGraph={jest.fn()} />);
+  for (const name of ["Proportion · standard", "Proportion · math", "Memory Piers"]) {
+    expect(screen.queryByRole("button", { name, exact: true })).not.toBeInTheDocument();
+  }
+  fireEvent.click(screen.getByRole("button", { name: "Presentation", exact: true }));
+  expect(screen.getByRole("button", { name: "Proportion", exact: true })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Appearance colors", exact: true })).toBeInTheDocument();
+  expect(screen.getByText("2 of 22 templates")).toBeInTheDocument();
+});
+
+test.each([3, 7])("Proportion creates %s columns and freezes its controls while loading", async (columns) => {
+  let finish;
+  loadExample.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+  const openGraph = jest.fn();
+  render(<ImportModal openGraph={openGraph} />);
+  fireEvent.click(screen.getByRole("button", { name: "Proportion", exact: true }));
+  const input = screen.getByRole("spinbutton", { name: "Columns", exact: true });
+  expect(input).toHaveValue(3);
+  if (columns !== 3) fireEvent.change(input, { target: { value: String(columns) } });
+  fireEvent.click(screen.getByRole("button", { name: "Create", exact: true }));
+  const options = { rounds: 5, vertical: false, columns };
+  expect(createExample).toHaveBeenCalledWith("proportion_v1", options);
+  expect(loadExample).toHaveBeenCalledWith({ type: "proportion_v1", ...options });
+  expect(input).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Loading…", exact: true })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Grid", exact: true })).toBeDisabled();
+  const recipe = { type: "proportion_v1", columns };
+  await act(async () => finish({ ...loaded, example: recipe }));
+  expect(openGraph).toHaveBeenCalledWith(loaded.graph, null, null, loaded.viewportData, recipe, undefined, null, "Proportion");
+});
+
+test("invalid Proportion columns cannot submit, and switching templates remains available", async () => {
+  const openGraph = jest.fn();
+  render(<ImportModal openGraph={openGraph} />);
+  fireEvent.click(screen.getByRole("button", { name: "Proportion", exact: true }));
+  const input = screen.getByRole("spinbutton", { name: "Columns", exact: true });
+  const create = screen.getByRole("button", { name: "Create", exact: true });
+  for (const value of ["", "0", "201", "1.5"]) {
+    fireEvent.change(input, { target: { value } });
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByRole("alert")).toHaveTextContent("Enter a whole number from 1 to 200.");
+    expect(create).toBeDisabled();
+    // Direct submission bypasses native number-input validation and disabled buttons.
+    fireEvent.submit(create.closest("form"));
+    expect(createExample).not.toHaveBeenCalled();
+    expect(loadExample).not.toHaveBeenCalled();
+  }
+  fireEvent.change(input, { target: { value: "200" } });
+  expect(create).toBeEnabled();
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  fireEvent.change(input, { target: { value: "" } });
+  fireEvent.click(screen.getByRole("button", { name: "Grid", exact: true }));
+  expect(screen.queryByRole("spinbutton", { name: "Columns", exact: true })).not.toBeInTheDocument();
+  expect(create).toBeEnabled();
+  fireEvent.click(create);
+  await waitFor(() => expect(openGraph).toHaveBeenCalledTimes(1));
+  expect(createExample).toHaveBeenCalledWith("grid", { rounds: 5, vertical: false });
+});
+
+test.each([
+  { name: "Recursive cross", type: "cross", rounds: 4, vertical: false },
+  { name: "Tournament", type: "march", rounds: 7, vertical: true },
+])("$name retains its recipe controls in the gallery", async ({ name, type, rounds, vertical }) => {
+  const openGraph = jest.fn();
+  render(<ImportModal openGraph={openGraph} />);
+  fireEvent.click(screen.getByRole("button", { name, exact: true }));
+  fireEvent.change(screen.getByRole("slider", { name: /Rounds/ }), {
+    target: { value: String(rounds) },
+  });
+  if (vertical) {
+    fireEvent.click(screen.getByRole("checkbox", { name: "Vertical bracket" }));
+  } else {
+    expect(screen.queryByRole("checkbox", { name: "Vertical bracket" })).not.toBeInTheDocument();
+  }
+  fireEvent.click(screen.getByRole("button", { name: "Create", exact: true }));
+  await waitFor(() => expect(openGraph).toHaveBeenCalledTimes(1));
+  expect(createExample).toHaveBeenCalledWith(type, { rounds, vertical });
+  expect(loadExample).toHaveBeenCalledWith({ type, rounds, vertical });
+});
+
+test("Enter in template search filters without submitting the selected example", () => {
+  render(<ImportModal openGraph={jest.fn()} />);
+  const search = screen.getByRole("searchbox", { name: "Search templates" });
+  fireEvent.change(search, { target: { value: "recursive" } });
+  const enter = createEvent.keyDown(search, { key: "Enter", code: "Enter" });
+  fireEvent(search, enter);
+  expect(enter.defaultPrevented).toBe(true);
+  expect(screen.getByRole("button", { name: "Recursive cross", exact: true })).toBeInTheDocument();
+  expect(createExample).not.toHaveBeenCalled();
+  expect(loadExample).not.toHaveBeenCalled();
+});
+
+test("switching from a large tournament clamps cross rounds in both the controls and recipe", async () => {
+  const openGraph = jest.fn();
+  render(<ImportModal openGraph={openGraph} />);
+  fireEvent.click(screen.getByRole("button", { name: "Tournament", exact: true }));
+  fireEvent.change(screen.getByRole("slider", { name: /Rounds/ }), { target: { value: "14" } });
+  expect(screen.getByText("14", { selector: "output" })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Recursive cross", exact: true }));
+  expect(screen.getByRole("slider", { name: /Rounds/ })).toHaveValue("11");
+  expect(screen.getByText("11", { selector: "output" })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Create", exact: true }));
+  await waitFor(() => expect(openGraph).toHaveBeenCalledTimes(1));
+  expect(createExample).toHaveBeenCalledWith("cross", { rounds: 11, vertical: false });
+  expect(loadExample).toHaveBeenCalledWith({ type: "cross", rounds: 11, vertical: false });
+});
+
+test("repeated form submission starts only one pending example load", async () => {
+  let finish;
+  loadExample.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+  const openGraph = jest.fn();
+  render(<ImportModal openGraph={openGraph} />);
+  const form = screen.getByRole("button", { name: "Create", exact: true }).closest("form");
+  act(() => {
+    fireEvent.submit(form);
+    fireEvent.submit(form);
+  });
+  expect(createExample).toHaveBeenCalledTimes(1);
+  expect(loadExample).toHaveBeenCalledTimes(1);
+  expect(openGraph).not.toHaveBeenCalled();
+  await act(async () => finish(loaded));
+  expect(openGraph).toHaveBeenCalledTimes(1);
+});
+
+test("pending creation keeps its card and options fixed, then failed loading permits a retry", async () => {
+  let fail;
+  loadExample.mockReturnValueOnce(new Promise((resolve, reject) => { fail = reject; }));
+  const openGraph = jest.fn();
+  render(<ImportModal openGraph={openGraph} />);
+  fireEvent.click(screen.getByRole("button", { name: "Recursive cross", exact: true }));
+  fireEvent.change(screen.getByRole("slider", { name: /Rounds/ }), { target: { value: "3" } });
+  fireEvent.click(screen.getByRole("button", { name: "Create", exact: true }));
+  expect(screen.getByRole("button", { name: "Loading…", exact: true })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Recursive cross", exact: true })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("button", { name: "Tournament", exact: true })).toBeDisabled();
+  expect(screen.getByRole("slider", { name: /Rounds/ })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "New JSON document" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Open", exact: true })).toBeEnabled();
+  await act(async () => fail(new Error("offline")));
+  expect(screen.getByRole("alert")).toHaveTextContent("Could not load this example");
+  expect(openGraph).not.toHaveBeenCalled();
+  expect(screen.getByRole("button", { name: "Recursive cross", exact: true })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("slider", { name: /Rounds/ })).toHaveValue("3");
+  fireEvent.click(screen.getByRole("button", { name: "Create", exact: true }));
+  await waitFor(() => expect(openGraph).toHaveBeenCalledTimes(1));
+  expect(createExample).toHaveBeenLastCalledWith("cross", { rounds: 3, vertical: false });
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 });
 
 test("new JSON documents start with explicit key and value slots in edit mode", () => {
@@ -105,6 +280,7 @@ test("JSON file import retains empty containers and opens with grammar-aware edi
   await waitFor(() => expect(openGraph).toHaveBeenCalledTimes(1));
   expect(exportStructuredJson(openGraph.mock.calls[0][0])).toEqual({ object: {}, array: [], text: "", value: null });
   expect(openGraph.mock.calls[0][5]).toBe(true);
+  expect(openGraph.mock.calls[0][7]).toBe("empty.json");
 });
 
 test("a cancelled example load cannot replace a subsequently opened file", async () => {

@@ -1,0 +1,191 @@
+{
+  "grid": {
+    "example": {
+      "type": "grid",
+      "size": 12
+    },
+    "nodes": 157,
+    "width": 480,
+    "height": 300
+  },
+  "cross": {
+    "example": {
+      "type": "cross",
+      "rounds": 5
+    },
+    "nodes": 509,
+    "width": 480,
+    "height": 300
+  },
+  "rainbow": {
+    "example": {
+      "type": "rainbow"
+    },
+    "nodes": 8421,
+    "width": 480,
+    "height": 300
+  },
+  "rainbow_vert": {
+    "example": {
+      "type": "rainbow_vert"
+    },
+    "nodes": 8421,
+    "width": 480,
+    "height": 300
+  },
+  "rainbow_random": {
+    "example": {
+      "type": "rainbow_random",
+      "seed": 42
+    },
+    "nodes": 5101,
+    "width": 480,
+    "height": 300
+  },
+  "alt_columns": {
+    "example": {
+      "type": "alt_columns",
+      "seed": 42
+    },
+    "nodes": 4971,
+    "width": 480,
+    "height": 300
+  },
+  "random": {
+    "example": {
+      "type": "random",
+      "seed": 42
+    },
+    "nodes": 141,
+    "width": 480,
+    "height": 300
+  },
+  "daily_planner_60": {
+    "example": {
+      "type": "daily_planner_60"
+    },
+    "nodes": 25,
+    "width": 480,
+    "height": 300,
+    "cropHeight": 220
+  },
+  "daily_planner_30": {
+    "example": {
+      "type": "daily_planner_30"
+    },
+    "nodes": 49,
+    "width": 480,
+    "height": 300,
+    "cropHeight": 220
+  },
+  "daily_planner_15": {
+    "example": {
+      "type": "daily_planner_15"
+    },
+    "nodes": 97,
+    "width": 480,
+    "height": 300,
+    "cropHeight": 220
+  },
+  "daily_planner_10": {
+    "example": {
+      "type": "daily_planner_10"
+    },
+    "nodes": 145,
+    "width": 480,
+    "height": 300,
+    "cropHeight": 220
+  },
+  "daily_planner_5": {
+    "example": {
+      "type": "daily_planner_5"
+    },
+    "nodes": 289,
+    "width": 480,
+    "height": 300,
+    "cropHeight": 220
+  },
+  "march": {
+    "example": {
+      "type": "march",
+      "rounds": 5,
+      "vertical": false
+    },
+    "nodes": 123,
+    "width": 480,
+    "height": 300
+  },
+  "march_madness": {
+    "example": {
+      "type": "march_madness"
+    },
+    "nodes": 59,
+    "width": 480,
+    "height": 300
+  },
+  "march_madness_vert": {
+    "example": {
+      "type": "march_madness_vert"
+    },
+    "nodes": 59,
+    "width": 480,
+    "height": 300
+  },
+  "playoffs": {
+    "example": {
+      "type": "playoffs"
+    },
+    "nodes": 59,
+    "width": 480,
+    "height": 300
+  },
+  "playoffs_vert": {
+    "example": {
+      "type": "playoffs_vert"
+    },
+    "nodes": 59,
+    "width": 480,
+    "height": 300
+  },
+  "json": {
+    "example": {
+      "type": "json"
+    },
+    "nodes": 21,
+    "width": 480,
+    "height": 300
+  },
+  "lisp": {
+    "example": {
+      "type": "lisp"
+    },
+    "nodes": 15,
+    "width": 480,
+    "height": 300
+  },
+  "svg": {
+    "example": {
+      "type": "svg"
+    },
+    "nodes": 75,
+    "width": 480,
+    "height": 300
+  },
+  "proportion_v1": {
+    "example": {
+      "type": "proportion_v1",
+      "columns": 3
+    },
+    "nodes": 25,
+    "width": 480,
+    "height": 300
+  },
+  "appearance_v1": {
+    "example": {
+      "type": "appearance_v1"
+    },
+    "nodes": 3,
+    "width": 480,
+    "height": 300
+  }
+}

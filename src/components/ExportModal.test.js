@@ -30,12 +30,16 @@ test("incomplete JSON blocks source export but can be downloaded as a recoverabl
 test("complete structured JSON exports its content rather than graph metadata", () => {
   const root = createStructuredJson({ empty: [], object: {}, value: null, text: "" });
   let downloaded;
+  let filename;
   jest.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function () {
     downloaded = this.getAttribute("href");
+    filename = this.getAttribute("download");
   });
-  render(<ExportModal graph={root} viewport={{}} initialFormat="json" />);
+  render(<ExportModal graph={root} viewport={{}} initialFormat="json" documentName="project-settings.json" />);
+  expect(screen.getByRole("textbox", { name: "Name:" })).toHaveValue("project-settings.json");
   fireEvent.click(screen.getByRole("button", { name: "Save", exact: true }));
   expect(downloaded).toBe(`data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ empty: [], object: {}, value: null, text: "" }, null, 2))}`);
+  expect(filename).toBe("project-settings.json");
 });
 
 test("export writes the edited v1 document and makes legacy export explicitly lossy", () => {

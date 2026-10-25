@@ -60,6 +60,11 @@ test("opening a v1 document exposes applied and preserved capabilities", () => {
   expect(
     screen.queryByRole("button", { name: "Open fixture" })
   ).not.toBeInTheDocument();
+  expect(screen.queryByText("Document capabilities")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Developer" })).toHaveAttribute(
+    "aria-expanded", "false"
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Developer" }));
   fireEvent.click(screen.getByText("Document capabilities"));
   expect(screen.getByText(/Presentation applied/)).toHaveTextContent(
     "Appearance applied"

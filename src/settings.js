@@ -8,13 +8,13 @@ const POST_RENDER_TIMEOUT_MS = 15;
 const LABEL_IS_VISIBLE_SCALE = 0.8;
 const TEXT_IS_VISIBLE_SCALE = 0.2;
 const DEFAULT_NODE_STYLE = {
-  backgroundColor: new Color(0.5, 1, 0.5, 0.1),
-  borderColor: new Color(0, 0, 0, 0.5),
-  textColor: new Color(0, 0, 0, 1),
-  lineColor: new Color(0.9, 0.9, 0.9, 0.8),
+  backgroundColor: Color.fromHex("#ffffff"),
+  borderColor: Color.fromHex("#82958f"),
+  textColor: Color.fromHex("#263b35"),
+  lineColor: Color.fromHex("#a7b8b1"),
 };
 const SHOW_KEY_STROKES = false;
-const PAGE_BACKGROUND_COLOR = new Color(0.2, 0.2, 0.9, 1);
+const PAGE_BACKGROUND_COLOR = Color.fromHex("#edf0ef");
 const PRINT_PAINT_STATS = false;
 const ENABLE_EXTENT_VIEWING = true;
 

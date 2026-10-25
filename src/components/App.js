@@ -6,6 +6,7 @@ import {
   documentState,
   graphSelection,
   graphViewport,
+  nodeLabel,
 } from "../graphDocument";
 import { isStructuredJson } from "../structuredJson";
 import { readJsonRecovery, writeJsonRecovery } from "../structuredJsonRecovery";
@@ -19,12 +20,18 @@ import {
   PRINT_PAINT_STATS,
   PUBLIC_SERVERS,
   SHOW_WORLD_LABELS,
+  SHOW_NODE_SPOTLIGHTS,
 } from "../settings";
 import NodeStylingModal from "./NodeStylingModal";
-import OffscreenModal from "./Viewport/OffscreenModal";
+import { EditorIcon, EditorHeader, EditorDialog } from "./EditorShell";
 import MousePanControls from "./MousePanControls";
 import CameraTravelControls from "./CameraTravelControls";
-import { attachBenchmark, benchmarkFor, measureBenchmark } from "../benchmark";
+import {
+  attachBenchmark,
+  benchmarkFor,
+  benchmarkEnabled,
+  measureBenchmark,
+} from "../benchmark";
 import BenchmarkPanel from "./BenchmarkPanel";
 import {
   clearExampleSession,
@@ -72,6 +79,13 @@ function App() {
   );
 
   const [needsSave, setNeedsSave] = useState(false);
+  const [documentName, setDocumentName] = useState("Untitled graph");
+  const [selection, setSelection] = useState(null);
+  const [developerOpen, setDeveloperOpen] = useState(false);
+  const [labelsVisible, setLabelsVisible] = useState(SHOW_WORLD_LABELS);
+  const [spotlightsVisible, setSpotlightsVisible] =
+    useState(SHOW_NODE_SPOTLIGHTS);
+  const [benchmarkActive, setBenchmarkActive] = useState(benchmarkEnabled);
 
   const [hasWidget, setHasWidget] = useState(false);
   const [documentInfo, setDocumentInfo] = useState(null);
@@ -163,28 +177,24 @@ function App() {
   useEffect(() => {
     viewport.setOnDocumentChange?.((root, node) => {
       setStructuredView(isStructuredJson(root) ? { root, node } : null);
+      setSelection(node ? { label: nodeLabel(node), id: node.id() } : null);
     });
     return () => viewport.setOnDocumentChange?.(null);
   }, [viewport]);
 
   const persistJsonDraft = useCallback(() => {
-      const root = viewport.widget();
-      if (!isStructuredJson(root)) return;
-      try {
-        const document = writeGraph(
-          root,
-          viewport.node(),
-          viewport.toJSON(),
-          1
-        );
-        const savedAt = writeJsonRecovery(document);
-        setRecoveryState({ recovery: { document, savedAt }, error: null });
-        setRecoveryMessage("Draft recovery saved in this browser.");
-      } catch (error) {
-        setRecoveryMessage(
-          `Recovery could not be saved: ${error.message} Download a draft to keep your work.`
-        );
-      }
+    const root = viewport.widget();
+    if (!isStructuredJson(root)) return;
+    try {
+      const document = writeGraph(root, viewport.node(), viewport.toJSON(), 1);
+      const savedAt = writeJsonRecovery(document);
+      setRecoveryState({ recovery: { document, savedAt }, error: null });
+      setRecoveryMessage("Draft recovery saved in this browser.");
+    } catch (error) {
+      setRecoveryMessage(
+        `Recovery could not be saved: ${error.message} Download a draft to keep your work.`
+      );
+    }
   }, [viewport]);
 
   const structuredRoot = structuredView?.root;
@@ -274,7 +284,8 @@ function App() {
       viewportData,
       example = null,
       showingUI,
-      documentURL = null
+      documentURL = null,
+      name = null
     ) => {
       // Flush before switching even when the debounced recovery write has not run.
       persistJsonDraft();
@@ -284,6 +295,15 @@ function App() {
       setRoomName(roomName);
       setImportModalOpen(false);
       setNeedsSave(false);
+      setDocumentName(
+        name ||
+          (documentURL
+            ? new URL(documentURL, window.location.href).pathname
+                .split("/")
+                .pop()
+            : roomName ||
+              (isStructuredJson(graph) ? "Untitled.json" : "Untitled graph"))
+      );
       viewport.container()?.focus();
       graphs.clear();
       measureBenchmark(benchmark, "History serialization", () =>
@@ -317,8 +337,10 @@ function App() {
   }, [viewport, exampleSource]);
 
   const undo = useCallback(() => {
+    if (graphs.undoCount() <= 0) return;
     graphs.undo();
     refreshUndoCounts();
+    setNeedsSave(true);
     if (autopublish && PUBLIC_SERVERS) {
       publish();
     }
@@ -326,8 +348,10 @@ function App() {
   }, [autopublish, publish, graphs, refresh, refreshUndoCounts]);
 
   const redo = useCallback(() => {
+    if (graphs.redoCount() <= 0) return;
     graphs.redo();
     refreshUndoCounts();
+    setNeedsSave(true);
     if (autopublish && PUBLIC_SERVERS) {
       publish();
     }
@@ -371,8 +395,9 @@ function App() {
     });
     viewport.setUndo(undo);
     viewport.setRedo(redo);
-    viewport.setToggleNodeActions(() => {
-      setShowNodeActions((orig) => !orig);
+    viewport.setToggleNodeActions((shown) => {
+      setShowNodeActions(shown);
+      if (shown) setDeveloperOpen(false);
     });
     if (graphs._actionIndex < 0) {
       return;
@@ -440,67 +465,6 @@ function App() {
     graphs.replace(viewport.widget(), viewport.node().id(), viewport);
   };
 
-  const modalRef = useRef();
-  useEffect(() => {
-    if (!modalRef.current || !nodeStylingModalOpen) {
-      return;
-    }
-
-    const modal = modalRef.current;
-    const mouseUp = () => {
-      window.removeEventListener("mousemove", mouseMove, true);
-    };
-    window.addEventListener("mouseup", mouseUp, false);
-
-    const setPos = (x, y) => {
-      modal.style.left = x + "px";
-      modal.style.top = y + "px";
-    };
-
-    const mouseMove = (e) => {
-      setPos(e.clientX, e.clientY);
-    };
-
-    modal.addEventListener(
-      "mousedown",
-      (e) => {
-        if (e.target.tagName === "INPUT" || e.target.tagName === "BUTTON") {
-          return;
-        }
-        window.addEventListener("mousemove", mouseMove, true);
-      },
-      false
-    );
-
-    const touchMove = (e) => {
-      for (let i = 0; i < e.changedTouches.length; ++i) {
-        const touch = e.changedTouches[i];
-        setPos(touch.clientX, touch.clientY);
-      }
-    };
-
-    const touchEnd = () => {
-      window.removeEventListener("touchmove", touchMove, true);
-    };
-    window.addEventListener("touchend", touchEnd, false);
-
-    modal.addEventListener(
-      "touchstart",
-      (e) => {
-        if (e.target.tagName === "INPUT" || e.target.tagName === "BUTTON") {
-          return;
-        }
-        e.preventDefault();
-        window.addEventListener("touchmove", touchMove, true);
-      },
-      false
-    );
-
-    return () => {
-      window.removeEventListener("mouseup", mouseUp);
-    };
-  }, [modalRef, nodeStylingModalOpen]);
-
   const canvasRef = useRef();
 
   useEffect(() => {
@@ -519,170 +483,156 @@ function App() {
       return;
     }
     viewport.rendering().setOnUI((shown) => {
-      console.log(shown);
       setShowingUI(shown);
     });
   }, [viewport, setShowingUI]);
 
-  const goBack = useCallback(() => {
-    if (showingUI) {
-      window.location.href = "/";
-    } else {
-      viewport.rendering().showUI();
-    }
-  }, [showingUI]);
+  const toggleMode = (editing) => {
+    viewport.hideEditor?.();
+    if (editing) viewport.rendering().showUI();
+    else viewport.rendering().hideUI();
+    setDeveloperOpen(false);
+    viewport.refresh();
+    viewport.container()?.focus();
+  };
+  const focusCanvas = (action) => {
+    action();
+    viewport.container()?.focus();
+  };
+  const sidePanelOpen = hasWidget && (showingUI || developerOpen);
 
   return (
-    <>
-      <div className="App">
-        <BenchmarkPanel />
-        <div
-          id="parsegraph"
-          style={{ position: "fixed", inset: "0" }}
-          ref={canvasRef}
-          tabIndex={0}
-        />
-        {hasWidget && offscreen && (
-          <div className="modal">
-            <OffscreenModal
-              onRecenter={() => {
-                viewport.showInCamera();
-              }}
-            />
-          </div>
-        )}
-        {(!hasWidget || importModalOpen) && (
-          <div className="modal">
-            <ImportModal
-              recovery={recoveryState.recovery}
-              recoveryError={recoveryState.error}
-              onRestoreRecovery={() => {
-                try {
-                  const { document } = recoveryState.recovery;
-                  openGraph(
-                    readGraph(document),
-                    graphSelection(document),
-                    null,
-                    graphViewport(document),
-                    null,
-                    true
-                  );
-                  setNeedsSave(true);
-                } catch (error) {
-                  setRecoveryState((state) => ({
-                    ...state,
-                    error: error.message,
-                  }));
-                }
-              }}
-              initialSession={initialSession}
-              initialDocument={initialDocument}
-              onCancelDocument={() => {
-                setInitialDocument(null);
-                const url = new URL(window.location.href);
-                url.searchParams.delete("document");
-                url.searchParams.delete("sample");
-                url.searchParams.delete("public");
-                window.history.replaceState(window.history.state, "", url);
-              }}
-              onClose={hasWidget ? () => setImportModalOpen(false) : null}
-              openGraph={openGraph}
-            />
-          </div>
-        )}
-        {exportModalOpen && hasWidget && (
-          <div className="modal">
-            <ExportModal
-              initialFormat={exportModalFormat}
-              viewport={viewport}
-              onExport={() => {
-                setNeedsSave(false);
-              }}
-              graph={viewport.widget()}
-              onClose={() => setExportModalOpen(false)}
-            />
-          </div>
-        )}
-        {nodeStylingModalOpen && hasWidget && (
-          <div className="modal" ref={modalRef}>
-            <NodeStylingModal
-              viewport={viewport}
-              style={nodeStyling}
-              updateStyle={updateNodeStyling}
-              onClose={() => {
-                setNodeStylingModalOpen(false);
-                viewport.toggleNodeStyling();
-              }}
-            />
-          </div>
-        )}
-        {hasWidget && structuredView && showingUI && (
-          <StructuredJsonPanel
-            root={structuredView.root}
-            selectedNode={structuredView.node}
-            onEditValue={(nodeId) => {
-              viewport.moveToId(nodeId);
-              viewport.showEditor();
-            }}
-            onFinishEditing={() => {
-              viewport.hideEditor();
-              viewport.container()?.focus();
-            }}
-            onCommand={structuredCommand}
-            onSelect={(nodeId) => viewport.moveToId(nodeId)}
-            onSaveDraft={() => structuredExport("parsegraph")}
-            onExportJson={() => structuredExport("json")}
-            recoveryMessage={recoveryMessage}
+    <div
+      className={`App ${sidePanelOpen ? "has-inspector" : ""} ${
+        developerOpen ? "has-developer" : ""
+      }`}
+    >
+      <EditorHeader
+        hasDocument={hasWidget}
+        name={documentName}
+        modified={needsSave}
+        structured={!!structuredView}
+        editing={showingUI}
+        onMode={toggleMode}
+        onOpen={openImportModal}
+        onSave={openExportModal}
+        onUndo={() => focusCanvas(undo)}
+        onRedo={() => focusCanvas(redo)}
+        undoCount={undoSize}
+        redoCount={redoSize}
+      />
+      <main className="editor-workspace">
+        <section className="canvas-workspace" aria-label="Graph workspace">
+          <div
+            id="parsegraph"
+            ref={canvasRef}
+            tabIndex={0}
+            aria-label="Graph canvas"
           />
-        )}
-        <div className="AppMenu">
-          <div style={{ flexGrow: "1", display: "flex", gap: "5px" }}>
-            <button onClick={goBack}>&lt;&lt;</button>
-            {hasWidget && showingUI && !showNodeActions && (
-              <button tabIndex={0} onClick={openImportModal}>
-                Open
-              </button>
-            )}
-            {hasWidget && showingUI && (
-              <div
-                style={{
-                  flexGrow: "1",
-                  display: "flex",
-                  flexDirection: "column",
-                }}
+          {hasWidget && offscreen && (
+            <div className="canvas-notice" role="status">
+              <span>Your graph is outside the view.</span>
+              <button
+                type="button"
+                onClick={() => focusCanvas(() => viewport.fitGraph())}
               >
-                <div className="buttons" style={{ paddingTop: "0" }}>
-                  {hasWidget && (
-                    <>
-                      <button onClick={() => viewport.toggleNodeStyling()}>
-                        Style
-                      </button>
-                      <button onClick={() => viewport.fitGraph()}>Fit graph</button>
+                Bring it back
+              </button>
+            </div>
+          )}
+          {hasWidget && (
+            <div className="canvas-navigation" aria-label="Canvas controls">
+              <button
+                type="button"
+                className="icon-button"
+                aria-label="Zoom out"
+                title="Zoom out (−)"
+                onClick={() => focusCanvas(() => viewport.zoomCamera(1 / 1.2))}
+              >
+                <EditorIcon name="minus" />
+              </button>
+              <button
+                type="button"
+                onClick={() => focusCanvas(() => viewport.fitGraph())}
+              >
+                <EditorIcon name="fit" />
+                Fit graph
+              </button>
+              <button
+                type="button"
+                className="icon-button"
+                aria-label="Zoom in"
+                title="Zoom in (+)"
+                onClick={() => focusCanvas(() => viewport.zoomCamera(1.2))}
+              >
+                <EditorIcon name="plus" />
+              </button>
+              {SHOW_WORLD_LABELS && (
+                <button
+                  type="button"
+                  className="labels-toggle"
+                  aria-pressed={labelsVisible}
+                  onClick={() => {
+                    viewport.rendering().toggleWorldLabels();
+                    setLabelsVisible((previous) => !previous);
+                    viewport.refresh();
+                  }}
+                >
+                  Labels
+                </button>
+              )}
+            </div>
+          )}
+        </section>
+        {sidePanelOpen && (
+          <section
+            className="editor-inspector"
+            aria-label={developerOpen ? "Developer tools" : "Inspector"}
+          >
+            <header className="inspector-header">
+              <div>
+                <span className="eyebrow">
+                  {developerOpen ? "WORKBENCH" : "SELECTION"}
+                </span>
+                <h2>{developerOpen ? "Developer tools" : "Inspector"}</h2>
+              </div>
+              <button
+                type="button"
+                className="icon-button"
+                aria-label={
+                  developerOpen ? "Close developer tools" : "Hide inspector"
+                }
+                onClick={() =>
+                  developerOpen ? setDeveloperOpen(false) : toggleMode(false)
+                }
+              >
+                <EditorIcon name="close" />
+              </button>
+            </header>
+            <div className="inspector-content">
+              {developerOpen ? (
+                <div className="developer-panel">
+                  <p className="panel-intro">
+                    Tune movement and inspect rendering performance.
+                  </p>
+                  <MousePanControls />
+                  <CameraTravelControls />
+                  <details className="inspector-section">
+                    <summary>Rendering</summary>
+                    <div className="inspector-actions">
                       <button
+                        type="button"
+                        aria-pressed={spotlightsVisible}
                         onClick={() => {
-                          viewport.rendering().toggleUI();
-                          viewport.refresh();
+                          viewport.rendering().toggleSpotlights();
+                          setSpotlightsVisible((previous) => !previous);
                         }}
-                      >
-                        {viewport.rendering().showingUI() ? "View" : "Edit"}
-                      </button>
-                      <button
-                        onClick={() => viewport.rendering().toggleSpotlights()}
                       >
                         Spotlights
                       </button>
-                      {SHOW_WORLD_LABELS && (
-                        <button
-                          onClick={() => {
-                            viewport.rendering().toggleWorldLabels();
-                            viewport.refresh();
-                          }}
-                        >
-                          Labels
-                        </button>
-                      )}
                       {PRINT_PAINT_STATS && (
                         <button
+                          type="button"
                           onClick={() => {
                             viewport.rendering().toggleStats();
                             viewport.refresh();
@@ -691,114 +641,283 @@ function App() {
                           Metrics
                         </button>
                       )}
-                    </>
+                    </div>
+                  </details>
+                  {documentInfo?.version === 1 && (
+                    <details className="inspector-section">
+                      <summary>Document capabilities</summary>
+                      <p>
+                        V1 document.{" "}
+                        {documentInfo.presentation
+                          ? "Presentation applied. "
+                          : "Local sizing. "}
+                        {documentInfo.appearance
+                          ? "Appearance applied."
+                          : "Local colors."}
+                      </p>
+                      {documentInfo.hasUnsupportedContent && (
+                        <p>
+                          Non-text JSON values are preserved without text
+                          labels.
+                        </p>
+                      )}
+                      {documentInfo.ignoredCapabilities.length > 0 && (
+                        <p>
+                          Preserved without interpretation:{" "}
+                          {documentInfo.ignoredCapabilities.join(", ")}.
+                          Generation recipes never replace edited nodes
+                          automatically.
+                        </p>
+                      )}
+                    </details>
                   )}
-                  {!showNodeActions && hasWidget && (
-                    <>
-                      <button onClick={() => viewport.showInCamera()}>
-                        Re-center
+                  {!benchmarkActive ? (
+                    <section className="inspector-section">
+                      <h3>Benchmarks</h3>
+                      <p>
+                        Record import, layout, and navigation timings for this
+                        session.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const url = new URL(window.location.href);
+                          url.searchParams.set("benchmark", "1");
+                          window.history.replaceState(
+                            window.history.state,
+                            "",
+                            url
+                          );
+                          setBenchmarkActive(true);
+                        }}
+                      >
+                        Enable benchmarks
                       </button>
-                      <button onClick={() => viewport.moveOutward()}>
-                        Outward
-                      </button>
-                      <button onClick={() => viewport.toggleEditor()}>
-                        Node
-                      </button>
-                    </>
-                  )}
-                  {showNodeActions && <NodeActions viewport={viewport} />}
-                  {!showNodeActions && (
-                    <button
-                      className="edit"
-                      style={{ background: "red", color: "white" }}
-                      onClick={() => viewport.removeNode()}
-                    >
-                      Remove
-                    </button>
-                  )}
-                  {!showNodeActions && (
-                    <UndoRedoActions
-                      undo={undo}
-                      redo={redo}
-                      undoSize={undoSize}
-                      redoSize={redoSize}
-                    />
-                  )}
-                  {PUBLIC_SERVERS && roomName && (
-                    <button
-                      onClick={() => {
-                        setAutopublish((orig) => {
-                          return !orig;
-                        });
-                      }}
-                    >
-                      Auto-publish {autopublish ? "ON" : "OFF"}
-                    </button>
+                    </section>
+                  ) : (
+                    <BenchmarkPanel />
                   )}
                 </div>
-                <ParsegraphEditor viewport={viewport} />
-              </div>
-            )}
-            {hasWidget && showingUI && !showNodeActions && (
-              <button onClick={openExportModal}>Save</button>
-            )}
-            {hasWidget && showingUI && PUBLIC_SERVERS && roomName && (
-              <button onClick={() => publish()}>Publish to {roomName}</button>
-            )}
-          </div>
-          {showingUI && (
-            <>
-              <ParsegraphLog viewport={viewport} />
-              <ParsegraphStatus viewport={viewport} />
-            </>
+              ) : structuredView ? (
+                <StructuredJsonPanel
+                  root={structuredView.root}
+                  selectedNode={structuredView.node}
+                  onEditValue={(nodeId) => {
+                    viewport.moveToId(nodeId);
+                    viewport.showEditor();
+                  }}
+                  onFinishEditing={() => {
+                    viewport.hideEditor();
+                    viewport.container()?.focus();
+                  }}
+                  onCommand={structuredCommand}
+                  onSelect={(nodeId) => viewport.moveToId(nodeId)}
+                  onSaveDraft={() => structuredExport("parsegraph")}
+                  onExportJson={() => structuredExport("json")}
+                  recoveryMessage={recoveryMessage}
+                />
+              ) : (
+                <div className="node-inspector">
+                  <span className="node-kind">
+                    {selection?.label ? "Text node" : "Bud"}
+                  </span>
+                  <h3 className="node-title">
+                    {selection?.label || "Empty node"}
+                  </h3>
+                  <p className="panel-intro">
+                    {selection?.label
+                      ? "Edit this node, or use its handles to grow the graph."
+                      : "An empty node connects and organizes your graph. Add a label or grow in any direction."}
+                  </p>
+                  <div className="inspector-actions">
+                    <button
+                      type="button"
+                      className="primary-button"
+                      onClick={() => viewport.toggleEditor()}
+                    >
+                      Edit text
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => viewport.toggleNodeStyling()}
+                    >
+                      Appearance
+                    </button>
+                  </div>
+                  <ParsegraphEditor viewport={viewport} />
+                  <section className="inspector-section">
+                    <h3>Navigate</h3>
+                    <div className="inspector-actions">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          focusCanvas(() => viewport.showInCamera())
+                        }
+                      >
+                        Center selection
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          focusCanvas(() => viewport.moveOutward())
+                        }
+                      >
+                        Go outward
+                      </button>
+                    </div>
+                    <p>
+                      WASD or HJKL follows connections. Enter edits the label.
+                    </p>
+                  </section>
+                  <details className="inspector-section" open={showNodeActions}>
+                    <summary>Layout & structure</summary>
+                    <div className="inspector-actions">
+                      <NodeActions viewport={viewport} />
+                    </div>
+                  </details>
+                  <section className="inspector-section">
+                    <button
+                      type="button"
+                      className="danger-button"
+                      onClick={() => focusCanvas(() => viewport.removeNode())}
+                    >
+                      Remove node
+                    </button>
+                    <p>You can undo changes at any time.</p>
+                  </section>
+                  {PUBLIC_SERVERS && roomName && (
+                    <section className="inspector-section">
+                      <h3>Shared document</h3>
+                      <button
+                        type="button"
+                        aria-pressed={autopublish}
+                        onClick={() => setAutopublish((previous) => !previous)}
+                      >
+                        Auto-publish {autopublish ? "ON" : "OFF"}
+                      </button>
+                      <button type="button" onClick={publish}>
+                        Publish to {roomName}
+                      </button>
+                    </section>
+                  )}
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+      </main>
+      <footer className="editor-statusbar">
+        <div className="workspace-status">
+          <span className="status-dot" aria-hidden="true" />
+          <span>
+            {hasWidget
+              ? showingUI
+                ? "Editing"
+                : "Viewing"
+              : "Ready when you are"}
+          </span>
+          <span className="statusbar-divider" />
+          {hasWidget && (
+            <span className="navigation-hint">
+              {showingUI
+                ? "Select a node to make it yours"
+                : "Drag to pan · Scroll to zoom"}
+            </span>
           )}
         </div>
         {hasWidget && (
-          <div className="navigation-controls">
-            <MousePanControls />
-            <CameraTravelControls />
-            {documentInfo?.version === 1 && (
-              <details className="mouse-pan-controls">
-                <summary>Document capabilities</summary>
-                <div className="mouse-pan-controls-body">
-                  <p>
-                    V1 document.{" "}
-                    {documentInfo.presentation
-                      ? "Presentation applied. "
-                      : "Local sizing. "}
-                    {documentInfo.appearance
-                      ? "Appearance applied."
-                      : "Local colors."}
-                  </p>
-                  {documentInfo.hasUnsupportedContent && (
-                    <p>
-                      Non-text JSON values are preserved without text labels.
-                    </p>
-                  )}
-                  {documentInfo.ignoredCapabilities.length > 0 && (
-                    <p>
-                      Preserved without interpretation:{" "}
-                      {documentInfo.ignoredCapabilities.join(", ")}. Generation
-                      recipes never replace edited nodes automatically.
-                    </p>
-                  )}
-                </div>
-              </details>
-            )}
+          <div className="renderer-status">
+            <ParsegraphLog viewport={viewport} />
+            <ParsegraphStatus viewport={viewport} />
           </div>
         )}
-        {!showingUI && (
-          <div style={{ position: "fixed", bottom: "3px", right: "3px", display: "flex", gap: "4px" }}>
-            {hasWidget && <button onClick={() => viewport.fitGraph()}>Fit graph</button>}
-            <button
-              onClick={() => viewport.rendering().toggleUI()}
-            >
-              Edit
-            </button>
-          </div>
+        {hasWidget && (
+          <button
+            type="button"
+            className="developer-toggle"
+            aria-expanded={developerOpen}
+            onClick={() => setDeveloperOpen((previous) => !previous)}
+          >
+            <EditorIcon name="sliders" />
+            Developer
+          </button>
         )}
-      </div>
-    </>
+        {!hasWidget && (
+          <span className="statusbar-credit">Made for connected ideas</span>
+        )}
+      </footer>
+      {(!hasWidget || importModalOpen) && (
+        <EditorDialog
+          onClose={hasWidget ? () => setImportModalOpen(false) : undefined}
+        >
+          <ImportModal
+            recovery={recoveryState.recovery}
+            recoveryError={recoveryState.error}
+            onRestoreRecovery={() => {
+              try {
+                const { document } = recoveryState.recovery;
+                openGraph(
+                  readGraph(document),
+                  graphSelection(document),
+                  null,
+                  graphViewport(document),
+                  null,
+                  true
+                );
+                setNeedsSave(true);
+              } catch (error) {
+                setRecoveryState((state) => ({
+                  ...state,
+                  error: error.message,
+                }));
+              }
+            }}
+            initialSession={initialSession}
+            initialDocument={initialDocument}
+            onCancelDocument={() => {
+              setInitialDocument(null);
+              const url = new URL(window.location.href);
+              url.searchParams.delete("document");
+              url.searchParams.delete("sample");
+              url.searchParams.delete("public");
+              window.history.replaceState(window.history.state, "", url);
+            }}
+            onClose={hasWidget ? () => setImportModalOpen(false) : null}
+            openGraph={openGraph}
+          />
+        </EditorDialog>
+      )}
+      {exportModalOpen && hasWidget && (
+        <EditorDialog onClose={() => setExportModalOpen(false)}>
+          <ExportModal
+            initialFormat={exportModalFormat}
+            documentName={documentName}
+            viewport={viewport}
+            onExport={() => {
+              setNeedsSave(false);
+            }}
+            graph={viewport.widget()}
+            onClose={() => setExportModalOpen(false)}
+          />
+        </EditorDialog>
+      )}
+      {nodeStylingModalOpen && hasWidget && (
+        <EditorDialog
+          label="Node appearance"
+          onClose={() => viewport.toggleNodeStyling()}
+        >
+          <NodeStylingModal
+            viewport={viewport}
+            style={nodeStyling}
+            updateStyle={updateNodeStyling}
+            onClose={() => {
+              setNodeStylingModalOpen(false);
+              viewport.toggleNodeStyling();
+            }}
+          />
+        </EditorDialog>
+      )}
+    </div>
   );
 }
 
@@ -812,7 +931,7 @@ function ParsegraphLog({ viewport }) {
     if (!logRef.current) {
       return;
     }
-    viewport.mountLog(logRef.current);
+    viewport.mountLog?.(logRef.current);
   });
 
   return <div id="log" ref={logRef} />;
@@ -828,7 +947,9 @@ function ParsegraphEditor({ viewport }) {
     if (!editorContainerRef.current) {
       return;
     }
-    viewport.mountEditor(editorContainerRef.current);
+    const container = editorContainerRef.current;
+    viewport.mountEditor(container);
+    return () => viewport.unmountEditor?.(container);
   }, [viewport, editorContainerRef]);
 
   return <div ref={editorContainerRef}></div>;
@@ -844,7 +965,7 @@ function ParsegraphStatus({ viewport }) {
     if (!ref.current) {
       return;
     }
-    viewport.mountStatus(ref.current);
+    viewport.mountStatus?.(ref.current);
   }, [viewport, ref]);
 
   return <div ref={ref}></div>;
@@ -868,15 +989,6 @@ function NodeActions({ viewport }) {
       <button className="edit" onClick={() => viewport.toggleCrease()}>
         Crease
       </button>
-    </>
-  );
-}
-
-function UndoRedoActions({ undo, redo, undoSize, redoSize }) {
-  return (
-    <>
-      <button onClick={() => undo()}>Undo ({undoSize})</button>
-      <button onClick={() => redo()}>Redo ({redoSize})</button>
     </>
   );
 }

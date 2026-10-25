@@ -8,6 +8,8 @@ import * as importers from "../importers";
 import "./modal.css";
 import { createExample, loadExample } from "../examples";
 import DocumentImport from "./DocumentImport";
+import TemplateGallery from "./TemplateGallery";
+import { templateName } from "../templateCatalog";
 import { readXmlFile } from "../xmlGraph";
 import {
   attachBenchmark,
@@ -50,28 +52,32 @@ function ImportFromFile({ openGraph, onClose }) {
           measureBenchmark(benchmark, "Graph construction", fn),
           benchmark
         );
+      const openFile = (...args) => {
+        args[7] = importData.name;
+        openGraph(...args);
+      };
       if (importType === "png") {
         const bytes = await read(() => importData.arrayBuffer());
-        openGraph(build(() => importers.graphPng(new Uint8Array(bytes))));
+        openFile(build(() => importers.graphPng(new Uint8Array(bytes))));
       } else if (importType === "jpeg") {
         const bytes = await read(() => importData.arrayBuffer());
-        openGraph(build(() => importers.graphJpeg(bytes)));
+        openFile(build(() => importers.graphJpeg(bytes)));
       } else {
         const text = await read(() =>
           importType === "xml" ? readXmlFile(importData) : importData.text()
         );
         switch (importType) {
           case "words":
-            openGraph(build(() => importers.graphWords(text)));
+            openFile(build(() => importers.graphWords(text)));
             break;
           case "lisp":
-            openGraph(build(() => importers.graphLisp(text)));
+            openFile(build(() => importers.graphLisp(text)));
             break;
           case "json": {
             const data = measureBenchmark(benchmark, "JSON parsing", () =>
               JSON.parse(text)
             );
-            openGraph(
+            openFile(
               build(() => createStructuredJson(data)),
               null,
               null,
@@ -82,13 +88,13 @@ function ImportFromFile({ openGraph, onClose }) {
             break;
           }
           case "xml":
-            openGraph(build(() => importers.graphXml(text, benchmark)));
+            openFile(build(() => importers.graphXml(text, benchmark)));
             break;
           case "parsegraph": {
             const data = measureBenchmark(benchmark, "JSON parsing", () =>
               JSON.parse(text)
             );
-            openGraph(
+            openFile(
               build(() => readGraph(data)),
               graphSelection(data),
               null,
@@ -97,7 +103,7 @@ function ImportFromFile({ openGraph, onClose }) {
             break;
           }
           case "lines":
-            openGraph(build(() => importers.graphLines(text)));
+            openFile(build(() => importers.graphLines(text)));
             break;
           default:
             throw new Error("Unsupported import type: " + importType);
@@ -165,41 +171,32 @@ function ImportFromFile({ openGraph, onClose }) {
         e.preventDefault();
         performImport();
       }}
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "stretch",
-      }}
+      className="document-form"
     >
-      <span
-        style={{ display: "block", paddingBottom: "0.5em", fontSize: "18px" }}
-      >
-        Load a Parsegraph from a file.
-      </span>
-      <label
-        htmlFor="fileUpload"
-        style={{
-          display: "block",
-          background: importData ? "#0a8a0a" : "#5f5fff",
-          color: "white",
-          padding: "5px",
-          borderRadius: "3px",
-          marginBottom: "5px",
-          flexGrow: "1",
-        }}
-      >
-        {importData ? importName ?? "File selected" : "Choose file"}
+      <p className="document-description">
+        Bring a document into the canvas. Choose its format before opening it.
+      </p>
+      <label htmlFor="fileUpload" className="document-file-picker">
+        <span className="document-file-icon" aria-hidden="true">
+          ↑
+        </span>
+        <strong>
+          {importData ? importName ?? "File selected" : "Choose file"}
+        </strong>
+        <span className="document-file-hint">
+          Parsegraph, JSON, XML, SVG, text, or image metadata
+        </span>
       </label>
       <input
-        style={{ display: "none" }}
+        className="document-file-input"
         id="fileUpload"
         type="file"
+        aria-label="Choose file"
         onChange={loadFiles}
       />
-      <label style={{ display: "flex", gap: "5px" }}>
+      <label className="document-field">
         Type:{" "}
         <select
-          style={{ flexGrow: "1" }}
           value={importType}
           onChange={(e) => setImportType(e.target.value)}
         >
@@ -214,16 +211,21 @@ function ImportFromFile({ openGraph, onClose }) {
         </select>
       </label>
       {importType === "xml" && (
-        <p>
+        <p className="document-note">
           Preserves text and whitespace. External DOCTYPEs are kept as data;
           custom DTDs and entity declarations are unsupported.
         </p>
       )}
       {importError && <p role="alert">Could not open file: {importError}</p>}
       <div className="buttons">
-        <input type="submit" style={{ flexGrow: "1" }} value="Import" />
+        <input
+          type="submit"
+          className="document-primary"
+          value="Import"
+          disabled={!importData}
+        />
         {onClose && (
-          <button type="button" style={{ flexGrow: "1" }} onClick={onClose}>
+          <button type="button" onClick={onClose}>
             Cancel
           </button>
         )}
@@ -236,7 +238,16 @@ const loadRoom = (openGraph, roomName) => {
   return fetch("/public/" + roomName)
     .then((resp) => resp.json())
     .then((roomData) => {
-      openGraph(readGraph(roomData), null, roomName, graphViewport(roomData));
+      openGraph(
+        readGraph(roomData),
+        null,
+        roomName,
+        graphViewport(roomData),
+        null,
+        undefined,
+        null,
+        roomName
+      );
     });
 };
 
@@ -292,11 +303,19 @@ function JoinPublic({ openGraph, onClose }) {
 }
 
 function ImportFromTemplate({ openGraph, onClose }) {
-  const [importType, setImportType] = useState("blank");
+  const [importType, setImportType] = useState("grid");
   const [numRounds, setNumRounds] = useState(5);
   const [vertical, setVertical] = useState(false);
+  const [columns, setColumns] = useState("3");
+  const columnCount = Number(columns);
+  const validColumns =
+    columns.trim() !== "" &&
+    Number.isInteger(columnCount) &&
+    columnCount >= 1 &&
+    columnCount <= 200;
 
   const [loading, setLoading] = useState(false);
+  const loadingRef = useRef(false);
   const [error, setError] = useState(null);
   const active = useRef(true);
   const pendingBenchmark = useRef();
@@ -308,10 +327,17 @@ function ImportFromTemplate({ openGraph, onClose }) {
     };
   }, []);
 
-  const createFromTemplate = async () => {
+  const createFromTemplate = async (type = importType) => {
+    if (loadingRef.current) return;
+    if (type === "proportion_v1" && !validColumns) return;
+    loadingRef.current = true;
     setLoading(true);
     setError(null);
-    const example = createExample(importType, { rounds: numRounds, vertical });
+    const example = createExample(type, {
+      rounds: numRounds,
+      vertical,
+      ...(type === "proportion_v1" ? { columns: columnCount } : {}),
+    });
     const benchmark = beginBenchmark({
       kind: "example",
       ...example,
@@ -329,7 +355,10 @@ function ImportFromTemplate({ openGraph, onClose }) {
         loaded.selectedNode,
         null,
         loaded.viewportData,
-        loaded.example
+        loaded.example,
+        undefined,
+        null,
+        templateName(type)
       );
       onClose?.();
     } catch (err) {
@@ -337,114 +366,187 @@ function ImportFromTemplate({ openGraph, onClose }) {
       if (active.current)
         setError("Could not load this example. Please try again.");
     } finally {
+      loadingRef.current = false;
       if (active.current) setLoading(false);
     }
   };
 
+  const selectTemplate = (type) => {
+    setImportType(type);
+    if (type === "march" || type === "cross") {
+      const max = type === "cross" ? MAX_ROUNDS - 3 : MAX_ROUNDS;
+      setNumRounds((rounds) => Math.max(1, Math.min(max, rounds)));
+    }
+    setError(null);
+  };
+
   return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        createFromTemplate();
-      }}
-    >
-      <span
-        style={{ display: "block", paddingBottom: "0.5em", fontSize: "18px" }}
-      >
-        Create a new Parsegraph.
-      </span>
-      <label style={{ display: "flex", gap: "5px" }}>
-        Template:{" "}
-        <select
-          style={{ flexGrow: "1" }}
-          value={importType}
-          onChange={(e) => setImportType(e.target.value)}
-        >
-          <option value="blank">Blank</option>
-          <option value="json">Sample JSON</option>
-          <option value="lisp">Sample Lisp</option>
-          <option value="svg">SVG source (XML)</option>
-          <option value="grid">Grid</option>
-          <option value="daily_planner_5">Daily planner (5m)</option>
-          <option value="daily_planner_10">Daily planner (10m)</option>
-          <option value="daily_planner_15">Daily planner (15m)</option>
-          <option value="daily_planner_30">Daily planner (30m)</option>
-          <option value="daily_planner_60">Daily planner (hourly)</option>
-          <option value="alt_columns">Alternating columns</option>
-          <option value="random">Random graph</option>
-          <option value="march_madness">March Madness</option>
-          <option value="march_madness_vert">March Madness (vertical)</option>
-          <option value="playoffs">Playoffs</option>
-          <option value="playoffs_vert">Playoffs (vertical)</option>
-          <option value="march">Tournament</option>
-          <option value="rainbow">Rainbow</option>
-          <option value="rainbow_vert">Rainbow (vertical)</option>
-          <option value="rainbow_random">Random Colors</option>
-          <option value="cross">Recursive cross</option>
-          <option value="proportion_v1">Proportion (v1)</option>
-          <option value="proportion_standard_v1">
-            Proportion, standard (v1)
-          </option>
-          <option value="proportion_math_v1">Proportion, math (v1)</option>
-          <option value="appearance_v1">Appearance colors (v1)</option>
-          <option value="memory_piers_v1">Memory Piers (v1, seed 42)</option>
-        </select>
-      </label>
-      {(importType === "march" || importType === "cross") && (
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            justifyContent: "space-between",
-            gap: "8px",
-            margin: "8px 0",
-          }}
-        >
-          <label style={{ display: "flex" }}>
-            Rounds:&nbsp;
-            <input
-              value={numRounds}
-              onChange={(e) => setNumRounds(Number.parseInt(e.target.value))}
-              type="range"
-              min="1"
-              max={importType === "cross" ? MAX_ROUNDS - 3 : MAX_ROUNDS}
-            ></input>
-            <span style={{ display: "inline-block", minWidth: "2em" }}>
-              {numRounds}
-            </span>
-          </label>
-          {importType === "march" && (
-            <label style={{ display: "flex", justifyContent: "space-between" }}>
-              Vertical?
-              <input
-                style={{ minWidth: "2em" }}
-                type="checkbox"
-                checked={vertical}
-                onChange={(e) => setVertical(e.target.checked)}
-              />
-            </label>
-          )}
-        </div>
-      )}
-      <p style={{ fontSize: "13px", maxWidth: "320px" }}>
-        Refresh restores the original example and your view. Save to keep edits.
-      </p>
-      {error && <p role="alert">{error}</p>}
-      <div className="buttons">
-        <input
-          type="submit"
-          style={{ flexGrow: "1" }}
-          value={loading ? "Loading…" : "Create"}
+    <>
+      <div className="document-start-options" aria-label="New document">
+        <button
+          className="document-start"
+          type="button"
           disabled={loading}
-          autoFocus
-        />
-        {onClose && (
-          <button type="button" style={{ flexGrow: "1" }} onClick={onClose}>
-            Cancel
-          </button>
-        )}
+          aria-label="Blank graph"
+          onClick={() => createFromTemplate("blank")}
+        >
+          <span className="document-start-icon" aria-hidden="true">
+            ＋
+          </span>
+          <strong>Blank graph</strong>
+          <span>Start with a node. Build in any direction.</span>
+        </button>
+        <button
+          className="document-start"
+          type="button"
+          disabled={loading}
+          aria-label="New JSON document"
+          onClick={() =>
+            openGraph(
+              createJsonDraft(),
+              null,
+              null,
+              undefined,
+              null,
+              true,
+              null,
+              "Untitled.json"
+            )
+          }
+        >
+          <span
+            className="document-start-icon document-start-json"
+            aria-hidden="true"
+          >
+            {"{ }"}
+          </span>
+          <strong>New JSON document</strong>
+          <span>Build structured content with editable slots.</span>
+        </button>
       </div>
-    </form>
+      <form
+        className="document-form document-examples"
+        onSubmit={(e) => {
+          e.preventDefault();
+          createFromTemplate();
+        }}
+      >
+        <TemplateGallery
+          selected={importType}
+          onSelect={selectTemplate}
+          disabled={loading}
+        />
+        <div className="template-selection" aria-label="Selected template">
+          <div className="template-selection-copy">
+            <span className="template-selection-eyebrow">
+              SELECTED TEMPLATE
+            </span>
+            <strong id="selected-template-title">
+              {templateName(importType)}
+            </strong>
+            <p className="document-note">
+              {importType === "grid"
+                ? "Preview shows a smaller grid. Create opens the full example."
+                : importType === "march" ||
+                  importType === "cross" ||
+                  importType === "proportion_v1"
+                ? "Preview shows the default settings."
+                : importType.startsWith("daily_planner_")
+                ? "Preview shows the start of the day."
+                : ["random", "alt_columns", "rainbow_random"].includes(
+                    importType
+                  )
+                ? "Preview shows one seeded example. Each new graph can vary."
+                : "Refresh restores this example and your view. Save to keep edits."}
+            </p>
+          </div>
+          {(importType === "march" || importType === "cross") && (
+            <div className="template-options">
+              <label htmlFor="template-rounds">Rounds:</label>
+              <input
+                id="template-rounds"
+                value={numRounds}
+                onChange={(event) =>
+                  setNumRounds(Number.parseInt(event.target.value))
+                }
+                type="range"
+                min="1"
+                max={importType === "cross" ? MAX_ROUNDS - 3 : MAX_ROUNDS}
+                disabled={loading}
+              />
+              <output htmlFor="template-rounds">{numRounds}</output>
+              {importType === "march" && (
+                <label className="template-orientation">
+                  <input
+                    type="checkbox"
+                    checked={vertical}
+                    disabled={loading}
+                    onChange={(event) => setVertical(event.target.checked)}
+                  />
+                  Vertical bracket
+                </label>
+              )}
+            </div>
+          )}
+          {importType === "proportion_v1" && (
+            <div className="template-column-options">
+              <label id="template-columns-label" htmlFor="template-columns-slider">
+                Columns
+              </label>
+              <input
+                id="template-columns-slider"
+                type="range"
+                min="1"
+                max="200"
+                step="1"
+                value={Math.max(1, Math.min(200, columnCount || 3))}
+                disabled={loading}
+                aria-describedby="template-columns-note"
+                onChange={(event) => setColumns(event.target.value)}
+              />
+              <input
+                id="template-columns"
+                type="number"
+                min="1"
+                max="200"
+                step="1"
+                value={columns}
+                disabled={loading}
+                aria-labelledby="template-columns-label"
+                aria-invalid={!validColumns}
+                aria-describedby={`template-columns-note${
+                  validColumns ? "" : " template-columns-error"
+                }`}
+                onChange={(event) => setColumns(event.target.value)}
+              />
+              <small id="template-columns-note">Columns per side</small>
+              {!validColumns && (
+                <p id="template-columns-error" role="alert">
+                  Enter a whole number from 1 to 200.
+                </p>
+              )}
+            </div>
+          )}
+          <div className="buttons template-create-actions">
+            <input
+              type="submit"
+              className="document-primary"
+              value={loading ? "Loading…" : "Create"}
+              aria-describedby="selected-template-title"
+              disabled={
+                loading || (importType === "proportion_v1" && !validColumns)
+              }
+            />
+            {onClose && (
+              <button type="button" onClick={onClose}>
+                Cancel
+              </button>
+            )}
+          </div>
+        </div>
+        {error && <p role="alert">{error}</p>}
+      </form>
+    </>
   );
 }
 
@@ -486,7 +588,9 @@ export default function ImportModal({
           null,
           viewportData,
           loaded.example,
-          initialSession.showingUI
+          initialSession.showingUI,
+          null,
+          templateName(initialSession.example.type)
         );
       })
       .catch((err) => {
@@ -503,46 +607,68 @@ export default function ImportModal({
   }, [initialSession, initialDocument, openGraph]);
 
   if (initialDocument != null) {
-    return <DocumentImport documentURL={initialDocument} openGraph={openGraph}
-      onCancel={onCancelDocument} />;
+    return (
+      <DocumentImport
+        documentURL={initialDocument}
+        openGraph={openGraph}
+        onCancel={onCancelDocument}
+      />
+    );
   }
 
   if (initialSession && !loadError) {
-    return <div style={{ padding: "12px" }}>Loading Parsegraph…</div>;
+    return (
+      <div className="document-dialog document-loading" role="status">
+        Loading Parsegraph…
+      </div>
+    );
   }
 
   return (
     <div
-      style={{
-        width: "100%",
-        height: "100%",
-        display: "flex",
-        justifyContent: "stretch",
-        flexDirection: "column",
-        alignItems: "stretch",
-        gap: "3px",
-        padding: "12px",
-        boxSizing: "border-box",
-      }}
+      className={`document-dialog document-chooser${
+        activeTab === "template" ? " document-chooser-gallery" : ""
+      }`}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="document-chooser-title"
     >
-      <h3 style={{ margin: "0", marginBottom: ".5em" }}>
-        {activeTab === "template"
-          ? "New"
-          : activeTab === "public"
-          ? "Load"
-          : "Open"}{" "}
-        Parsegraph
-      </h3>
+      <div className="document-dialog-heading">
+        <div>
+          <p className="document-eyebrow">PARSEGRAPH FREEFORM</p>
+          <h2 id="document-chooser-title">
+            {activeTab === "template"
+              ? "New document"
+              : activeTab === "public"
+              ? "Open a shared graph"
+              : "Open a document"}
+          </h2>
+        </div>
+        {onClose && (
+          <button
+            className="document-close"
+            type="button"
+            aria-label="Close document chooser"
+            onClick={onClose}
+          >
+            ×
+          </button>
+        )}
+      </div>
       {loadError && <p role="alert">{loadError}</p>}
       {recoveryError && <p role="alert">{recoveryError}</p>}
       {recovery && (
-        <button type="button" onClick={onRestoreRecovery}>
-          Recover JSON draft
-        </button>
+        <div className="document-recovery">
+          <span>Your last JSON draft is available.</span>
+          <button type="button" onClick={onRestoreRecovery}>
+            Recover JSON draft
+          </button>
+        </div>
       )}
-      <div className="tabs" style={{ display: "flex", gap: "5px" }}>
+      <div className="tabs document-tabs" aria-label="Document source">
         <button
           className={activeTab === "template" ? "active" : null}
+          aria-pressed={activeTab === "template"}
           onClick={() => {
             setActiveTab("template");
           }}
@@ -551,6 +677,7 @@ export default function ImportModal({
         </button>
         <button
           className={activeTab === "import" ? "active" : null}
+          aria-pressed={activeTab === "import"}
           onClick={() => {
             setActiveTab("import");
           }}
@@ -560,6 +687,7 @@ export default function ImportModal({
         {(PUBLIC_SERVERS || !HIDE_PUBLIC_SERVERS_TAB) && (
           <button
             className={activeTab === "public" ? "active" : null}
+            aria-pressed={activeTab === "public"}
             onClick={() => {
               setActiveTab("public");
             }}
@@ -568,16 +696,6 @@ export default function ImportModal({
           </button>
         )}
       </div>
-      {activeTab === "template" && (
-        <button
-          type="button"
-          onClick={() =>
-            openGraph(createJsonDraft(), null, null, undefined, null, true)
-          }
-        >
-          New JSON document
-        </button>
-      )}
       {activeTab === "template" && (
         <ImportFromTemplate openGraph={openGraph} onClose={onClose} />
       )}

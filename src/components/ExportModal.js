@@ -39,17 +39,25 @@ const addExtension = (name, ext) => {
   return name + "." + ext;
 };
 
-function ExportForm({ viewport, graph, onExport, onClose, initialFormat }) {
+function ExportForm({
+  viewport,
+  graph,
+  onExport,
+  onClose,
+  initialFormat,
+  documentName,
+}) {
   const structured = isStructuredJson(graph);
   const [exportType, setExportType] = useState(initialFormat || "parsegraph");
   const [name, setName] = useState(
-    structured
-      ? "document"
-      : typeof graph.value() === "string" || typeof graph.value() === "number"
-      ? graph.value() === "#document"
+    documentName ||
+      (structured
         ? "document"
-        : String(graph.value())
-      : "graph"
+        : typeof graph.value() === "string" || typeof graph.value() === "number"
+        ? graph.value() === "#document"
+          ? "document"
+          : String(graph.value())
+        : "graph")
   );
   const [exportError, setExportError] = useState(null);
 
@@ -149,20 +157,15 @@ function ExportForm({ viewport, graph, onExport, onClose, initialFormat }) {
         e.preventDefault();
         performExport();
       }}
-      style={{ display: "flex", flexDirection: "column", gap: "3px" }}
+      className="document-form"
     >
-      <label style={{ display: "flex", gap: "5px" }}>
+      <label className="document-field">
         Name:&nbsp;
-        <input
-          style={{ flexGrow: "1" }}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
+        <input value={name} onChange={(e) => setName(e.target.value)} />
       </label>
-      <label style={{ display: "flex", gap: "5px" }}>
+      <label className="document-field">
         Format:{" "}
         <select
-          style={{ flexGrow: "1" }}
           value={exportType}
           onChange={(e) => setExportType(e.target.value)}
         >
@@ -188,13 +191,13 @@ function ExportForm({ viewport, graph, onExport, onClose, initialFormat }) {
         </select>
       </label>
       {structured && (
-        <p>
+        <p className="document-note">
           A Parsegraph draft preserves unfinished slots and editing state. JSON
           export requires complete values and writes formatted source.
         </p>
       )}
       {(exportType === "xml" || exportType === "svg") && (
-        <p>
+        <p className="document-note">
           Exports the XML tree and its edits as UTF-8, preserving content
           whitespace. SVG requires an svg root in the SVG namespace.
         </p>
@@ -202,16 +205,18 @@ function ExportForm({ viewport, graph, onExport, onClose, initialFormat }) {
       {exportError && <p role="alert">Could not export: {exportError}</p>}
       {exportType === "parsegraph-v0" &&
         documentState(graph)?.version === 1 && (
-          <p role="status">
+          <p className="document-note document-warning" role="status">
             Legacy export discards presentation, appearance, generation recipes,
             and other v1 capabilities.
           </p>
         )}
       <div className="buttons">
-        <input type="submit" value="Save" />
-        <button type="button" onClick={onClose}>
-          Cancel
-        </button>
+        <input className="document-primary" type="submit" value="Save" />
+        {onClose && (
+          <button type="button" onClick={onClose}>
+            Cancel
+          </button>
+        )}
       </div>
     </form>
   );
@@ -223,33 +228,42 @@ export default function ExportModal({
   graph,
   viewport,
   initialFormat,
+  documentName,
 }) {
-  const [activeTab] = useState("export");
-
   return (
     <div
-      style={{
-        width: "100%",
-        height: "100%",
-        display: "flex",
-        justifyContent: "stretch",
-        flexDirection: "column",
-        alignItems: "stretch",
-        gap: "3px",
-        padding: "12px",
-        boxSizing: "border-box",
-      }}
+      className="document-dialog document-export"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="document-export-title"
     >
-      <h3 style={{ margin: "0", marginBottom: ".5em" }}>Save Parsegraph</h3>
-      {activeTab === "export" && (
-        <ExportForm
-          viewport={viewport}
-          initialFormat={initialFormat}
-          graph={graph}
-          onExport={onExport}
-          onClose={onClose}
-        />
-      )}
+      <div className="document-dialog-heading">
+        <div>
+          <p className="document-eyebrow">YOUR DOCUMENT</p>
+          <h2 id="document-export-title">Save a copy</h2>
+        </div>
+        {onClose && (
+          <button
+            className="document-close"
+            type="button"
+            aria-label="Close export"
+            onClick={onClose}
+          >
+            ×
+          </button>
+        )}
+      </div>
+      <p className="document-description">
+        Download your work in the format you need.
+      </p>
+      <ExportForm
+        viewport={viewport}
+        initialFormat={initialFormat}
+        documentName={documentName}
+        graph={graph}
+        onExport={onExport}
+        onClose={onClose}
+      />
     </div>
   );
 }

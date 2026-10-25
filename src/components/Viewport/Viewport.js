@@ -183,10 +183,11 @@ export default class Viewport {
   progressElem() {
     if (!this._progressElem) {
       this._progressElem = document.createElement("div");
-      this._progressElem.style.background = "grey";
-      this._progressElem.style.width = "10vw";
-      this._progressElem.style.height = "24px";
-      this._progressElem.style.border = "1px solid #1d1d1d";
+      this._progressElem.className = "viewport-progress";
+      this._progressElem.style.background = "#e5ebe8";
+      this._progressElem.style.width = "96px";
+      this._progressElem.style.height = "18px";
+      this._progressElem.style.borderRadius = "4px";
       this._progressElem.style.alignItems = "start";
       this._progressElem.style.position = "relative";
       this._progressElem.style.display = "none";
@@ -194,9 +195,9 @@ export default class Viewport {
       this._progressIndicator.style.position = "absolute";
       this._progressIndicator.style.left = "0px";
       this._progressIndicator.style.width = "0%";
-      this._progressIndicator.style.fontSize = "18px";
+      this._progressIndicator.style.fontSize = "11px";
       this._progressIndicator.style.height = "100%";
-      this._progressIndicator.style.background = "lightgreen";
+      this._progressIndicator.style.background = "#bed6cc";
       this._progressElem.appendChild(this._progressIndicator);
       this.statusElem().appendChild(this._progressElem);
     }
@@ -232,13 +233,10 @@ export default class Viewport {
   statusElem() {
     if (!this._statusElem) {
       this._statusElem = document.createElement("div");
-      this._statusElem.style.position = "fixed";
+      this._statusElem.className = "viewport-status";
       this._statusElem.style.display = "flex";
-      this._statusElem.style.flexDirection = "column";
-      this._statusElem.style.alignItems = "end";
-      this._statusElem.style.gap = "2px";
-      this._statusElem.style.right = "5px";
-      this._statusElem.style.bottom = "1.2em";
+      this._statusElem.style.alignItems = "center";
+      this._statusElem.style.gap = "8px";
     }
     return this._statusElem;
   }
@@ -246,8 +244,8 @@ export default class Viewport {
   statusTextElem() {
     if (!this._statusTextElem) {
       this._statusTextElem = document.createElement("div");
-      this._statusTextElem.style.fontSize = "18px";
-      this._statusTextElem.style.color = "white";
+      this._statusTextElem.style.fontSize = "12px";
+      this._statusTextElem.style.color = "inherit";
       this._statusTextElem.style.display = "none";
       this.statusElem().appendChild(this._statusTextElem);
     }
@@ -284,8 +282,8 @@ export default class Viewport {
   logContainer() {
     if (!this._logContainer) {
       this._logContainer = document.createElement("div");
-      this._logContainer.style.fontSize = "18px";
-      this._logContainer.style.color = "white";
+      this._logContainer.style.fontSize = "12px";
+      this._logContainer.style.color = "inherit";
       this._logContainer.style.display = "flex";
       this._logContainer.style.flexDirection = "column";
     }
@@ -753,6 +751,25 @@ export default class Viewport {
   mountEditor(editorContainer) {
     this.createEditor();
     editorContainer.appendChild(this._editorContainer);
+    if (this._suspendedEditor?.node === this.node()) {
+      this._showEditor = true;
+      this._editor.value = this._suspendedEditor.text;
+      this._editorContainer.style.display = "block";
+    }
+    this._suspendedEditor = null;
+    if (this._showEditor) this._editor.focus({ preventScroll: true });
+  }
+
+  unmountEditor(editorContainer) {
+    if (this._editorContainer?.parentElement !== editorContainer) return;
+    if (this._showEditor) {
+      // Developer tools can temporarily replace the inspector. Keep its
+      // unsubmitted label text, but don't let a hidden editor consume keys.
+      this._suspendedEditor = { node: this._editorNode, text: this._editor.value };
+      this._showEditor = false;
+      this._editorContainer.style.display = "none";
+    }
+    this._editorContainer.remove();
   }
 
   undo() {
@@ -1061,6 +1078,7 @@ export default class Viewport {
   }
 
   createEditor() {
+    if (this._editorContainer) return this._editorContainer;
     const editorContainer = document.createElement("div");
     editorContainer.style.display = "none";
     editorContainer.style.flexGrow = "1";
@@ -1083,13 +1101,11 @@ export default class Viewport {
       this.toggleEditor();
     };
     saveBtn.addEventListener("click", save);
-    saveBtn.addEventListener("touchend", save);
     saveBtn.innerHTML = "Save";
     buttons.appendChild(saveBtn);
 
     const cancelBtn = document.createElement("button");
     cancelBtn.addEventListener("click", () => this.toggleEditor());
-    cancelBtn.addEventListener("touchend", () => this.toggleEditor());
     cancelBtn.innerHTML = "Cancel";
     buttons.appendChild(cancelBtn);
 
@@ -1123,15 +1139,21 @@ export default class Viewport {
 
   createEditorComp() {
     const editor = document.createElement("textarea");
+    editor.setAttribute("aria-label", "Node text");
     editor.style.width = "100%";
     editor.style.boxSizing = "border-box";
-    editor.addEventListener("keypress", (e) => {
+    editor.addEventListener("keydown", (e) => {
+      if (e.isComposing || e.keyCode === 229 || e.ctrlKey || e.metaKey || e.altKey) return;
       if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
         this.toggleEditor();
       } else if (e.key === "Enter") {
         if (e.shiftKey) {
           return;
         }
+        e.preventDefault();
+        e.stopPropagation();
         this.applyEditorValue();
         this.toggleEditor();
       }
@@ -1140,6 +1162,7 @@ export default class Viewport {
   }
 
   hideEditor() {
+    this._suspendedEditor = null;
     if (this._inlineEditor?.active()) {
       this._inlineEditor.close(true);
       return;
@@ -1148,7 +1171,7 @@ export default class Viewport {
       return;
     }
     if (this._toggleNodeActions) {
-      this._toggleNodeActions();
+      this._toggleNodeActions(false);
     }
     this._showEditor = false;
     this._editorContainer.style.display = "none";
@@ -1167,13 +1190,20 @@ export default class Viewport {
     if (this.showingEditor()) {
       return;
     }
-    if (this._toggleNodeActions) {
-      this._toggleNodeActions();
-    }
+    this.createEditor();
+    const pending = this._suspendedEditor;
+    this._suspendedEditor = null;
     this._showEditor = true;
+    this._editorNode = this.node();
+    this.rendering()?.showUI();
+    if (this._toggleNodeActions) {
+      this._toggleNodeActions(true);
+    }
     this._editorContainer.style.display = "block";
-    this._editor.focus();
-    if (nodeHasValue(this.node())) {
+    if (this._editorContainer.isConnected) this._editor.focus({ preventScroll: true });
+    if (pending?.node === this.node()) {
+      this._editor.value = pending.text;
+    } else if (nodeHasValue(this.node())) {
       this._editor.value = this.node().value();
     } else {
       this._editor.value = "";

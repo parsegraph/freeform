@@ -275,6 +275,12 @@ export default class ViewportInput {
       );
     }
     this._attached = this.viewport().container();
+    // Camera coordinates start at the canvas workspace, which can sit beside
+    // an inspector and below the document toolbar.
+    const localPoint = (event) => {
+      const bounds = canvas.getBoundingClientRect();
+      return [event.clientX - bounds.left, event.clientY - bounds.top];
+    };
 
     this._uninstallers = [];
 
@@ -325,8 +331,9 @@ export default class ViewportInput {
     this._pan = pan;
     this._uninstallers.push(() => pan.stop());
     const dragTo = (e) => {
-      const dx = e.clientX - mouseX;
-      const dy = e.clientY - mouseY;
+      const [x, y] = localPoint(e);
+      const dx = x - mouseX;
+      const dy = y - mouseY;
       dragDistance += Math.hypot(dx, dy);
       dragged = dragDistance > 4;
       pan.dragBy(dx, dy, e.timeStamp);
@@ -346,7 +353,7 @@ export default class ViewportInput {
       const cam = viewport.camera();
       const widget = car.root();
       isDown = null;
-      [mouseX, mouseY] = [e.clientX, e.clientY];
+      [mouseX, mouseY] = localPoint(e);
       this.setMousePos(mouseX, mouseY);
       const [worldX, worldY] = cam.transform(mouseX, mouseY);
       mouseDownPos[0] = worldX;
@@ -390,7 +397,7 @@ export default class ViewportInput {
         if (!touchingNode) {
           dragTo(e);
         }
-        [mouseX, mouseY] = [e.clientX, e.clientY];
+        [mouseX, mouseY] = localPoint(e);
       }
       let hadGesture = false;
       if (touchingNode && includeFinalMovement) {
@@ -458,7 +465,7 @@ export default class ViewportInput {
         if (isDown) {
           dragTo(e);
         } else {
-          const [worldX, worldY] = cam.transform(e.clientX, e.clientY);
+          const [worldX, worldY] = cam.transform(...localPoint(e));
           let hoveredNode = car
             .root()
             .layout()
@@ -469,7 +476,7 @@ export default class ViewportInput {
           }
         }
       }
-      [mouseX, mouseY] = [e.clientX, e.clientY];
+      [mouseX, mouseY] = localPoint(e);
     };
     window.addEventListener("mousemove", onMouseMove);
     this._uninstallers.push(() => {
@@ -534,10 +541,10 @@ export default class ViewportInput {
       e.preventDefault();
       for (let i = 0; i < e.changedTouches.length; ++i) {
         const touch = e.changedTouches[i];
-        [mouseX, mouseY] = [touch.clientX, touch.clientY];
+        [mouseX, mouseY] = localPoint(touch);
         ongoingTouches.set(touch.identifier, {
-          mouseX: touch.clientX,
-          mouseY: touch.clientY,
+          mouseX,
+          mouseY,
         });
         if (!this.canInteract()) {
           // View-mode taps select on release; drags and pinches keep panning.
@@ -646,7 +653,7 @@ export default class ViewportInput {
           if (viewTouch?.id === touch.identifier && isGesture && !viewTouch.moved &&
             Math.hypot(touch.clientX - viewTouch.x, touch.clientY - viewTouch.y) <= 8 &&
             e.timeStamp - viewTouch.time < MAX_CLICK_DELAY_MS) {
-            const [x, y] = cam.transform(touch.clientX, touch.clientY);
+            const [x, y] = cam.transform(...localPoint(touch));
             const selected = car.root().layout().nodeUnderCoords(x, y, 1, size);
             if (selected) viewport.selectNode(selected);
             else viewport.clearNodeSelection();
@@ -717,8 +724,7 @@ export default class ViewportInput {
           if (!touchData) {
             continue;
           }
-          touchData.mouseX = touch.clientX;
-          touchData.mouseY = touch.clientY;
+          [touchData.mouseX, touchData.mouseY] = localPoint(touch);
         }
         const newDistance = distance(
           first.mouseX,
@@ -740,22 +746,24 @@ export default class ViewportInput {
         if (!touchData) {
           continue;
         }
-        const dx = touch.clientX - touchData.mouseX;
-        const dy = touch.clientY - touchData.mouseY;
+        const [x, y] = localPoint(touch);
+        const dx = x - touchData.mouseX;
+        const dy = y - touchData.mouseY;
         if (!touchingNode) {
           cam.adjustOrigin(dx / cam.scale(), dy / cam.scale());
           viewport.refreshCamera();
         }
-        touchData.mouseX = touch.clientX;
-        touchData.mouseY = touch.clientY;
+        touchData.mouseX = x;
+        touchData.mouseY = y;
       }
     });
 
     const handleWheel = (e) => {
       this._hoveredNode = null;
-      if (!this.viewport().hasWidget() || isNaN(mouseX)) {
+      if (!this.viewport().hasWidget()) {
         return;
       }
+      [mouseX, mouseY] = localPoint(e);
       // Wheel deltas can be expressed in pixels, lines, or pages.
       const deltaMode = e.deltaMode;
       const deltaUnit = deltaMode === 1
@@ -856,19 +864,29 @@ export default class ViewportInput {
       window.removeEventListener("keyup", onKeyUp);
     });
 
-    new ResizeObserver(() => {
+    const resizeObserver = new ResizeObserver(() => {
       const width = canvas.offsetWidth;
       const height = canvas.offsetHeight;
       // Hidden/detached viewports can briefly have no area. Keep the last
       // usable camera until a later resize supplies real dimensions.
       if (width <= 0 || height <= 0) return;
       viewport.cancelCameraTravel?.();
-      viewport.camera().setSize(width, height);
+      const camera = viewport.camera();
+      const oldWidth = camera.width?.(), oldHeight = camera.height?.();
+      const scale = camera.scale();
+      if ([oldWidth, oldHeight, scale].every((value) => Number.isFinite(value) && value > 0)) {
+        // Opening an inspector should keep the same world point at the center
+        // of the remaining canvas instead of pushing the selection offscreen.
+        camera.adjustOrigin((width - oldWidth) / (2 * scale), (height - oldHeight) / (2 * scale));
+      }
+      camera.setSize(width, height);
       if (this.viewport().hasWidget()) {
         viewport.checkScale();
         return;
       }
-    }).observe(canvas);
+    });
+    resizeObserver.observe(canvas);
+    this._uninstallers.push(() => resizeObserver.disconnect?.());
 
     this._keystrokes = new ViewportKeystrokes(viewport);
   }

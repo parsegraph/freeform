@@ -1,4 +1,5 @@
 import { clearExampleSession, initialExampleSession, readExampleSession, watchExampleSession } from "./exampleSession";
+import { createExample, loadExample } from "./examples";
 
 const KEY = "parsegraph-example-session";
 const example = { type: "grid", size: 12 };
@@ -31,6 +32,22 @@ test("restores only the original example recipe, camera, and View mode", () => {
   expect(initialExampleSession("")).toEqual({ example, cam, showingUI: false });
   expect(viewport.toJSON).not.toHaveBeenCalled();
   expect(Object.keys(JSON.parse(localStorage.getItem(KEY))).sort()).toEqual(["cam", "example", "showingUI", "version"]);
+});
+
+test("Proportion columns persist through camera saves and reconstruct with the same recipe", async () => {
+  const recipe = createExample("proportion_v1", { columns: 7 });
+  stop = watchExampleSession(viewport, recipe);
+  const saved = readExampleSession();
+  expect(saved).toEqual({ example: { type: "proportion_v1", columns: 7 }, cam, showingUI: false });
+  expect(initialExampleSession("")).toEqual(saved);
+  expect((await loadExample(saved.example)).example).toEqual(recipe);
+  expect(viewport.toJSON).not.toHaveBeenCalled();
+});
+
+test("out-of-range saved Proportion columns return to the chooser", () => {
+  localStorage.setItem(KEY, JSON.stringify({ version: 1, example: { type: "proportion_v1", columns: 201 }, cam }));
+  expect(readExampleSession()).toBeNull();
+  expect(initialExampleSession("")).toBeNull();
 });
 
 test("camera movement saves periodically and the final position flushes on pagehide", () => {

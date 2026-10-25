@@ -409,7 +409,8 @@ test("hover changes only refresh the overlay while a graph frame can finish", ()
 test("wheel zoom requests a camera update and scale check without restarting graph drawing", () => {
   mouse(canvas, "mousemove", 40, 0);
   const event = new WheelEvent("wheel", {
-    deltaY: 100, deltaMode: 0, bubbles: true, cancelable: true,
+    deltaY: 100, deltaMode: 0, clientX: 40, clientY: 50,
+    bubbles: true, cancelable: true,
   });
   canvas.dispatchEvent(event);
   expect(event.defaultPrevented).toBe(true);
@@ -417,6 +418,35 @@ test("wheel zoom requests a camera update and scale check without restarting gra
   expect(viewport.refreshCamera).toHaveBeenCalledWith(true);
   expect(viewport.checkScale).not.toHaveBeenCalled();
   expect(viewport.refresh).not.toHaveBeenCalled();
+});
+
+test("mouse picking and wheel zoom use the bounded workspace origin", () => {
+  viewport.rendering = () => ({ showingUI: () => false });
+  jest.spyOn(canvas, "getBoundingClientRect").mockReturnValue({ left: 100, top: 20 });
+  const node = {};
+  const nodeUnderCoords = jest.fn((x, y) => x === 40 && y === 30 ? node : null);
+  viewport.caret = () => ({ root: () => ({ layout: () => ({ nodeUnderCoords }) }) });
+  mouse(canvas, "mousedown", 140);
+  mouse(canvas, "mouseup", 140, 0);
+  expect(viewport.selectNode).toHaveBeenCalledWith(node);
+  canvas.dispatchEvent(new WheelEvent("wheel", {
+    deltaY: 100, clientX: 140, clientY: 50, bubbles: true, cancelable: true,
+  }));
+  expect(viewport.camera().zoomToPoint).toHaveBeenCalledWith(1 / 1.1, 40, 30);
+});
+
+test("touch selection and pinch anchors use the bounded workspace origin", () => {
+  viewport.rendering = () => ({ showingUI: () => false });
+  jest.spyOn(canvas, "getBoundingClientRect").mockReturnValue({ left: 100, top: 64 });
+  const node = {};
+  const nodeUnderCoords = jest.fn((x, y) => x === 40 && y === 30 ? node : null);
+  viewport.caret = () => ({ root: () => ({ layout: () => ({ nodeUnderCoords }) }) });
+  touch("touchstart", [[1, 140, 94]]);
+  touch("touchend", [[1, 140, 94]]);
+  expect(viewport.selectNode).toHaveBeenCalledWith(node);
+  touch("touchstart", [[2, 100, 74], [3, 120, 74]]);
+  touch("touchmove", [[3, 140, 74]]);
+  expect(viewport.camera().zoomToPoint).toHaveBeenCalledWith(2, 20, 10);
 });
 
 test("pinch zoom coalesces camera updates without restarting graph drawing", () => {
@@ -438,6 +468,21 @@ test("resize still invalidates rendering instead of reusing the previous frame d
   expect(viewport.camera().setSize).toHaveBeenCalledWith(canvas.offsetWidth, canvas.offsetHeight);
   expect(viewport.checkScale).toHaveBeenCalledTimes(1);
   expect(viewport.refreshCamera).not.toHaveBeenCalled();
+});
+
+test("opening an inspector keeps the same world point at the canvas center", () => {
+  const camera = viewport.camera();
+  camera.width = () => 800;
+  camera.height = () => 600;
+  camera.scale = () => 2;
+  Object.defineProperties(canvas, {
+    offsetWidth: { configurable: true, value: 500 },
+    offsetHeight: { configurable: true, value: 400 },
+  });
+  window.ResizeObserver.mock.calls[0][0]();
+  expect(position).toEqual([-75, -50]);
+  expect(camera.setSize).toHaveBeenCalledWith(500, 400);
+  expect(viewport.checkScale).toHaveBeenCalledTimes(1);
 });
 
 test("temporary zero-sized resize notifications preserve the camera until the viewport returns", () => {

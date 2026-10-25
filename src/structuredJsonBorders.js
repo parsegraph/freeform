@@ -64,6 +64,17 @@ function side(ctx, geometry, kind, right, reverse = false) {
   }
 }
 
+// Share the contour with the selection overlay without sharing stroke width:
+// document borders can shrink, but the editor's selection must stay legible.
+export function traceJsonNodeBorder(ctx, geometry, kind) {
+  ctx.beginPath();
+  ctx.moveTo(geometry.left + geometry.depth, geometry.top);
+  side(ctx, geometry, kind, false);
+  ctx.lineTo(geometry.right - geometry.depth, geometry.bottom);
+  side(ctx, geometry, kind, true, true);
+  ctx.closePath();
+}
+
 /** Live selection/hover use the same contour as the GPU fill and outline. */
 export function drawJsonNodeBorder(ctx, node, camera, kind, style) {
   if (!hasJsonNodeBorder(kind)) return false;
@@ -75,12 +86,7 @@ export function drawJsonNodeBorder(ctx, node, camera, kind, style) {
   ctx.lineWidth = geometry.lineWidth;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
-  ctx.beginPath();
-  ctx.moveTo(geometry.left + geometry.depth, geometry.top);
-  side(ctx, geometry, kind, false);
-  ctx.lineTo(geometry.right - geometry.depth, geometry.bottom);
-  side(ctx, geometry, kind, true, true);
-  ctx.closePath();
+  traceJsonNodeBorder(ctx, geometry, kind);
   ctx.stroke();
   ctx.restore();
   return true;

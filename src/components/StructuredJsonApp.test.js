@@ -90,6 +90,9 @@ jest.mock("./Viewport/Viewport", () =>
       setToggleNodeActions: jest.fn(),
       setToggleNodeStyling: jest.fn(),
       showInCamera: jest.fn(),
+      fitGraph: jest.fn(),
+      zoomCamera: jest.fn(),
+      hideEditor: jest.fn(),
       mountEditor: jest.fn(),
       mountLog: jest.fn(),
       mountStatus: jest.fn(),
@@ -207,7 +210,7 @@ test("invalid explicit links show an error without fetching or restoring a saved
   expect(fetch).not.toHaveBeenCalled();
   expect(Viewport.mock.results.at(-1).value.widget()).toBeUndefined();
   fireEvent.click(screen.getByRole("button", { name: "Choose another document" }));
-  expect(screen.getByRole("heading", { name: "New Parsegraph" })).toBeInTheDocument();
+  expect(screen.getByRole("dialog", { name: "New document" })).toBeInTheDocument();
   expect(window.location.search).toBe("");
 });
 
@@ -224,11 +227,10 @@ function recoveredNumberText() {
   return inspectJsonSelection(root, selected).text;
 }
 
-async function importOrdinaryGraph() {
-  fireEvent.click(screen.getByRole("button", { name: "Open", exact: true }));
-  const chooser = screen.getByRole("heading", {
-    name: "New Parsegraph",
-  }).parentElement;
+async function importOrdinaryGraph(openChooser = true) {
+  if (openChooser)
+    fireEvent.click(screen.getByRole("button", { name: "Open", exact: true }));
+  const chooser = screen.getByRole("dialog", { name: "New document" });
   fireEvent.click(
     within(chooser).getByRole("button", { name: "Open", exact: true })
   );
@@ -332,9 +334,7 @@ test("failed automatic recovery is visible and still allows downloading the unfi
       );
     });
   fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
-  const exporter = screen.getByRole("heading", {
-    name: "Save Parsegraph",
-  }).parentElement;
+  const exporter = screen.getByRole("dialog", { name: "Save a copy" });
   fireEvent.click(
     within(exporter).getByRole("button", { name: "Save", exact: true })
   );
@@ -359,4 +359,123 @@ test("corrupt recovery is reported in the chooser without deleting its saved byt
     screen.getByRole("button", { name: "New JSON document" })
   ).toBeInTheDocument();
   expect(localStorage.getItem(JSON_RECOVERY_KEY)).toBe("{broken");
+});
+
+test("the shell names imported documents, starts with no history, and keeps developer tools closed", async () => {
+  renderApp();
+  await importOrdinaryGraph(false);
+  expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
+    "ordinary.parsegraph"
+  );
+  expect(screen.getByText("No unsaved changes")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Undo", exact: true })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Redo", exact: true })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Developer" })).toHaveAttribute(
+    "aria-expanded", "false"
+  );
+  expect(screen.queryByRole("region", { name: "Developer tools" })).not.toBeInTheDocument();
+  expect(screen.queryByText("Mouse feel")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Save", exact: true }));
+  const dialog = screen.getByRole("dialog", { name: "Save a copy" });
+  expect(within(dialog).getByRole("textbox", { name: "Name:" })).toHaveValue(
+    "ordinary.parsegraph"
+  );
+});
+
+test("switching View and Edit preserves selected content, camera, and unsaved state", () => {
+  saveRecovery();
+  renderApp();
+  recover();
+  const viewport = Viewport.mock.results.at(-1).value;
+  fireEvent.change(screen.getByRole("textbox", { name: "Number", exact: true }), {
+    target: { value: "-5" },
+  });
+  const selectedId = viewport.node().id();
+  const camera = viewport.toJSON().cam;
+  fireEvent.click(screen.getByRole("button", { name: "View", exact: true }));
+  expect(screen.getByRole("button", { name: "View", exact: true })).toHaveAttribute(
+    "aria-pressed", "true"
+  );
+  expect(screen.queryByRole("complementary", { name: "JSON editor" })).not.toBeInTheDocument();
+  expect(viewport.node().id()).toBe(selectedId);
+  expect(viewport.node().value()).toBe("-5");
+  expect(viewport.toJSON().cam).toEqual(camera);
+  expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+  expect(screen.getByLabelText("Graph canvas")).toHaveFocus();
+  fireEvent.click(screen.getByRole("button", { name: "Edit", exact: true }));
+  expect(screen.getByRole("textbox", { name: "Number", exact: true })).toHaveValue("-5");
+  expect(viewport.node().id()).toBe(selectedId);
+  expect(viewport.toJSON().cam).toEqual(camera);
+  expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+  expect(screen.getByLabelText("Graph canvas")).toHaveFocus();
+});
+
+test("toolbar undo and redo restore semantic content and return focus to the canvas", () => {
+  saveRecovery();
+  renderApp();
+  recover();
+  expect(screen.getByRole("button", { name: "Undo", exact: true })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Redo", exact: true })).toBeDisabled();
+  fireEvent.change(screen.getByRole("textbox", { name: "Number", exact: true }), {
+    target: { value: "12" },
+  });
+  expect(screen.getByRole("button", { name: "Undo", exact: true })).toBeEnabled();
+  fireEvent.click(screen.getByRole("button", { name: "Undo", exact: true }));
+  expect(screen.getByRole("textbox", { name: "Number", exact: true })).toHaveValue("-");
+  expect(screen.getByRole("button", { name: "Undo", exact: true })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Redo", exact: true })).toBeEnabled();
+  expect(screen.getByLabelText("Graph canvas")).toHaveFocus();
+  fireEvent.click(screen.getByRole("button", { name: "Redo", exact: true }));
+  expect(screen.getByRole("textbox", { name: "Number", exact: true })).toHaveValue("12");
+  expect(screen.getByRole("button", { name: "Redo", exact: true })).toBeDisabled();
+  expect(screen.getByLabelText("Graph canvas")).toHaveFocus();
+});
+
+test("Undo and Redo mark a saved draft as unsaved again", () => {
+  saveRecovery();
+  const download = jest.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+  renderApp();
+  recover();
+  fireEvent.change(screen.getByRole("textbox", { name: "Number", exact: true }), {
+    target: { value: "12" },
+  });
+  const saveDraft = () => {
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Save a copy" }))
+      .getByRole("button", { name: "Save", exact: true }));
+    expect(screen.getByText("No unsaved changes")).toBeInTheDocument();
+  };
+  saveDraft();
+  fireEvent.click(screen.getByRole("button", { name: "Undo", exact: true }));
+  expect(screen.getByRole("textbox", { name: "Number", exact: true })).toHaveValue("-");
+  expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+  saveDraft();
+  fireEvent.click(screen.getByRole("button", { name: "Redo", exact: true }));
+  expect(screen.getByRole("textbox", { name: "Number", exact: true })).toHaveValue("12");
+  expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+  expect(download).toHaveBeenCalledTimes(2);
+});
+
+test("the save dialog contains keyboard focus and Escape restores its toolbar trigger", () => {
+  saveRecovery();
+  renderApp();
+  recover();
+  const save = screen.getByRole("button", { name: "Save", exact: true });
+  const toolbar = save.closest("header");
+  save.focus();
+  fireEvent.click(save);
+  const dialog = screen.getByRole("dialog", { name: "Save a copy" });
+  const close = within(dialog).getByRole("button", { name: "Close export" });
+  const cancel = within(dialog).getByRole("button", { name: "Cancel" });
+  expect(close).toHaveFocus();
+  expect(toolbar).toHaveAttribute("inert");
+  fireEvent.keyDown(close, { key: "Tab", shiftKey: true });
+  expect(cancel).toHaveFocus();
+  fireEvent.keyDown(cancel, { key: "Tab" });
+  expect(close).toHaveFocus();
+  fireEvent.keyDown(close, { key: "Escape" });
+  expect(screen.queryByRole("dialog", { name: "Save a copy" })).not.toBeInTheDocument();
+  expect(save).toHaveFocus();
+  expect(toolbar).not.toHaveAttribute("inert");
+  expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
 });

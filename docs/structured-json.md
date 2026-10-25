@@ -4,11 +4,20 @@ Freeform's first structured editor supports JSON. Open a JSON file or create a
 JSON draft, select a node, and use its structured actions. Ordinary Parsegraph
 documents retain unrestricted graph editing.
 
-Choose **New JSON document** in the New/Open chooser, or open a `.json` file.
-The JSON sidebar appears in Edit mode. Unfinished slots use amber blocks; the
-sidebar's diagnostics also select the corresponding node directly.
+Choose a JSON draft in the **New document** chooser, or use its Open tab to
+import a `.json` file. The toolbar shows the document name and unsaved state;
+Open, Save, Undo, Redo, and View/Edit remain available in both modes.
 
-Node types have a shared color scheme in the graph and type-choice buttons.
+The contextual JSON inspector appears in **Edit** mode. It leads with the
+selected value and its available actions, followed by diagnostics, draft/export
+actions, recovery status, and a collapsed keyboard reference. Unfinished slots
+use amber blocks; diagnostic entries select the corresponding node directly.
+**View** hides the inspector while preserving selection and camera. On narrow
+screens the inspector sits below the canvas.
+
+Node types share muted colors in the graph, inline editor, and type-choice
+buttons. The surrounding controls and default canvas use neutral colors;
+explicit document appearance settings are preserved.
 Objects, arrays, and booleans use curly, square, and angle outlines in place of
 the ordinary rounded border. The shaped sides are capped at 32 screen pixels
 wide, with extra side padding for labels and contained nodes. At small zoom
@@ -21,6 +30,12 @@ group, keeping container backgrounds behind their children.
 The **Labels** toggle enables WorldLabels: when node text becomes too small,
 readable labels remain over the graph, with overlapping labels filtered out.
 This also works with v1 presentation settings and their chosen font size.
+
+**Developer** in the status bar opens Mouse feel, Node travel, rendering
+controls, Document capabilities, and benchmarks. It starts closed, separate
+from the inspector. Choose **Enable benchmarks** to record the current session,
+or retain the existing `?benchmark=1` launch option. The shell changes where
+controls live without changing import/export semantics or keyboard shortcuts.
 
 ## Slots and document states
 
@@ -75,7 +90,7 @@ the document for each keystroke.
 
 ### Building with the keyboard
 
-The JSON sidebar has a collapsed **Keyboard controls** reference. These commands
+The JSON inspector has a collapsed **Keyboard controls** reference. These commands
 apply while the graph has focus. In View mode, select a node first; Escape
 clears the selection and returns directional keys to camera panning.
 
@@ -118,6 +133,11 @@ editing. These bindings retain Freeform's directional navigation; `i` means
 INWARD rather than Vim's insert mode.
 
 ## Saving and recovery
+
+The toolbar's **Save** and the inspector's **Save draft** open **Save a copy**.
+This downloads a file, using the document name as a starting point; it does not
+write back to the source file. The toolbar's unsaved indicator clears after a
+successful download and marks further edits, Undo, or Redo as unsaved.
 
 **Save draft** writes a native Parsegraph v1 document containing the graph and
 the editor's typed metadata. It preserves slots, partial input, and selection,

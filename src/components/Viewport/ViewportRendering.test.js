@@ -202,24 +202,48 @@ test("typed selection and hover highlights follow the custom outline", () => {
   renderer.carouselContainer = () => ({ style: {} });
   renderer.renderCaret();
   expect(ctx.closePath).toHaveBeenCalledTimes(1);
+  expect(ctx.stroke).toHaveBeenCalledTimes(2);
   expect(ctx.roundRect).not.toHaveBeenCalled();
   renderer.renderHovered();
   expect(ctx.closePath).toHaveBeenCalledTimes(2);
+  expect(ctx.stroke).toHaveBeenCalledTimes(3);
   expect(ctx.roundRect).not.toHaveBeenCalled();
   showingCaret = false;
   renderer.renderCaret();
   expect(ctx.strokeRect).not.toHaveBeenCalled();
   expect(ctx.closePath).toHaveBeenCalledTimes(2);
+  expect(ctx.stroke).toHaveBeenCalledTimes(3);
   // Ordinary scalar highlights retain their existing rounded shape.
   selected = string;
   showingCaret = true;
   renderer.renderCaret();
   expect(ctx.roundRect).toHaveBeenCalledTimes(1);
+  expect(ctx.stroke).toHaveBeenCalledTimes(5);
   hovered = string;
   selected = bool;
   renderer.renderHovered();
   expect(ctx.roundRect).toHaveBeenCalledTimes(2);
   for (const item of [root, bool, string]) item.layout.mockRestore();
+});
+
+test.each([
+  ["View with a selected node", false, true, true],
+  ["View while panning", false, false, false],
+  ["Edit mode", true, false, true],
+])("%s renders the expected selection overlay", (name, editing, navigating, showsSelection) => {
+  const camera = new Camera();
+  camera.setSize(800, 600);
+  camera.setOrigin(400, 300);
+  const ctx = Object.fromEntries(["resetTransform", "scale", "translate"].map((method) => [method, jest.fn()]));
+  const renderer = Object.create(ViewportRendering.prototype);
+  renderer._viewport = { camera: () => camera, navigatingNodes: () => navigating };
+  renderer._overlayCanvas = { getContext: () => ctx };
+  renderer._showingUI = editing;
+  renderer.renderCaret = jest.fn();
+  renderer.renderHovered = jest.fn();
+  renderer.renderUI();
+  expect(renderer.renderHovered).toHaveBeenCalledTimes(1);
+  expect(renderer.renderCaret).toHaveBeenCalledTimes(showsSelection ? 1 : 0);
 });
 
 test("neighbor focus schedules travel once and rapid moves use the planned zoom", () => {

@@ -118,8 +118,11 @@ export default class ViewportInlineEditor {
     const left = Math.max(8, Math.min(camera.width() - width - 8, position.x - width / 2));
     const top = Math.max(8, Math.min(camera.height() - height - 8, position.y - height / 2));
     const style = viewport.getNodeStyle();
+    const bounds = viewport.container()?.getBoundingClientRect();
     Object.assign(element.style, {
-      left: `${left}px`, top: `${top}px`, width: `${width}px`, height: `${height}px`,
+      left: `${left + (bounds?.left ?? 0)}px`,
+      top: `${top + (bounds?.top ?? 0)}px`,
+      width: `${width}px`, height: `${height}px`,
       fontSize: `${Math.max(14, Math.min(64, FONT_SIZE * position.scale))}px`,
       lineHeight: `${Math.max(18, Math.min(80, LINE_HEIGHT * position.scale))}px`,
       backgroundColor: style.backgroundColor, color: style.textColor,

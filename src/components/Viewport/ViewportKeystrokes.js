@@ -3,7 +3,7 @@ import { SHOW_KEY_STROKES } from "../../settings";
 export default class ViewportKeystrokes {
   constructor(viewport) {
     this._keyStrokeElem = document.createElement("div");
-    this._keyStrokeElem.style.position = "fixed";
+    this._keyStrokeElem.style.position = "absolute";
     this._keyStrokeElem.style.transform = "translate(-50%, -50%)";
     this._keyStrokeElem.style.left = "50%";
     this._keyStrokeElem.style.bottom = "5px";

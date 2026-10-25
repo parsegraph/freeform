@@ -2,6 +2,11 @@ import fs from "fs";
 import path from "path";
 import { Direction } from "parsegraph";
 import { createExample, exampleFromSample, loadExample } from "./examples";
+import { writeGraph } from "./graphDocument";
+import proportional from "./fixtures/v1/proportion-proportional.json";
+import standard from "./fixtures/v1/proportion-standard.json";
+import math from "./fixtures/v1/proportion-math.json";
+import memory from "./fixtures/v1/memory-piers.json";
 import * as builders from "./builders";
 
 jest.mock("./builders", () => ({
@@ -10,6 +15,7 @@ jest.mock("./builders", () => ({
   buildTournament: jest.fn(() => "tournament"),
   buildRandom: jest.fn((steps, random) => Array.from({ length: steps }, random)),
   buildAlternatingColumns: jest.fn((random) => ["columns", null, null, { styles: [random(), random()] }]),
+  buildProportionDocument: jest.fn(),
 }));
 
 beforeEach(() => {
@@ -19,7 +25,13 @@ beforeEach(() => {
   builders.buildTournament.mockReturnValue("tournament");
   builders.buildRandom.mockImplementation((steps, random) => Array.from({ length: steps }, random));
   builders.buildAlternatingColumns.mockImplementation((random) => ["columns", null, null, { styles: [random(), random()] }]);
+  builders.buildProportionDocument.mockReturnValue(proportional);
 });
+
+function documentById(document) {
+  // Serialization may choose another traversal order without changing the graph.
+  return { ...document, nodes: Object.fromEntries(document.nodes.map((node) => [node.id, node])) };
+}
 
 test("template options survive reconstruction", async () => {
   const source = createExample("march", { rounds: 4, vertical: true });
@@ -54,6 +66,44 @@ test("invalid or unbounded stored recipes are rejected or bounded", async () => 
   await expect(loadExample({ type: "unknown" })).rejects.toThrow();
   expect(createExample("grid", { size: -1 })).toBeNull();
   expect(createExample("cross", { rounds: 100000 }).rounds).toBe(11);
+});
+
+test("explicit Proportion columns survive reconstruction and reach the document builder", async () => {
+  const source = createExample("proportion_v1", { columns: 7 });
+  expect(source).toEqual({ type: "proportion_v1", columns: 7 });
+  const loaded = await loadExample(JSON.parse(JSON.stringify(source)));
+  expect(loaded.example).toEqual(source);
+  expect(builders.buildProportionDocument).toHaveBeenCalledTimes(1);
+  expect(builders.buildProportionDocument).toHaveBeenCalledWith(7);
+  expect(documentById(writeGraph(loaded.graph))).toEqual(documentById(proportional));
+});
+
+test("Proportion columns accept only bounded integers, while an omitted value retains its old recipe", async () => {
+  for (const columns of [1, 3, 200]) {
+    expect(createExample("proportion_v1", { columns })).toEqual({ type: "proportion_v1", columns });
+  }
+  for (const columns of [0, -1, 201, 2.5, "3", null, NaN, Infinity]) {
+    expect(createExample("proportion_v1", { columns })).toBeNull();
+    await expect(loadExample({ type: "proportion_v1", columns })).rejects.toThrow();
+  }
+  const source = createExample("proportion_v1");
+  expect(source).toEqual({ type: "proportion_v1" });
+  const loaded = await loadExample(source);
+  expect(loaded.example).toEqual(source);
+  expect(documentById(writeGraph(loaded.graph))).toEqual(documentById(proportional));
+  expect(builders.buildProportionDocument).not.toHaveBeenCalled();
+});
+
+test.each([
+  ["proportion_standard_v1", standard],
+  ["proportion_math_v1", math],
+  ["memory_piers_v1", memory],
+])("retired gallery recipe %s still restores its original document", async (type, fixture) => {
+  const recipe = { type };
+  expect(exampleFromSample(type)).toEqual(recipe);
+  const loaded = await loadExample(recipe);
+  expect(loaded.example).toEqual(recipe);
+  expect(documentById(writeGraph(loaded.graph))).toEqual(documentById(fixture));
 });
 
 // Load the shipped assets through the real importers as well as checking URLs.

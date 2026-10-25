@@ -36,6 +36,10 @@ export function normalizeExample(value) {
     if (!Number.isInteger(value.size) || value.size < 1 || value.size > 500) return null;
     result.size = value.size;
   }
+  if (value.type === "proportion_v1" && value.columns !== undefined) {
+    if (!Number.isInteger(value.columns) || value.columns < 1 || value.columns > 200) return null;
+    result.columns = value.columns;
+  }
   if (RANDOM_TYPES.has(value.type)) {
     if (!Number.isInteger(value.seed) || value.seed < 0 || value.seed > 0xffffffff) return null;
     result.seed = value.seed;
@@ -86,6 +90,16 @@ function tournamentRounds(count) {
 export async function loadExample(value, benchmark) {
   const example = normalizeExample(value);
   if (!example) throw new Error("Unknown example or invalid example options.");
+  if (example.type === "proportion_v1" && example.columns !== undefined) {
+    return {
+      graph: measureBenchmark(benchmark, "Graph construction", () =>
+        readGraph(builders.buildProportionDocument(example.columns))
+      ),
+      selectedNode: null, viewportData: null, example,
+    };
+  }
+  // Retain the old fixture recipes for saved sessions and direct sample links.
+  // The gallery only offers the configurable Proportion example now.
   if (DOCUMENT_EXAMPLES[example.type]) {
     return { graph: measureBenchmark(benchmark, "Graph construction", () => readGraph(DOCUMENT_EXAMPLES[example.type])), selectedNode: null,
       viewportData: null, example };

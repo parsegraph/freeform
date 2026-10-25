@@ -136,6 +136,18 @@ test("Enter finishes inline editing and returns focus so the editor can open aga
   expect(document.querySelector(".graph-inline-editor")).toBeNull();
 });
 
+test("the inline textbox follows the graph inside an offset canvas workspace", () => {
+  const { viewport, root, container } = editor("hello");
+  geometry(root, { x: 200, y: 150, width: 120, height: 40 });
+  jest.spyOn(container, "getBoundingClientRect").mockReturnValue({ left: 80, top: 64 });
+  viewport.camera().setOrigin(0, 0);
+  viewport.camera().setScale(1);
+  viewport.toggleEditor();
+  const field = document.querySelector(".graph-inline-editor");
+  expect(field.style.left).toBe("220px");
+  expect(field.style.top).toBe("194px");
+});
+
 test("Shift+Enter permits string newlines and IME Enter does not finish a composition", () => {
   const { viewport } = editor("hello");
   viewport.toggleEditor();

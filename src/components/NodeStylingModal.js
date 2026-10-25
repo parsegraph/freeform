@@ -19,25 +19,15 @@ const ColorField = ({ name, label, style, setStyle }) => {
   }, [boxRef, name, style]);
 
   return (
-    <>
-      <label
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          gap: "5px",
-          alignItems: "center",
-        }}
-      >
+    <fieldset className="appearance-fields">
+      <legend>{label}</legend>
+      <label className="appearance-field">
         Color:&nbsp;
-        <span style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+        <span className="appearance-color-input">
           <canvas
             ref={boxRef}
-            style={{
-              height: "1.5em",
-              width: "2.5em",
-              border: "1px solid black",
-              borderRadius: "3px",
-            }}
+            className="appearance-swatch"
+            aria-hidden="true"
           />
           <input
             type="color"
@@ -49,14 +39,7 @@ const ColorField = ({ name, label, style, setStyle }) => {
         </span>
       </label>
       {style[name + "Alpha"] !== undefined && (
-        <label
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            gap: "5px",
-            alignItems: "center",
-          }}
-        >
+        <label className="appearance-field">
           Alpha:&nbsp;
           <input
             type="range"
@@ -70,7 +53,7 @@ const ColorField = ({ name, label, style, setStyle }) => {
           />
         </label>
       )}
-    </>
+    </fieldset>
   );
 };
 
@@ -110,7 +93,9 @@ export default function NodeStylingModal({
   const Tab = ({ name, label }) => {
     return (
       <button
+        type="button"
         className={activeTab === name ? "active" : null}
+        aria-pressed={activeTab === name}
         onClick={(e) => {
           e.preventDefault();
           setActiveTab(name);
@@ -124,22 +109,26 @@ export default function NodeStylingModal({
   return (
     <form
       onSubmit={applyStyle}
-      style={{
-        width: "100%",
-        height: "100%",
-        display: "flex",
-        justifyContent: "stretch",
-        flexDirection: "column",
-        alignItems: "stretch",
-        gap: "3px",
-        padding: "12px",
-        boxSizing: "border-box",
-      }}
+      className="document-dialog document-form document-appearance"
     >
-      <h3 style={{ margin: "0", marginBottom: ".5em", userSelect: "none" }}>
-        Node Styling
-      </h3>
-      <div className="tabs" style={{ display: "flex", gap: "5px" }}>
+      <div className="document-dialog-heading">
+        <div>
+          <p className="document-eyebrow">APPEARANCE</p>
+          <h2>Node appearance</h2>
+        </div>
+        <button
+          className="document-close"
+          type="button"
+          aria-label="Close appearance"
+          onClick={onClose}
+        >
+          ×
+        </button>
+      </div>
+      <p className="document-description">
+        Set the page and selected node’s colors.
+      </p>
+      <div className="tabs" aria-label="Appearance properties">
         <Tab name="page" label="Page" />
         <Tab name="background" label="Node" />
         <Tab name="border" label="Border" />
@@ -177,7 +166,7 @@ export default function NodeStylingModal({
         <ColorField style={style} setStyle={update} name="text" label="Text" />
       )}
 
-      <label style={{ display: "flex", justifyContent: "space-between" }}>
+      <label className="appearance-field appearance-option">
         Live:{" "}
         <input
           type="checkbox"
@@ -185,7 +174,7 @@ export default function NodeStylingModal({
           onChange={(e) => setIsLive(e.target.checked)}
         />
       </label>
-      <label style={{ display: "flex", justifyContent: "space-between" }}>
+      <label className="appearance-field appearance-option">
         Update default node style:{" "}
         <input
           type="checkbox"
@@ -202,7 +191,7 @@ export default function NodeStylingModal({
         >
           Copy
         </button>
-        <input type="submit" style={{ flexGrow: "1" }} value="Apply" />
+        <input className="document-primary" type="submit" value="Apply" />
         <button
           onClick={(e) => {
             e.preventDefault();

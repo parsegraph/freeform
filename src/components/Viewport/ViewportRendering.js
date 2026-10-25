@@ -42,6 +42,7 @@ import {
 } from "../../settings";
 import { WorldLabels } from "../WorldLabel";
 import { createLayoutPainter } from "./createLayoutPainter";
+import { drawSelectionOutline } from "./selectionOutline";
 import DocumentFont from "./DocumentFont";
 import ViewportFrameBuffer, { viewportFrameTransform } from "./ViewportFrameBuffer";
 import { documentState, nodeLabel, writeGraph } from "../../graphDocument";
@@ -71,7 +72,7 @@ function frameCanvas(className) {
   const canvas = document.createElement("canvas");
   canvas.className = className;
   Object.assign(canvas.style, {
-    position: "fixed", inset: "0", transformOrigin: "0 0", pointerEvents: "none",
+    position: "absolute", inset: "0", transformOrigin: "0 0", pointerEvents: "none",
   });
   return canvas;
 }
@@ -84,9 +85,7 @@ const WALL_TIME_WIDTH = 1;
 
 const WALL_TIME_SCALE = 4;
 
-const caretColor = new Color(0.95, 0.9, 0, 1);
-const caretHighlightColor = new Color(1, 1, 0, 1);
-const highlightColor = new Color(1, 1, 1, 0.7);
+const highlightColor = new Color(0.4, 0.65, 0.57, 0.35);
 
 // Node colors
 const borderColor = new Color(0, 0, 0, 0.5);
@@ -141,7 +140,7 @@ export default class ViewportRendering {
     glProvider.container().className = "viewport-webgl-container";
     glProvider.canvas().className = "viewport-webgl-canvas";
     glProvider.canvas().style.transformOrigin = "0 0";
-    glProvider.container().style.position = "fixed";
+    glProvider.container().style.position = "absolute";
     glProvider.container().style.inset = 0;
     container.appendChild(glProvider.container());
     this._glProvider = glProvider;
@@ -151,7 +150,7 @@ export default class ViewportRendering {
     this._extentGlProvider.canvas().getContext("webgl", { preserveDrawingBuffer: true });
     this._extentGlProvider.canvas().style.transformOrigin = "0 0";
     this._extentGlProvider.container();
-    this._extentGlProvider.container().style.position = "fixed";
+    this._extentGlProvider.container().style.position = "absolute";
     this._extentGlProvider.container().style.inset = 0;
     this._extentGlProvider.container();
     this._extentGlProvider.container().className = "viewport-extent-container";
@@ -1290,63 +1289,11 @@ export default class ViewportRendering {
     const cam = this.camera();
 
     if (this.node()) {
-      ctx.lineWidth = (BORDER_THICKNESS / 2) * layout.absoluteScale();
-      ctx.lineJoin = "round";
-      let hovered = this.viewport().input()?.hoveredNode();
-      ctx.strokeStyle =
-        hovered === this.node()
-          ? caretHighlightColor.asRGBA()
-          : caretColor.asRGBA();
       const bodySize = [0, 0];
       layout.size(bodySize);
-      const kind = jsonNodeKind(this.widget(), this.node());
-      if (hasJsonNodeBorder(kind)) {
-        if (this.viewport().showingCaret()) {
-          const color = hovered === this.node() ? caretHighlightColor : caretColor;
-          drawJsonNodeBorder(ctx, this.node(), cam, kind, {
-            borderColor: color.asHex(), borderAlpha: color.a(),
-          });
-        }
-      } else if (this.viewport().showingCaret()) {
-        if (
-          nodeHasValue(this.node()) ||
-          this.node().neighbors().hasNode(Direction.INWARD)
-        ) {
-          ctx.beginPath();
-          ctx.roundRect(
-            layout.absoluteX() -
-              (layout.absoluteScale() * bodySize[0]) / 2 +
-              (BORDER_THICKNESS / 4) * layout.absoluteScale(),
-            layout.absoluteY() -
-              (layout.absoluteScale() * bodySize[1]) / 2 +
-              (BORDER_THICKNESS / 4) * layout.absoluteScale(),
-            layout.absoluteScale() * bodySize[0] -
-              (BORDER_THICKNESS / 2) * layout.absoluteScale(),
-            layout.absoluteScale() * bodySize[1] -
-              (BORDER_THICKNESS / 2) * layout.absoluteScale(),
-            (BORDER_ROUNDEDNESS * layout.absoluteScale()) / 2.13
-          );
-          ctx.stroke();
-        } else {
-          ctx.beginPath();
-          ctx.arc(
-            layout.absoluteX(),
-            layout.absoluteY(),
-            (bodySize[0] / 2) * layout.absoluteScale() -
-              (BORDER_THICKNESS / 4) * layout.absoluteScale(),
-            0,
-            Math.PI * 2
-          );
-          ctx.stroke();
-        }
-      } else {
-        ctx.lineWidth = 0.1;
-        ctx.lineJoin = "round";
-        ctx.strokeRect(
-          layout.absoluteX() - (layout.absoluteScale() * bodySize[0]) / 2,
-          layout.absoluteY() - (layout.absoluteScale() * bodySize[1]) / 2,
-          layout.absoluteScale() * bodySize[0],
-          layout.absoluteScale() * bodySize[1]
+      if (this.viewport().showingCaret()) {
+        drawSelectionOutline(
+          ctx, this.node(), cam, jsonNodeKind(this.widget(), this.node())
         );
       }
 

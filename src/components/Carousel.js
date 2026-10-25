@@ -9,6 +9,8 @@ export default function Carousel({ viewport }) {
     <>
       <button
         className="dir"
+        aria-label="Add inner node"
+        title="Add inner node"
         style={{
           position: "absolute",
           right: "50%",
@@ -23,6 +25,8 @@ export default function Carousel({ viewport }) {
       </button>
       <button
         className="dir"
+        aria-label="Add node to the left"
+        title="Add node to the left"
         style={{
           position: "absolute",
           right: "100%",
@@ -37,6 +41,8 @@ export default function Carousel({ viewport }) {
       </button>
       <button
         className="dir"
+        aria-label="Add node above"
+        title="Add node above"
         style={{
           position: "absolute",
           bottom: "100%",
@@ -51,6 +57,8 @@ export default function Carousel({ viewport }) {
       </button>
       <button
         className="dir"
+        aria-label="Add node below"
+        title="Add node below"
         style={{
           position: "absolute",
           left: "50%",
@@ -65,6 +73,8 @@ export default function Carousel({ viewport }) {
       </button>
       <button
         className="dir"
+        aria-label="Add node to the right"
+        title="Add node to the right"
         style={{
           position: "absolute",
           left: "100%",

@@ -13,8 +13,34 @@ const clone = (value) => JSON.parse(JSON.stringify(value));
 const own = (object, key) =>
   Object.prototype.hasOwnProperty.call(object ?? {}, key);
 
+// Builders using v1-only node settings must opt into v1 before their first
+// history snapshot. Attach state directly, without serializing and rebuilding.
+export function initializeGraphDocument(root) {
+  Object.defineProperty(root, DOCUMENT_STATE, {
+    value: {
+      version: 1,
+      root,
+      capabilities: {},
+      ignoredCapabilities: [],
+      hasUnsupportedContent: graphNodes(root).some(
+        (node) =>
+          node.value() !== undefined &&
+          typeof node.value() !== "string" &&
+          typeof node.value() !== "number"
+      ),
+    },
+    configurable: true,
+  });
+  return root;
+}
+
 export function readGraph(data) {
   const loaded = deserializeParsegraphDocument(data);
+  const formats = loaded.metadata?.freeform;
+  if (own(formats, "structuredJson") && own(formats, "structuredLisp"))
+    throw new Error(
+      "A structured document must declare one language, not both JSON and Lisp/Scheme."
+    );
   loaded.hasUnsupportedContent = graphNodes(loaded.root).some(
     (node) =>
       node.value() !== undefined &&
@@ -142,9 +168,12 @@ export function writeGraph(
       ? selectedNode.id()
       : selectedNode;
   if (version === 0) {
-    if (state?.metadata?.freeform?.structuredJson) {
+    if (
+      state?.metadata?.freeform?.structuredJson !== undefined ||
+      state?.metadata?.freeform?.structuredLisp !== undefined
+    ) {
       throw new Error(
-        "Structured JSON drafts require Parsegraph v1 to preserve slots and node types."
+        "Structured drafts require Parsegraph v1 to preserve slots and node types."
       );
     }
     return {

@@ -7116,11 +7116,6 @@ parse5@6.0.1:
   resolved "https://registry.yarnpkg.com/parse5/-/parse5-6.0.1.tgz#e1a1c085c569b3dc08321184f19a39cc27f7c30b"
   integrity sha512-Ofn/CTFzRGTTxwpNEs9PP93gXShHcTq255nzRYSKe8AkVpZY7e1fpmTfOyoIvjP5HG7Z2ZM7VS9PPhQGW2pOpw==
 
-parsegraph-anthonylisp@^2.1.5:
-  version "2.1.5"
-  resolved "https://registry.yarnpkg.com/parsegraph-anthonylisp/-/parsegraph-anthonylisp-2.1.5.tgz#7219fff4e124975679f999663f1edbfd4c777bc8"
-  integrity sha512-8/uR269j0+gK6HpoDn7lC9Ue/Pz0vF0leJU8zozh8tN6pW3MVAR2Sfrhm2lzLKvrE4tDWSSt6EiMHljfP5sgMg==
-
 parsegraph-blockpainter@^1.8.0:
   version "1.8.0"
   resolved "https://registry.yarnpkg.com/parsegraph-blockpainter/-/parsegraph-blockpainter-1.8.0.tgz#46a724a2425e3c59bcacf226b435e0196b0f7be2"
@@ -7229,10 +7224,10 @@ parsegraph-unicode@^1.6.5:
   dependencies:
     node-localstorage "^2.1.6"
 
-parsegraph@7.0.1:
-  version "7.0.1"
-  resolved "https://registry.npmjs.org/parsegraph/-/parsegraph-7.0.1.tgz#f1a1a754aa51117fa3600a8f03b6e480056c6b02"
-  integrity sha512-Sx5vHykdNOuH0b3l0tQZEuqqHWTCSgs+4idFn46QEuM8YWev8Cf4UaW3W2mF1zIW79bIkAkLmxW6CgyOAUhWGw==
+parsegraph@7.1.0:
+  version "7.1.0"
+  resolved "https://registry.yarnpkg.com/parsegraph/-/parsegraph-7.1.0.tgz#4dc109ccb777caa6900428123eccbe0c03b64770"
+  integrity sha512-b3K5qbftorgjKndKP+wmAgBBvi51PMOs6ijMa7zd2zqWWzZb0gCZK1XuNiulz0Mafu4GyHBEWM5ssTLbM6OGbA==
 
 parsegraph@^6.1.4:
   version "6.1.4"

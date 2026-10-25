@@ -239,6 +239,67 @@ test("Enter keeps a failed text edit focused so it can be corrected", () => {
   );
 });
 
+test("a sidebar edit groups live input until blur and ends before a structural action", () => {
+  const calls = [];
+  props.onBeginEditing = jest.fn((finish) => { calls.push("begin"); expect(typeof finish).toBe("function"); });
+  props.onEndEditing = jest.fn((finish, disposed) => { if (!disposed) calls.push("end"); });
+  props.onCommand.mockImplementation((command) => calls.push(command.type));
+  render(<StructuredJsonPanel {...props} />);
+  const field = screen.getByRole("textbox", { name: "Number" });
+  fireEvent.focus(field);
+  fireEvent.change(field, { target: { value: "1" } });
+  fireEvent.change(field, { target: { value: "12" } });
+  expect(props.onBeginEditing).toHaveBeenCalledTimes(1);
+  expect(calls).toEqual(["begin", "setText", "setText"]);
+  fireEvent.blur(field);
+  expect(calls.at(-1)).toBe("end");
+  fireEvent.focus(field);
+  fireEvent.change(field, { target: { value: "123" } });
+  fireEvent.click(screen.getByRole("button", { name: "Wrap in array" }));
+  expect(calls.slice(-4)).toEqual(["begin", "setText", "end", "wrap"]);
+});
+
+test("a failed edit on an earlier selection blocks save, export, and structural actions until corrected", () => {
+  props.onCommand.mockImplementation((command, nodeId) => {
+    if (nodeId === "number-1") throw new Error("Rejected earlier edit");
+  });
+  const { rerender } = render(<StructuredJsonPanel {...props} />);
+  fireEvent.change(screen.getByRole("textbox", { name: "Number" }), { target: { value: "-" } });
+  inspectJsonSelection.mockReturnValue(descriptor({ nodeId: "string-2", kind: "string", text: "next" }));
+  rerender(<StructuredJsonPanel {...props} selectedNode={{}} />);
+  expect(screen.getByRole("textbox", { name: "String" })).toHaveValue("next");
+  expect(screen.getByRole("button", { name: "Export JSON" })).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+  fireEvent.click(screen.getByRole("button", { name: "Wrap in array" }));
+  expect(props.onSaveDraft).not.toHaveBeenCalled();
+  expect(props.onCommand).not.toHaveBeenCalledWith({ type: "wrap", kind: "array" });
+  expect(props.onCommand).toHaveBeenLastCalledWith({ type: "setText", text: "-" }, "number-1");
+  props.onCommand.mockImplementation(() => {});
+  inspectJsonSelection.mockReturnValue(descriptor());
+  rerender(<StructuredJsonPanel {...props} selectedNode={{}} />);
+  expect(screen.getByRole("textbox", { name: "Number" })).toHaveValue("-");
+  fireEvent.change(screen.getByRole("textbox", { name: "Number" }), { target: { value: "12" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+  expect(props.onSaveDraft).toHaveBeenCalledTimes(1);
+  expect(screen.getByRole("button", { name: "Export JSON" })).toBeEnabled();
+});
+
+test("selection and inspector teardown end an owned session without replaying a stale edit", () => {
+  props.onBeginEditing = jest.fn();
+  props.onEndEditing = jest.fn();
+  const { rerender, unmount } = render(<StructuredJsonPanel {...props} />);
+  fireEvent.focus(screen.getByRole("textbox", { name: "Number" }));
+  fireEvent.change(screen.getByRole("textbox", { name: "Number" }), { target: { value: "12" } });
+  const finish = props.onBeginEditing.mock.calls[0][0];
+  inspectJsonSelection.mockReturnValue(descriptor({ nodeId: "other", text: "7" }));
+  rerender(<StructuredJsonPanel {...props} selectedNode={{}} />);
+  expect(props.onEndEditing).toHaveBeenCalledWith(finish);
+  expect(props.onCommand).toHaveBeenCalledTimes(1);
+  unmount();
+  expect(props.onEndEditing).toHaveBeenLastCalledWith(finish, true);
+  expect(props.onCommand).toHaveBeenCalledTimes(1);
+});
+
 test("the real document model supports slots, focused partial text, draft round trips, wrapping and undo", () => {
   const model = jest.requireActual("../structuredJson");
   const documents = jest.requireActual("../graphDocument");

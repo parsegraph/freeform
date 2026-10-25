@@ -11,16 +11,24 @@ and XML export reads the graph's current contents.
 - The root is `#document`.
 - A parent's children occupy a horizontal multislot: the parent connects down
   to a spine of empty buds connected forward, each with its XML child downward.
-  Buds pull downward to keep each child's subtree snug before the next prong
-  is laid out. Downward connections into the multislot and its children use
-  center alignment; forward spine connections stay straight. Nested children
-  use the same pattern. The forward spine preserves document order, including
-  text and whitespace nodes.
+  Buds keep `Fit.EXACT`, pull downward, then call `loosen()` to give the forward
+  spine rectangular clearance around each child's subtree. Separation is loose
+  FORWARD and BACKWARD, independently of the bud's exact node fit; DOWNWARD and
+  UPWARD separation stay exact. Downward connections into the multislot and its
+  children use center alignment; forward spine connections stay straight.
+  Nested children use the same pattern. The forward spine preserves document
+  order, including text and whitespace nodes.
 - An element is labeled `<qualified:name>`. Its attributes start inward and
   form a downward chain of `@qualified:name` nodes, each with its literal value
   to the right. The attribute list is contained inside the element.
 - `#text`, `#cdata`, `#comment`, `#doctype`, and `?target` have a value below.
 - `#xml` represents the optional XML declaration, with attributes inward too.
+
+New XML imports initialize a v1 document so normal save/reload and undo/redo
+preserve this spacing through `separation/1`. The capability stores concrete
+directions, not a link to the pull preference. Export to legacy Parsegraph v0
+loses these separation settings; XML/SVG source export retains the same markup
+regardless of this layout choice.
 
 Text and whitespace inside elements are preserved, including mixed content,
 indentation, empty attributes, and `xml:space`. Namespace declarations and

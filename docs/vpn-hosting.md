@@ -123,7 +123,7 @@ untrusted pull-request branches. The website's pipeline and runtime are separate
 
 ## Manual artifact build
 
-Commit the selected changes, including the exact `parsegraph@7.0.1` dependency
+Commit the selected changes, including the exact `parsegraph@7.1.0` dependency
 and lockfile, without collecting unrelated work. Push the reviewed commit to
 `fritolaptop:repo/freeform.git` and record its full Git SHA. Build that commit in
 a disposable, host-local checkout on fritolaptop, never through SSHFS or from an

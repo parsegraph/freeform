@@ -3,12 +3,13 @@ import { Direction, DirectionNode } from "parsegraph";
 import Color from "parsegraph-color";
 import Viewport from "./Viewport";
 import GraphStack from "../../GraphStack";
-import { graphNodes } from "../../graphDocument";
+import { graphNodes, graphSelection, readGraph, writeGraph } from "../../graphDocument";
 import {
   createJsonDraft,
   createStructuredJson,
   exportStructuredJson,
   inspectJsonSelection,
+  structuredJsonStatus,
 } from "../../structuredJson";
 
 const editors = [];
@@ -255,4 +256,161 @@ test("ordinary graphs keep their existing keyboard behavior", () => {
   expect(press(viewport, "i")).toBe(false);
   expect(history.undoCount()).toBe(0);
   expect(viewport.node().neighbors().hasNode(Direction.INWARD)).toBe(false);
+});
+
+test("edit a configuration, extend a nested task list, and reorder it without replacing existing identities", () => {
+  const original = {
+    name: "demo",
+    enabled: false,
+    jobs: [{ name: "build", steps: ["install", "test"] }],
+    obsolete: true,
+  };
+  const { viewport, history } = editor(createStructuredJson(original));
+  const originalIds = graphNodes(viewport.widget()).map((node) => node.id());
+  const restore = () => {
+    viewport.show(history.widget(), history.viewportData());
+    viewport.moveToId(history.selectedNode());
+  };
+  viewport.setUndo(() => { history.undo(); restore(); });
+  viewport.setRedo(() => { history.redo(); restore(); });
+
+  // Rename a key and edit its string; JSON fields contain decoded text.
+  press(viewport, "i");
+  expect(selected(viewport)).toMatchObject({ kind: "key", text: "name" });
+  const keyId = viewport.node().id();
+  press(viewport, "Enter");
+  text(viewport, "projectName");
+  expect(viewport.node().id()).toBe(keyId);
+  press(viewport, ":");
+  const nameId = viewport.node().id();
+  press(viewport, "Enter");
+  text(viewport, "freeform");
+  expect(viewport.node().id()).toBe(nameId);
+
+  // A value's dead-end down key advances to the next member's key.
+  press(viewport, "j");
+  expect(selected(viewport)).toMatchObject({ kind: "key", text: "enabled" });
+  press(viewport, ":");
+  press(viewport, "Enter");
+  text(viewport, "true");
+  press(viewport, ",");
+  press(viewport, "Enter");
+  text(viewport, "timeout");
+  press(viewport, ":");
+  press(viewport, "3");
+  text(viewport, "30");
+
+  // Enter jobs[0].steps and append a third item to the existing array.
+  press(viewport, "j");
+  expect(selected(viewport)).toMatchObject({ kind: "key", text: "jobs" });
+  press(viewport, ":");
+  press(viewport, "i");
+  expect(selected(viewport).kind).toBe("object");
+  press(viewport, "i");
+  press(viewport, ":");
+  press(viewport, "j");
+  expect(selected(viewport)).toMatchObject({ kind: "key", text: "steps" });
+  press(viewport, ":");
+  press(viewport, "i");
+  expect(selected(viewport).text).toBe("install");
+  press(viewport, "j");
+  expect(selected(viewport).text).toBe("test");
+  press(viewport, ",");
+  press(viewport, '"');
+  text(viewport, "lint");
+  const lintId = viewport.node().id();
+  const extended = {
+    projectName: "freeform", enabled: true, timeout: 30,
+    jobs: [{ name: "build", steps: ["install", "test", "lint"] }], obsolete: true,
+  };
+  expect(exportStructuredJson(viewport.widget())).toEqual(extended);
+
+  // The inspector's Move earlier action uses this same viewport command.
+  expect(selected(viewport).canMoveEarlier).toBe(true);
+  viewport.applyStructuredCommand({ type: "move", offset: -1 });
+  expect(viewport.node().id()).toBe(lintId);
+  expect(exportStructuredJson(viewport.widget()).jobs[0].steps).toEqual(["install", "lint", "test"]);
+  press(viewport, "u");
+  expect(exportStructuredJson(viewport.widget())).toEqual(extended);
+  press(viewport, "y");
+  expect(exportStructuredJson(viewport.widget()).jobs[0].steps).toEqual(["install", "lint", "test"]);
+  expect(viewport.node().id()).toBe(lintId);
+
+  // Leave steps, then insert beside its owning job rather than beside jobs.
+  press(viewport, "o");
+  press(viewport, "o");
+  expect(selected(viewport).kind).toBe("object");
+  press(viewport, ",");
+  press(viewport, "{");
+  press(viewport, "i");
+  press(viewport, "Enter");
+  text(viewport, "name");
+  press(viewport, ":");
+  press(viewport, '"');
+  text(viewport, "preview");
+  press(viewport, ",");
+  press(viewport, "Enter");
+  text(viewport, "steps");
+  press(viewport, ":");
+  press(viewport, "[");
+  press(viewport, "i");
+  press(viewport, '"');
+  text(viewport, "serve");
+
+  const expected = {
+    ...extended,
+    jobs: [
+      { name: "build", steps: ["install", "lint", "test"] },
+      { name: "preview", steps: ["serve"] },
+    ],
+  };
+  expect(exportStructuredJson(viewport.widget())).toEqual(expected);
+  expect(structuredJsonStatus(viewport.widget()).complete).toBe(true);
+  const saved = writeGraph(viewport.widget(), viewport.node(), viewport.toJSON());
+  const restored = readGraph(saved);
+  expect(exportStructuredJson(restored)).toEqual(expected);
+  expect(inspectJsonSelection(restored, graphSelection(saved)).text).toBe("serve");
+  const ids = new Set(graphNodes(restored).map((node) => node.id()));
+  originalIds.forEach((id) => expect(ids.has(id)).toBe(true));
+  expect(viewport.logMessage).not.toHaveBeenCalled();
+});
+
+test("deleting a member value clears it, while deleting its key removes the member and undo restores both", () => {
+  const original = { obsolete: true, keep: "untouched" };
+  const { viewport, history } = editor(createStructuredJson(original));
+  const restore = () => {
+    viewport.show(history.widget(), history.viewportData());
+    viewport.moveToId(history.selectedNode());
+  };
+  viewport.setUndo(() => { history.undo(); restore(); });
+  viewport.setRedo(() => { history.redo(); restore(); });
+  press(viewport, "i");
+  const keyId = viewport.node().id();
+  press(viewport, ":");
+  const valueId = viewport.node().id();
+  press(viewport, "x");
+  expect(selected(viewport)).toMatchObject({ kind: "slot", nodeId: valueId });
+  expect(inspectJsonSelection(viewport.widget(), keyId).text).toBe("obsolete");
+  expect(structuredJsonStatus(viewport.widget()).complete).toBe(false);
+  expect(() => exportStructuredJson(viewport.widget())).toThrow();
+  press(viewport, "u");
+  expect(exportStructuredJson(viewport.widget())).toEqual(original);
+  // JSON undo restores the preceding saved selection, which was the root;
+  // navigating before the first edit does not create a history snapshot.
+  expect(viewport.node()).toBe(viewport.widget());
+  press(viewport, "i");
+  press(viewport, ":");
+  expect(viewport.node().id()).toBe(valueId);
+  press(viewport, "k");
+  expect(viewport.node().id()).toBe(keyId);
+  press(viewport, "x");
+  expect(exportStructuredJson(viewport.widget())).toEqual({ keep: "untouched" });
+  expect(selected(viewport)).toMatchObject({ kind: "key", text: "keep" });
+  press(viewport, "u");
+  expect(exportStructuredJson(viewport.widget())).toEqual(original);
+  expect(graphNodes(viewport.widget()).some((node) => node.id() === keyId)).toBe(true);
+  expect(graphNodes(viewport.widget()).some((node) => node.id() === valueId)).toBe(true);
+  press(viewport, "y");
+  expect(exportStructuredJson(readGraph(writeGraph(viewport.widget())))).toEqual({ keep: "untouched" });
+  expect(viewport.logMessage).not.toHaveBeenCalled();
 });

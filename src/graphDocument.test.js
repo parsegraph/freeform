@@ -1,6 +1,7 @@
 import {
   Direction,
   DirectionNode,
+  Fit,
   serializeParsegraph,
   resolveNodeAppearance,
 } from "parsegraph";
@@ -11,6 +12,7 @@ import {
   graphNodes,
   graphSelection,
   graphViewport,
+  initializeGraphDocument,
 } from "./graphDocument";
 import GraphStack from "./GraphStack";
 import Viewport from "./components/Viewport/Viewport";
@@ -18,6 +20,68 @@ import Color from "parsegraph-color";
 import fixture from "./fixtures/v1/appearance-colors.json";
 
 const copy = (value) => JSON.parse(JSON.stringify(value));
+
+test.each(["structuredJson", "structuredLisp"])(
+  "%s metadata cannot be silently discarded through a v0 export",
+  (language) => {
+    for (const marker of [null, false, 0, { version: 1, nodes: {} }]) {
+      const data = copy(fixture);
+      data.metadata = { freeform: { [language]: marker } };
+      const root = readGraph(data);
+      expect(() => writeGraph(root, null, null, 0)).toThrow("require Parsegraph v1");
+      expect(writeGraph(root, null, null, 1).metadata.freeform[language]).toEqual(marker);
+    }
+  }
+);
+
+test("native imports reject ambiguous language metadata", () => {
+  const data = copy(fixture);
+  data.metadata = { freeform: { structuredJson: null, structuredLisp: null } };
+  expect(() => readGraph(data)).toThrow("one language");
+});
+
+test("builder documents retain node separation in their first history snapshot", () => {
+  const root = new DirectionNode("builder");
+  root.setNodeFit(Fit.EXACT);
+  root.setSeparationFit(Direction.FORWARD, Fit.LOOSE);
+  expect(initializeGraphDocument(root)).toBe(root);
+  const history = new GraphStack();
+  history.save(root);
+  const restored = history.widget();
+  expect(documentState(restored).version).toBe(1);
+  expect(restored.nodeFit()).toBe(Fit.EXACT);
+  expect(restored.separationFit(Direction.FORWARD)).toBe(Fit.LOOSE);
+  expect(restored.separationFit(Direction.DOWNWARD)).toBe(Fit.EXACT);
+});
+
+test("separation and focus follow live nodes through undo, deletion, and clearing", () => {
+  const data = copy(fixture);
+  data.capabilities["separation/1"] = {
+    nodeDirections: { root: ["forward", "backward"], child: ["upward"] },
+  };
+  data.capabilities["focus/1"] = {
+    nodeDirections: { root: ["forward"], child: [] },
+  };
+  const root = readGraph(data);
+  expect(documentState(root).ignoredCapabilities).toEqual([]);
+  const history = new GraphStack();
+  history.save(root);
+  root.setSeparationFit(Direction.FORWARD, Fit.EXACT);
+  root.clearFocus();
+  graphNodes(root).find((node) => node.id() === "child").disconnect();
+  history.save(root);
+  history.undo();
+  const undone = writeGraph(history.widget());
+  expect(undone.capabilities["separation/1"]).toEqual(data.capabilities["separation/1"]);
+  expect(undone.capabilities["focus/1"]).toEqual(data.capabilities["focus/1"]);
+  history.redo();
+  const restored = history.widget();
+  const saved = writeGraph(restored);
+  expect(saved.capabilities["separation/1"]).toEqual({ nodeDirections: { root: ["backward"] } });
+  expect(saved.capabilities["focus/1"]).toEqual({ nodeDirections: {} });
+  restored.setSeparationFit(Direction.BACKWARD, Fit.EXACT);
+  expect(writeGraph(restored).capabilities["separation/1"]).toEqual({ nodeDirections: {} });
+});
 
 test("live module reload keeps document capabilities attached to existing graphs", () => {
   const root = readGraph(fixture);

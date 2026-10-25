@@ -6,7 +6,7 @@ import {
   screen,
   within,
 } from "@testing-library/react";
-import { DirectionNode } from "parsegraph";
+import { Direction, DirectionNode } from "parsegraph";
 import Viewport from "./Viewport/Viewport";
 import {
   graphNodes,
@@ -26,14 +26,25 @@ import {
   writeJsonRecovery,
 } from "../structuredJsonRecovery";
 import galleryFixture from "../fixtures/v1/appearance-colors.json";
+import {
+  applyLispCommand,
+  createStructuredLisp,
+  exportStructuredLisp,
+  structuredLispStatus,
+} from "../structuredLisp";
+import {
+  LISP_RECOVERY_KEY,
+  readLispRecovery,
+  writeLispRecovery,
+} from "../structuredRecovery";
 
 // Exercise App, the actual document chooser/editor/exporter, history, and codecs.
 // Only the WebGL viewport is replaced with an adapter using the real commands.
 jest.mock("./Viewport/Viewport", () =>
   jest.fn().mockImplementation(() => {
     const { graphNodes } = require("../graphDocument");
-    const { applyJsonCommand } = require("../structuredJson");
-    let container, root, selected, onDocumentChange, onSave, onUI;
+    const { applyStructuredCommand } = require("../structuredDocument");
+    let container, root, selected, onDocumentChange, onSave, onUI, historyGrouping;
     let showingUI = false;
     let cam = { cameraX: 0, cameraY: 0, scale: 1 };
     const notify = () => onDocumentChange?.(root, selected);
@@ -85,6 +96,9 @@ jest.mock("./Viewport/Viewport", () =>
       setSaveGraph: (listener) => {
         onSave = listener;
       },
+      setHistoryGrouping: (callbacks) => { historyGrouping = callbacks; },
+      beginHistoryGroup: () => historyGrouping?.begin(root, selected, { cam, showingUI }),
+      endHistoryGroup: () => historyGrouping?.end(),
       setUndo: jest.fn(),
       setRedo: jest.fn(),
       setToggleNodeActions: jest.fn(),
@@ -106,7 +120,7 @@ jest.mock("./Viewport/Viewport", () =>
         const target = nodeId
           ? graphNodes(root).find((node) => node.id() === nodeId)
           : selected;
-        const result = applyJsonCommand(root, target, command);
+        const result = applyStructuredCommand(root, target, command);
         root = result.root;
         selected = result.selectedNode;
         notify();
@@ -168,6 +182,165 @@ function renderApp() {
   const App = require("./App").default;
   return render(<App />);
 }
+
+test("App keeps source edits live while grouping undo and restores clean state after a no-op", () => {
+  renderApp();
+  fireEvent.click(screen.getByRole("button", { name: "New Lisp/Scheme document" }));
+  const viewport = Viewport.mock.results.at(-1).value;
+  const original = writeGraph(viewport.widget());
+  expect(screen.getByText("No unsaved changes")).toBeInTheDocument();
+  act(() => {
+    viewport.beginHistoryGroup();
+    viewport.applyStructuredCommand({ type: "insertSibling" });
+    viewport.applyStructuredCommand({ type: "remove" });
+    viewport.endHistoryGroup();
+  });
+  expect(screen.getByText("No unsaved changes")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Undo", exact: true })).toBeDisabled();
+  const slot = graphNodes(viewport.widget()).find((node) => node.value() === "[value]");
+  act(() => {
+    viewport.moveToId(slot.id());
+    viewport.beginHistoryGroup();
+    viewport.applyStructuredCommand({ type: "setText", text: "a" });
+    viewport.applyStructuredCommand({ type: "setText", text: "answer" });
+    window.dispatchEvent(new Event("pagehide"));
+  });
+  // Recovery still sees the newest text before the insertion session ends.
+  expect(exportStructuredLisp(readGraph(readLispRecovery().document))).toBe("answer");
+  act(() => viewport.endHistoryGroup());
+  expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Undo", exact: true }));
+  expect(writeGraph(viewport.widget())).toMatchObject({ nodes: original.nodes });
+  expect(screen.getByRole("button", { name: "Undo", exact: true })).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: "Redo", exact: true }));
+  expect(exportStructuredLisp(viewport.widget())).toBe("answer");
+});
+
+test("opening an older Lisp row draft removes organizing buds and preserves selection through undo", () => {
+  const root = new DirectionNode("Scheme"); root.setId("document");
+  const row = new DirectionNode(); row.setId("row");
+  const entryA = new DirectionNode(); entryA.setId("entry-a");
+  const entryB = new DirectionNode(); entryB.setId("entry-b");
+  const a = new DirectionNode("alpha"); a.setId("a");
+  const b = new DirectionNode("beta"); b.setId("b");
+  root.connect(Direction.INWARD, row);
+  row.connect(Direction.FORWARD, entryA);
+  entryA.connect(Direction.DOWNWARD, a);
+  entryA.connect(Direction.FORWARD, entryB);
+  entryB.connect(Direction.DOWNWARD, b);
+  Object.defineProperty(root, Symbol.for("parsegraph.freeform.document"), { value: {
+    version: 1, capabilities: {}, metadata: { freeform: { structuredLisp: {
+      version: 1, layout: "source-lines", nodes: {
+        document: { kind: "document", trailing: "\n" },
+        row: { kind: "line" },
+        "entry-a": { kind: "entry", leading: "" },
+        "entry-b": { kind: "entry", leading: " " },
+        a: { kind: "symbol" }, b: { kind: "symbol" },
+      },
+    } } },
+  } });
+  writeLispRecovery(writeGraph(root, entryB, { showingUI: true }, 1));
+  renderApp();
+  fireEvent.click(screen.getByRole("button", { name: "Recover Lisp/Scheme draft" }));
+  const viewport = Viewport.mock.results.at(-1).value;
+  expect(graphNodes(viewport.widget())).toHaveLength(3);
+  expect(viewport.node().id()).toBe("b");
+  expect(exportStructuredLisp(viewport.widget())).toBe("alpha beta\n");
+  act(() => {
+    viewport.beginHistoryGroup();
+    viewport.applyStructuredCommand({ type: "setText", text: "beta" });
+    viewport.endHistoryGroup();
+  });
+  expect(screen.getByRole("button", { name: "Undo", exact: true })).toBeDisabled();
+  fireEvent.change(screen.getByRole("textbox", { name: "Symbol", exact: true }), {
+    target: { value: "updated" },
+  });
+  expect(exportStructuredLisp(viewport.widget())).toBe("alpha updated\n");
+  fireEvent.click(screen.getByRole("button", { name: "Undo", exact: true }));
+  expect(graphNodes(viewport.widget())).toHaveLength(3);
+  expect(viewport.node().id()).toBe("b");
+  expect(exportStructuredLisp(viewport.widget())).toBe("alpha beta\n");
+  act(() => window.dispatchEvent(new Event("pagehide")));
+  expect(graphNodes(readGraph(readLispRecovery().document))).toHaveLength(3);
+});
+
+test("Lisp drafts use the same shell, undo, source export, and focused recovery as JSON", () => {
+  const original = createStructuredLisp('; keep\n(define name "complete")');
+  const string = graphNodes(original).find(
+    (node) => node.value() === '"complete"'
+  );
+  const changed = applyLispCommand(original, string, {
+    type: "setText",
+    text: '"unfinished',
+  });
+  writeLispRecovery(
+    writeGraph(changed.root, changed.selectedNode, { showingUI: true }, 1)
+  );
+  const app = renderApp();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Recover Lisp/Scheme draft" })
+  );
+  expect(
+    screen.getByRole("complementary", { name: "Lisp/Scheme editor" })
+  ).toBeInTheDocument();
+  expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
+    "Untitled.scm"
+  );
+  expect(
+    screen.queryByRole("complementary", { name: "JSON editor" })
+  ).not.toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "Export Lisp/Scheme" })
+  ).toBeDisabled();
+  const field = screen.getByRole("textbox", { name: "String", exact: true });
+  expect(field).toHaveValue('"unfinished');
+  fireEvent.change(field, { target: { value: '"finished"' } });
+  expect(
+    screen.getByRole("button", { name: "Export Lisp/Scheme" })
+  ).toBeEnabled();
+  expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+  act(() => window.dispatchEvent(new Event("pagehide")));
+  expect(
+    exportStructuredLisp(readGraph(readLispRecovery().document))
+  ).toContain('"finished"');
+  fireEvent.click(screen.getByRole("button", { name: "Undo", exact: true }));
+  expect(
+    screen.getByRole("textbox", { name: "String", exact: true })
+  ).toHaveValue('"unfinished');
+  expect(
+    screen.getByRole("button", { name: "Export Lisp/Scheme" })
+  ).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: "Redo", exact: true }));
+  const restored = Viewport.mock.results.at(-1).value.widget();
+  expect(exportStructuredLisp(restored)).toContain("; keep");
+  expect(exportStructuredLisp(restored)).toContain('"finished"');
+  let downloaded;
+  jest
+    .spyOn(HTMLAnchorElement.prototype, "click")
+    .mockImplementation(function () {
+      downloaded = decodeURIComponent(
+        this.getAttribute("href").split(",").slice(1).join(",")
+      );
+    });
+  fireEvent.click(screen.getByRole("button", { name: "Export Lisp/Scheme" }));
+  fireEvent.click(
+    within(screen.getByRole("dialog", { name: "Save a copy" })).getByRole(
+      "button",
+      { name: "Save", exact: true }
+    )
+  );
+  expect(downloaded).toBe(exportStructuredLisp(restored));
+  act(() => window.dispatchEvent(new Event("pagehide")));
+  app.unmount();
+  renderApp();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Recover Lisp/Scheme draft" })
+  );
+  expect(
+    structuredLispStatus(Viewport.mock.results.at(-1).value.widget()).complete
+  ).toBe(true);
+  expect(localStorage.getItem(LISP_RECOVERY_KEY)).not.toBeNull();
+});
 
 test("gallery launch overrides saved examples, preserves capabilities, and reloads until another source opens", async () => {
   localStorage.setItem("parsegraph-example-session", JSON.stringify({
@@ -290,6 +463,79 @@ test("switching documents before the debounce expires flushes the most recent fo
   ).not.toBeInTheDocument();
   expect(Viewport.mock.results.at(-1).value.widget().value()).toBe("ordinary");
   expect(recoveredNumberText()).toBe("-2e");
+  expect(screen.getByText("No unsaved changes")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Undo", exact: true })).toBeDisabled();
+});
+
+test("JSON sidebar sessions keep recovery live and undo all typed text in one step", () => {
+  saveRecovery(); renderApp(); recover();
+  const field = screen.getByRole("textbox", { name: "Number", exact: true });
+  fireEvent.focus(field);
+  for (const value of ["1", "12", "123"]) fireEvent.change(field, { target: { value } });
+  act(() => window.dispatchEvent(new Event("pagehide")));
+  expect(recoveredNumberText()).toBe("123");
+  // Toolbar Undo must finish the focused session even without a blur event.
+  fireEvent.click(screen.getByRole("button", { name: "Undo", exact: true }));
+  expect(screen.getByRole("textbox", { name: "Number", exact: true })).toHaveValue("-");
+  expect(screen.getByRole("button", { name: "Undo", exact: true })).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: "Redo", exact: true }));
+  expect(screen.getByRole("textbox", { name: "Number", exact: true })).toHaveValue("123");
+});
+
+test("a reverted or untouched JSON field session stays clean and preserves redo", () => {
+  saveRecovery(); renderApp(); recover();
+  const download = jest.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+  const saveDraft = () => {
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Save a copy" }))
+      .getByRole("button", { name: "Save", exact: true }));
+  };
+  saveDraft();
+  let field = screen.getByRole("textbox", { name: "Number", exact: true });
+  fireEvent.focus(field);
+  fireEvent.change(field, { target: { value: "-2" } });
+  fireEvent.change(field, { target: { value: "-" } });
+  fireEvent.blur(field);
+  expect(screen.getByText("No unsaved changes")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Undo", exact: true })).toBeDisabled();
+  fireEvent.focus(field);
+  fireEvent.change(field, { target: { value: "12" } });
+  fireEvent.blur(field);
+  fireEvent.click(screen.getByRole("button", { name: "Undo", exact: true }));
+  saveDraft();
+  expect(screen.getByText("No unsaved changes")).toBeInTheDocument();
+  field = screen.getByRole("textbox", { name: "Number", exact: true });
+  fireEvent.focus(field); fireEvent.blur(field);
+  expect(screen.getByText("No unsaved changes")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Redo", exact: true })).toBeEnabled();
+  fireEvent.click(screen.getByRole("button", { name: "Redo", exact: true }));
+  expect(screen.getByRole("textbox", { name: "Number", exact: true })).toHaveValue("12");
+  download.mockRestore();
+});
+
+test("a rejected sidebar draft still blocks toolbar Save and Open after blur", () => {
+  saveRecovery(); renderApp(); recover();
+  const viewport = Viewport.mock.results.at(-1).value;
+  const apply = viewport.applyStructuredCommand;
+  const failing = jest.spyOn(viewport, "applyStructuredCommand").mockImplementation((command, nodeId) => {
+    if (command.text === "rejected") throw new Error("Rejected field text");
+    return apply(command, nodeId);
+  });
+  const field = screen.getByRole("textbox", { name: "Number", exact: true });
+  fireEvent.focus(field);
+  fireEvent.change(field, { target: { value: "rejected" } });
+  fireEvent.blur(field);
+  fireEvent.click(screen.getByRole("button", { name: "Save", exact: true }));
+  expect(screen.queryByRole("dialog", { name: "Save a copy" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Open", exact: true }));
+  expect(screen.queryByRole("dialog", { name: "New document" })).not.toBeInTheDocument();
+  expect(field).toHaveValue("rejected");
+  expect(screen.getByRole("alert")).toHaveTextContent("Rejected field text");
+  fireEvent.change(field, { target: { value: "12" } });
+  fireEvent.blur(field);
+  fireEvent.click(screen.getByRole("button", { name: "Save", exact: true }));
+  expect(screen.getByRole("dialog", { name: "Save a copy" })).toBeInTheDocument();
+  failing.mockRestore();
 });
 
 test("pagehide flushes a focused unfinished token before the debounce expires", () => {

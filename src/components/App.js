@@ -9,8 +9,14 @@ import {
   nodeLabel,
 } from "../graphDocument";
 import { isStructuredJson } from "../structuredJson";
-import { readJsonRecovery, writeJsonRecovery } from "../structuredJsonRecovery";
+import { isStructuredLisp, upgradeLispLayout } from "../structuredLisp";
+import { isStructuredDocument } from "../structuredDocument";
+import {
+  readStructuredRecovery,
+  writeStructuredRecovery,
+} from "../structuredRecovery";
 import StructuredJsonPanel from "./StructuredJsonPanel";
+import StructuredLispPanel from "./StructuredLispPanel";
 import GraphStack from "../GraphStack";
 import "./App.css";
 import Viewport from "./Viewport/Viewport";
@@ -79,6 +85,35 @@ function App() {
   );
 
   const [needsSave, setNeedsSave] = useState(false);
+  const needsSaveRef = useRef(needsSave);
+  needsSaveRef.current = needsSave;
+  const editGroupDirty = useRef(false);
+  const sidebarEditing = useRef(null);
+  const sidebarHistoryGroup = useRef(null);
+  const finishStructuredEditing = useCallback(() => {
+    if (sidebarEditing.current?.() === false) return false;
+    const finish = viewport.finishStructuredEditing ?? viewport.finishLispSourceInput;
+    return finish?.call(viewport) !== false;
+  }, [viewport]);
+  const beginSidebarEditing = useCallback((finish) => {
+    if (sidebarEditing.current && sidebarEditing.current !== finish &&
+        sidebarEditing.current() === false) return false;
+    const finishViewport = viewport.finishStructuredEditing ?? viewport.finishLispSourceInput;
+    if (finishViewport?.call(viewport) === false) return false;
+    sidebarEditing.current = finish;
+    sidebarHistoryGroup.current = finish;
+    viewport.beginHistoryGroup?.();
+    return true;
+  }, [viewport]);
+  const endSidebarEditing = useCallback((finish, disposed = false) => {
+    if (sidebarHistoryGroup.current === finish) {
+      sidebarHistoryGroup.current = null;
+      viewport.endHistoryGroup?.();
+    }
+    // A blurred field can still have rejected text. Keep its flush callback
+    // until unmount so toolbar actions cannot export an older accepted value.
+    if (disposed && sidebarEditing.current === finish) sidebarEditing.current = null;
+  }, [viewport]);
   const [documentName, setDocumentName] = useState("Untitled graph");
   const [selection, setSelection] = useState(null);
   const [developerOpen, setDeveloperOpen] = useState(false);
@@ -91,13 +126,7 @@ function App() {
   const [documentInfo, setDocumentInfo] = useState(null);
   const [structuredView, setStructuredView] = useState(null);
   const [recoveryRevision, setRecoveryRevision] = useState(0);
-  const [recoveryState, setRecoveryState] = useState(() => {
-    try {
-      return { recovery: readJsonRecovery(), error: null };
-    } catch (error) {
-      return { recovery: null, error: error.message };
-    }
-  });
+  const [recoveryState, setRecoveryState] = useState(readStructuredRecovery);
   const [recoveryMessage, setRecoveryMessage] = useState("");
 
   const [autopublish, setAutopublish] = useState(false);
@@ -116,16 +145,16 @@ function App() {
     (dontTouchCamera, benchmark) => {
       setHasWidget(graphs.hasWidget());
       if (graphs.hasWidget()) {
-        const root = attachBenchmark(
-          measureBenchmark(benchmark, "Display reconstruction", () =>
-            graphs.widget()
-          ),
-          benchmark
+        const displayed = measureBenchmark(
+          benchmark,
+          "Display reconstruction",
+          () => upgradeLispLayout(graphs.widget(), graphs.selectedNode())
         );
+        const root = attachBenchmark(displayed.root, benchmark);
         measureBenchmark(benchmark, "Viewport setup", () => {
           viewport.show(root, graphs.viewportData());
           setDocumentInfo(documentState(root));
-          viewport.moveToId(graphs.selectedNode());
+          viewport.moveToId(displayed.selectedNode?.id() ?? graphs.selectedNode());
           if (!dontTouchCamera) {
             viewport.showInCamera();
           }
@@ -162,11 +191,13 @@ function App() {
   }, [graphs, roomName, viewport]);
 
   const openImportModal = () => {
+    if (!finishStructuredEditing()) return;
     setExportModalOpen(false);
     setImportModalOpen((old) => !old);
   };
 
   const openExportModal = () => {
+    if (!finishStructuredEditing()) return;
     setExportModalFormat("parsegraph");
     setImportModalOpen(false);
     setExportModalOpen((old) => !old);
@@ -176,18 +207,18 @@ function App() {
 
   useEffect(() => {
     viewport.setOnDocumentChange?.((root, node) => {
-      setStructuredView(isStructuredJson(root) ? { root, node } : null);
+      setStructuredView(isStructuredDocument(root) ? { root, node } : null);
       setSelection(node ? { label: nodeLabel(node), id: node.id() } : null);
     });
     return () => viewport.setOnDocumentChange?.(null);
   }, [viewport]);
 
-  const persistJsonDraft = useCallback(() => {
+  const persistStructuredDraft = useCallback(() => {
     const root = viewport.widget();
-    if (!isStructuredJson(root)) return;
+    if (!isStructuredDocument(root)) return;
     try {
       const document = writeGraph(root, viewport.node(), viewport.toJSON(), 1);
-      const savedAt = writeJsonRecovery(document);
+      const savedAt = writeStructuredRecovery(document);
       setRecoveryState({ recovery: { document, savedAt }, error: null });
       setRecoveryMessage("Draft recovery saved in this browser.");
     } catch (error) {
@@ -200,18 +231,18 @@ function App() {
   const structuredRoot = structuredView?.root;
   useEffect(() => {
     if (!structuredRoot) return;
-    const timer = setTimeout(persistJsonDraft, 300);
+    const timer = setTimeout(persistStructuredDraft, 300);
     const onVisibility = () => {
-      if (document.visibilityState === "hidden") persistJsonDraft();
+      if (document.visibilityState === "hidden") persistStructuredDraft();
     };
-    window.addEventListener("pagehide", persistJsonDraft);
+    window.addEventListener("pagehide", persistStructuredDraft);
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
       clearTimeout(timer);
-      window.removeEventListener("pagehide", persistJsonDraft);
+      window.removeEventListener("pagehide", persistStructuredDraft);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [structuredRoot, persistJsonDraft, recoveryRevision]);
+  }, [structuredRoot, persistStructuredDraft, recoveryRevision]);
 
   const structuredCommand = useCallback(
     (command, nodeId) => {
@@ -221,6 +252,7 @@ function App() {
   );
 
   const structuredExport = (format) => {
+    if (!finishStructuredEditing()) return;
     setExportModalFormat(format);
     setExportModalOpen(true);
   };
@@ -287,9 +319,22 @@ function App() {
       documentURL = null,
       name = null
     ) => {
+      if (!finishStructuredEditing()) return;
+      sidebarEditing.current = null;
+      sidebarHistoryGroup.current = null;
       // Flush before switching even when the debounced recovery write has not run.
-      persistJsonDraft();
+      persistStructuredDraft();
       const benchmark = benchmarkFor(graph);
+      if (isStructuredLisp(graph)) {
+        const opened = upgradeLispLayout(
+          graph,
+          selectedNode ?? documentState(graph)?.metadata?.freeform?.selectedNode
+        );
+        if (opened.root !== graph) {
+          graph = attachBenchmark(opened.root, benchmark);
+          if (selectedNode !== null) selectedNode = opened.selectedNode;
+        }
+      }
       setInitialSession(null);
       setInitialDocument(null);
       setRoomName(roomName);
@@ -302,7 +347,11 @@ function App() {
                 .split("/")
                 .pop()
             : roomName ||
-              (isStructuredJson(graph) ? "Untitled.json" : "Untitled graph"))
+              (isStructuredJson(graph)
+                ? "Untitled.json"
+                : isStructuredLisp(graph)
+                ? "Untitled.scm"
+                : "Untitled graph"))
       );
       viewport.container()?.focus();
       graphs.clear();
@@ -328,7 +377,7 @@ function App() {
         window.history.replaceState(window.history.state, "", url);
       }
     },
-    [graphs, viewport, refresh, persistJsonDraft]
+    [graphs, viewport, refresh, persistStructuredDraft, finishStructuredEditing]
   );
 
   useEffect(() => {
@@ -337,6 +386,7 @@ function App() {
   }, [viewport, exampleSource]);
 
   const undo = useCallback(() => {
+    if (!finishStructuredEditing()) return;
     if (graphs.undoCount() <= 0) return;
     graphs.undo();
     refreshUndoCounts();
@@ -345,9 +395,10 @@ function App() {
       publish();
     }
     refresh(true);
-  }, [autopublish, publish, graphs, refresh, refreshUndoCounts]);
+  }, [autopublish, publish, graphs, refresh, refreshUndoCounts, finishStructuredEditing]);
 
   const redo = useCallback(() => {
+    if (!finishStructuredEditing()) return;
     if (graphs.redoCount() <= 0) return;
     graphs.redo();
     refreshUndoCounts();
@@ -356,7 +407,7 @@ function App() {
       publish();
     }
     refresh(true);
-  }, [autopublish, publish, graphs, refresh, refreshUndoCounts]);
+  }, [autopublish, publish, graphs, refresh, refreshUndoCounts, finishStructuredEditing]);
 
   useEffect(() => {
     if (!graphs) {
@@ -381,7 +432,7 @@ function App() {
       return;
     }
     viewport.setSaveGraph((graph, selectedNode) => {
-      if (isStructuredJson(graph))
+      if (isStructuredDocument(graph))
         setRecoveryRevision((revision) => revision + 1);
       if (!viewport.showingStyling()) {
         graphs.save(graph, selectedNode, viewport.toJSON());
@@ -392,6 +443,17 @@ function App() {
       } else {
         setNeedsSave(true);
       }
+    });
+    viewport.setHistoryGrouping?.({
+      begin: (graph, node, data) => {
+        editGroupDirty.current = needsSaveRef.current;
+        graphs.beginGroup(graph, node, data);
+      },
+      end: () => {
+        const changed = graphs.endGroup();
+        if (changed !== undefined) setNeedsSave(editGroupDirty.current || changed);
+        refreshUndoCounts();
+      },
     });
     viewport.setUndo(undo);
     viewport.setRedo(redo);
@@ -488,6 +550,7 @@ function App() {
   }, [viewport, setShowingUI]);
 
   const toggleMode = (editing) => {
+    if (!finishStructuredEditing()) return;
     viewport.hideEditor?.();
     if (editing) viewport.rendering().showUI();
     else viewport.rendering().hideUI();
@@ -500,6 +563,9 @@ function App() {
     viewport.container()?.focus();
   };
   const sidePanelOpen = hasWidget && (showingUI || developerOpen);
+  const StructuredPanel = isStructuredLisp(structuredView?.root)
+    ? StructuredLispPanel
+    : StructuredJsonPanel;
 
   return (
     <div
@@ -512,6 +578,9 @@ function App() {
         name={documentName}
         modified={needsSave}
         structured={!!structuredView}
+        language={
+          isStructuredLisp(structuredView?.root) ? "LISP / SCHEME" : "JSON"
+        }
         editing={showingUI}
         onMode={toggleMode}
         onOpen={openImportModal}
@@ -699,21 +768,25 @@ function App() {
                   )}
                 </div>
               ) : structuredView ? (
-                <StructuredJsonPanel
+                <StructuredPanel
                   root={structuredView.root}
                   selectedNode={structuredView.node}
                   onEditValue={(nodeId) => {
                     viewport.moveToId(nodeId);
                     viewport.showEditor();
                   }}
+                  onTypeSource={() => viewport.showLispSourceInput()}
                   onFinishEditing={() => {
                     viewport.hideEditor();
                     viewport.container()?.focus();
                   }}
+                  onBeginEditing={beginSidebarEditing}
+                  onEndEditing={endSidebarEditing}
                   onCommand={structuredCommand}
                   onSelect={(nodeId) => viewport.moveToId(nodeId)}
                   onSaveDraft={() => structuredExport("parsegraph")}
                   onExportJson={() => structuredExport("json")}
+                  onExportLisp={() => structuredExport("lisp")}
                   recoveryMessage={recoveryMessage}
                 />
               ) : (

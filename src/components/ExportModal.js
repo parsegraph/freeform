@@ -3,6 +3,7 @@ import { useState } from "react";
 import * as exporters from "../exporters";
 import { writeGraph, documentState } from "../graphDocument";
 import { isStructuredJson } from "../structuredJson";
+import { isStructuredLisp } from "../structuredLisp";
 
 import "./modal.css";
 import { PUBLIC_SERVERS } from "../settings";
@@ -47,7 +48,9 @@ function ExportForm({
   initialFormat,
   documentName,
 }) {
-  const structured = isStructuredJson(graph);
+  const json = isStructuredJson(graph);
+  const lisp = isStructuredLisp(graph);
+  const structured = json || lisp;
   const [exportType, setExportType] = useState(initialFormat || "parsegraph");
   const [name, setName] = useState(
     documentName ||
@@ -67,11 +70,27 @@ function ExportForm({
   const performExport = () => {
     setExportError(null);
     try {
+      if (
+        structured &&
+        ![
+          "parsegraph",
+          json ? "json" : "lisp",
+          ...(PUBLIC_SERVERS ? ["public"] : []),
+        ].includes(exportType)
+      )
+        throw new Error(
+          "Save this structured document as a native draft or export its source format."
+        );
       switch (exportType) {
         case "lisp":
           const tokens = [];
           exporters.exportGraphToLisp(graph, tokens);
-          download(addExtension(name, ".lisp"), tokens.join(""));
+          download(
+            /\.(?:lisp|lsp|scm|ss|sld|scheme)$/i.test(name)
+              ? name
+              : addExtension(name, lisp ? ".scm" : ".lisp"),
+            tokens.join("")
+          );
           break;
         case "json":
           download(
@@ -181,19 +200,21 @@ function ExportForm({
               </option>
               <option value="words">Words</option>
               <option value="lines">Lines</option>
-              <option value="lisp">Lisp</option>
+              <option value="lisp">Lisp / Scheme</option>
               <option value="xml">XML</option>
               <option value="svg">SVG (from XML graph)</option>
             </>
           )}
-          <option value="json">JSON</option>
+          {lisp && <option value="lisp">Lisp / Scheme</option>}
+          {!lisp && <option value="json">JSON</option>}
           {PUBLIC_SERVERS && <option value="public">Public</option>}
         </select>
       </label>
       {structured && (
         <p className="document-note">
-          A Parsegraph draft preserves unfinished slots and editing state. JSON
-          export requires complete values and writes formatted source.
+          A Parsegraph draft preserves unfinished slots and editing state.{" "}
+          {lisp ? "Lisp/Scheme" : "JSON"} export requires complete{" "}
+          {lisp ? "forms" : "values"} and writes formatted source.
         </p>
       )}
       {(exportType === "xml" || exportType === "svg") && (

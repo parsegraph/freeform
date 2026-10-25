@@ -109,6 +109,7 @@ export function EditorHeader({
   name,
   modified,
   structured,
+  language = "JSON",
   editing,
   onMode,
   onOpen,
@@ -149,7 +150,7 @@ export function EditorHeader({
         <span className="document-kind">
           {hasDocument
             ? structured
-              ? "JSON DOCUMENT"
+              ? `${language} DOCUMENT`
               : "GRAPH DOCUMENT"
             : "GRAPH EDITOR"}
         </span>

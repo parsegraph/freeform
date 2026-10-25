@@ -1,5 +1,5 @@
 import { DirectionCaret, DirectionNode, Direction } from "parsegraph";
-import { tokenize } from "parsegraph-anthonylisp";
+import { createStructuredLisp } from "../structuredLisp";
 
 function graphLines(input) {
   const car = new DirectionCaret();
@@ -76,66 +76,8 @@ function graphJson(data) {
   }
 }
 
-function graphLispTokens(tokens, given) {
-  let token = tokens.shift();
-  if (token.val === "(") {
-    const car = new DirectionCaret();
-    car.spawnMove("i");
-    car.shrink();
-    car.crease();
-    let newLined = false;
-    car.push();
-    let first = true;
-    while (tokens.length > 1 && tokens[0].val !== ")") {
-      if (tokens[0].val === "\n") {
-        tokens.shift();
-        newLined = true;
-        continue;
-      }
-      const child = graphLispTokens(tokens, first ? car.node() : null);
-      first = false;
-      if (newLined) {
-        car.pop();
-        car.spawnMove("d");
-        car.push();
-        car.connectMove("f", child);
-        newLined = false;
-      } else if (child !== car.node()) {
-        car.connectMove("f", child);
-      }
-    }
-    tokens.shift();
-    //car.connectMove('f', new DirectionNode(endToken.val));
-    return car.root();
-  } else if (given) {
-    given.setValue(token.val);
-    return given;
-  }
-  return new DirectionNode(token.val);
-}
-
 function graphLisp(input) {
-  const tokens = tokenize(input);
-  while (tokens.length > 0 && tokens[0].val === "\n") {
-    tokens.shift();
-  }
-  let node = graphLispTokens(tokens);
-  const root = node;
-  while (tokens.length > 0) {
-    const child = new DirectionNode();
-    const rv = graphLispTokens(tokens, child);
-    if (child === rv) {
-      node.connect(Direction.DOWNWARD, child);
-    } else {
-      child.connect(Direction.FORWARD, rv);
-      node.connect(Direction.DOWNWARD, child);
-    }
-    node = child;
-    while (tokens.length > 0 && tokens[0].val === "\n") {
-      tokens.shift();
-    }
-  }
-  return root;
+  return createStructuredLisp(input);
 }
 
 const extractPngChunks = require("png-chunks-extract");

@@ -8,6 +8,11 @@ import { exportGraphToSvg } from "../xmlGraph";
 import { TextDecoder, TextEncoder } from "util";
 import { benchmarkFor, cancelBenchmark, getBenchmarkRuns } from "../benchmark";
 import { exportStructuredJson, isStructuredJson, structuredJsonStatus } from "../structuredJson";
+import {
+  exportStructuredLisp,
+  isStructuredLisp,
+  structuredLispStatus,
+} from "../structuredLisp";
 
 jest.mock("../examples", () => ({
   createExample: jest.fn((type, options) => ({ type, ...options })),
@@ -281,6 +286,65 @@ test("JSON file import retains empty containers and opens with grammar-aware edi
   expect(exportStructuredJson(openGraph.mock.calls[0][0])).toEqual({ object: {}, array: [], text: "", value: null });
   expect(openGraph.mock.calls[0][5]).toBe(true);
   expect(openGraph.mock.calls[0][7]).toBe("empty.json");
+});
+
+test("new Lisp/Scheme documents start as editable native drafts", () => {
+  const openGraph = jest.fn();
+  render(<ImportModal openGraph={openGraph} />);
+  fireEvent.click(
+    screen.getByRole("button", { name: "New Lisp/Scheme document" })
+  );
+  const call = openGraph.mock.calls[0];
+  expect(isStructuredLisp(call[0])).toBe(true);
+  expect(structuredLispStatus(call[0])).toMatchObject({
+    validStructure: true,
+    complete: false,
+  });
+  expect(call[5]).toBe(true);
+  expect(call[7]).toBe("Untitled.scm");
+});
+
+test.each(["scm", "ss", "sld", "lisp", "lsp", "scheme"])(
+  ".%s import opens a structured Lisp/Scheme document",
+  async (extension) => {
+    const openGraph = jest.fn();
+    render(<ImportModal openGraph={openGraph} />);
+    fireEvent.click(screen.getByRole("button", { name: "Open", exact: true }));
+    const file = new File([""], `source.${extension}`);
+    const source = "; keep\r\n(define value\r\n\t#xFF)\r\n\r\n'(a . b)\r\n";
+    file.text = jest
+      .fn()
+      .mockResolvedValue(source);
+    fireEvent.change(screen.getByLabelText("Choose file"), {
+      target: { files: [file] },
+    });
+    expect(screen.getByRole("combobox")).toHaveValue("lisp");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Import", exact: true })
+    );
+    await waitFor(() => expect(openGraph).toHaveBeenCalledTimes(1));
+    const call = openGraph.mock.calls[0];
+    expect(isStructuredLisp(call[0])).toBe(true);
+    expect(exportStructuredLisp(call[0])).toBe(source);
+    expect(call[5]).toBe(true);
+    expect(call[7]).toBe(`source.${extension}`);
+  }
+);
+
+test("unsupported Lisp reader syntax leaves the chooser open with a useful error", async () => {
+  const openGraph = jest.fn();
+  render(<ImportModal openGraph={openGraph} />);
+  fireEvent.click(screen.getByRole("button", { name: "Open", exact: true }));
+  const file = new File([""], "source.scm");
+  file.text = jest.fn().mockResolvedValue("#.(run-command)");
+  fireEvent.change(screen.getByLabelText("Choose file"), {
+    target: { files: [file] },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Import", exact: true }));
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    /Could not open file/
+  );
+  expect(openGraph).not.toHaveBeenCalled();
 });
 
 test("a cancelled example load cannot replace a subsequently opened file", async () => {

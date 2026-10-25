@@ -67,14 +67,18 @@ Actions depend on the selected node's role:
 - Wrap an existing value in an array or object, preserving the value.
 - Paste JSON into a selected value position.
 
-Each structured command is one undo operation. Selection, camera navigation,
+Each structural command is one undo operation. Selection, camera navigation,
 and presentation still use Freeform's existing graph viewer. Structural edits
 must pass through the semantic commands; arbitrary connections cannot safely
 be treated as JSON content.
 
 Text is committed as it is typed, including incomplete numeric input, so focused
-fields are included in recovery. This first iteration records individual input
-changes in undo history.
+fields are included in recovery. Each inline or inspector text-editing session
+is one undo operation, ending on Enter, Escape (inline), or leaving the field.
+Undo restores the value and selection from the start of that session. Opening a
+field without changing it, or changing it back before finishing, preserves the
+redo history. Structural actions end the text session before making their own
+undo operation.
 
 Select an editable value and press **Enter**, or choose **Edit in graph**, to
 open a matching textbox over the node. Enter finishes editing and returns focus
@@ -167,6 +171,21 @@ spine, with FORWARD prongs. Array prongs hold values. Object prongs hold keys,
 with each key's value DOWNWARD. Prongs are centered and buds pull toward their
 children. Nested containers apply the same mapping.
 
+After building each spine, its buds use `DirectionCaret.pull(FORWARD)` followed
+by `loosen()`. This reserves rectangular space along the DOWNWARD/UPWARD axis
+so neighboring prongs do not interlock. The buds retain `Fit.EXACT` for their
+combined contours; separation fit is independent of node fit. Native v1 drafts
+save this spacing through `separation/1`. Child subtrees whose contours are
+already rectangular may keep the same spacing; the difference appears when
+exact contours would otherwise let neighboring prongs interlock.
+
+Structured edits preserve all directional separation choices on surviving node
+IDs, including manually tightened buds and dormant directions. New buds get
+the loose spine default. Existing drafts keep their stored spacing when edited.
+Edits also preserve `focus/1` intent, including explicit body-only focus. If
+reparenting makes a focused direction point toward the new parent, only that
+direction is removed. These preferences do not add camera behavior.
+
 Each container shrinks its first INWARD bud with `DirectionCaret.shrink()`
 (currently 0.85). The whole multislot inherits that scale: sibling entries stay
 the same size, and an object's key and value shrink together. Each further
@@ -191,7 +210,9 @@ XML/SVG and other importers do not yet use the JSON slot editor.
 
 JSON import currently uses `JSON.parse`, and export regenerates JSON. Original
 whitespace, escape spelling, numeric spelling, and duplicate source keys are not
-preserved; JavaScript numeric precision limits also apply. This is structural
+preserved; JavaScript numeric precision limits also apply. Integer-like object
+keys follow JavaScript's numeric-key order on export, even if reordered in the
+graph. This is structural
 editing, not a byte-preserving source editor. A schema-aware layer for required
 properties, domain-specific types, or numeric ranges is also future work.
 

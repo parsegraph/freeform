@@ -9,11 +9,11 @@ import {
   exportStructuredJson,
   inspectJsonSelection,
 } from "../../structuredJson";
+import { createStructuredLisp, exportStructuredLisp } from "../../structuredLisp";
 
 const editors = [];
 
-function editor(value) {
-  const root = createStructuredJson(value);
+function editor(value, root = createStructuredJson(value)) {
   let publishedRoot = root;
   const viewport = new Viewport();
   viewport.scheduleRepaint = jest.fn();
@@ -40,6 +40,24 @@ function editor(value) {
   viewport.setSaveGraph((graph, node) =>
     history.save(graph, node, viewport.toJSON())
   );
+  viewport.setHistoryGrouping({
+    begin: (graph, node, data) => history.beginGroup(graph, node, data),
+    end: () => history.endGroup(),
+  });
+  viewport.setUndo(() => {
+    if (history.undoCount()) {
+      history.undo();
+      viewport.show(history.widget(), history.viewportData());
+      viewport.moveToId(history.selectedNode());
+    }
+  });
+  viewport.setRedo(() => {
+    if (history.redoCount()) {
+      history.redo();
+      viewport.show(history.widget(), history.viewportData());
+      viewport.moveToId(history.selectedNode());
+    }
+  });
   const result = {
     viewport,
     root,
@@ -257,4 +275,91 @@ test("blur ends editing without stealing the next control's focus", () => {
   expect(field).not.toBeInTheDocument();
   expect(button).toHaveFocus();
   button.remove();
+});
+
+test("a JSON key rename is one undo and retains the key selection", () => {
+  const { viewport, history } = editor({ name: "demo", enabled: true });
+  const selected = graphNodes(viewport.widget()).find((node) => node.value() === '"name"');
+  viewport.selectNode(selected);
+  viewport.showEditor();
+  const field = viewport._inlineEditor.element;
+  for (const value of ["", "t", "title"]) fireEvent.input(field, { target: { value } });
+  expect(exportStructuredJson(viewport.widget())).toEqual({ title: "demo", enabled: true });
+  key(field, "Enter");
+  expect(history.undoCount()).toBe(1);
+  viewport.undo();
+  expect(exportStructuredJson(viewport.widget())).toEqual({ name: "demo", enabled: true });
+  expect(viewport.node().id()).toBe(selected.id());
+  viewport.redo();
+  expect(exportStructuredJson(viewport.widget())).toEqual({ title: "demo", enabled: true });
+});
+
+test("a no-op inline session after undo preserves redo", () => {
+  const { viewport, history } = editor("before");
+  viewport.showEditor();
+  fireEvent.input(viewport._inlineEditor.element, { target: { value: "after" } });
+  // Toolbar Undo can arrive while the editor is still active.
+  viewport.undo();
+  expect(viewport.showingEditor()).toBe(false);
+  expect(exportStructuredJson(viewport.widget())).toBe("before");
+  expect(history.redoCount()).toBe(1);
+  viewport.showEditor();
+  const field = viewport._inlineEditor.element;
+  fireEvent.input(field, { target: { value: "temporary" } });
+  fireEvent.input(field, { target: { value: "before" } });
+  key(field, "Escape");
+  expect(history.undoCount()).toBe(0);
+  expect(history.redoCount()).toBe(1);
+  viewport.redo();
+  expect(exportStructuredJson(viewport.widget())).toBe("after");
+});
+
+test("partial numbers remain live native drafts while an edit is grouped", () => {
+  const { viewport, history } = editor(12);
+  viewport.showEditor();
+  const field = viewport._inlineEditor.element;
+  fireEvent.input(field, { target: { value: "-" } });
+  fireEvent.input(field, { target: { value: "-1e" } });
+  const restored = readGraph(writeGraph(viewport.widget(), viewport.node(), viewport.toJSON(), 1));
+  expect(inspectJsonSelection(restored, restored)).toMatchObject({ kind: "number", text: "-1e", isSlot: true });
+  expect(() => exportStructuredJson(restored)).toThrow();
+  key(field, "Escape");
+  expect(history.undoCount()).toBe(1);
+  viewport.undo();
+  expect(exportStructuredJson(viewport.widget())).toBe(12);
+});
+
+test("rejected text stays in its field until it can be applied", () => {
+  const { viewport, history } = editor("before");
+  viewport.logMessage = jest.fn();
+  viewport.showEditor();
+  const field = viewport._inlineEditor.element;
+  const apply = jest.spyOn(viewport, "applyStructuredCommand").mockReturnValue(false);
+  fireEvent.input(field, { target: { value: "retained" } });
+  key(field, "Enter");
+  expect(field).toBeInTheDocument();
+  expect(field).toHaveValue("retained");
+  expect(field.validationMessage).toMatch(/still here/);
+  viewport.undo();
+  expect(field).toBeInTheDocument();
+  apply.mockRestore();
+  key(field, "Escape");
+  expect(field).not.toBeInTheDocument();
+  expect(exportStructuredJson(viewport.widget())).toBe("retained");
+  expect(history.undoCount()).toBe(1);
+});
+
+test("raw Lisp token editing also groups history without changing source input behavior", () => {
+  const { viewport, history } = editor(null, createStructuredLisp("(display value)\n"));
+  const token = graphNodes(viewport.widget()).find((node) => node.value() === "value");
+  viewport.selectNode(token);
+  viewport.showEditor();
+  const field = viewport._inlineEditor.element;
+  for (const value of ["", "r", "result"]) fireEvent.input(field, { target: { value } });
+  key(field, "Enter");
+  expect(exportStructuredLisp(viewport.widget())).toBe("(display result)\n");
+  expect(history.undoCount()).toBe(1);
+  viewport.undo();
+  expect(exportStructuredLisp(viewport.widget())).toBe("(display value)\n");
+  expect(viewport.node().id()).toBe(token.id());
 });

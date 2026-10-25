@@ -1,5 +1,12 @@
-import { Alignment, Direction, DirectionNode, Fit } from "parsegraph";
+import {
+  Alignment,
+  Direction,
+  DirectionCaret,
+  DirectionNode,
+  Fit,
+} from "parsegraph";
 import { measureBenchmark } from "./benchmark";
+import { initializeGraphDocument } from "./graphDocument";
 
 const XML_SPACE = "[\\x20\\t\\r\\n]";
 const DECLARATION = new RegExp(
@@ -195,7 +202,10 @@ function appendChild(previous, node, first = false) {
   bud.connect(Direction.DOWNWARD, node);
   bud.neighbors().align(Direction.DOWNWARD, Alignment.CENTER);
   bud.setNodeFit(Fit.EXACT);
-  bud.siblings().pull(Direction.DOWNWARD);
+  const caret = new DirectionCaret(bud);
+  caret.pull(Direction.DOWNWARD);
+  // Keep detailed contours, but reserve rectangular clearance along the spine.
+  caret.loosen();
   return bud;
 }
 
@@ -252,7 +262,7 @@ export function graphXml(input, benchmark) {
       previous = appendChild(previous, node, previous === parent);
     }
   }
-  return root;
+  return initializeGraphDocument(root);
 }
 
 const DIRECTIONS = [

@@ -27,15 +27,19 @@ import ViewportRendering from "./ViewportRendering";
 import ViewportInput from "./ViewportInput";
 import ViewportCameraTravel from "./ViewportCameraTravel";
 import ViewportInlineEditor from "./ViewportInlineEditor";
+import ViewportLispSourceInput from "./ViewportLispSourceInput";
 import { handleStructuredJsonKey } from "./structuredJsonKeys";
+import { handleStructuredLispKey } from "./structuredLispKeys";
 import Carousel from "../Carousel";
 import { documentState, ensureStringIds } from "../../graphDocument";
 import {
-  applyJsonCommand,
-  inspectJsonSelection,
-  isStructuredJson,
-} from "../../structuredJson";
+  applyStructuredCommand as runStructuredCommand,
+  inspectStructuredSelection,
+  isStructuredDocument,
+  structuredDocumentAdapter,
+} from "../../structuredDocument";
 import { jsonNodeAppearance } from "../../structuredJsonAppearance";
+import { lispNodeAppearance } from "../../structuredLispAppearance";
 import { benchmarkFor, measureBenchmark } from "../../benchmark";
 import {
   interactionRecording,
@@ -301,6 +305,18 @@ export default class Viewport {
     this._saveGraph = saveGraph;
   }
 
+  setHistoryGrouping(callbacks) {
+    this._historyGrouping = callbacks;
+  }
+
+  beginHistoryGroup() {
+    this._historyGrouping?.begin(this.widget(), this.node(), this.toJSON());
+  }
+
+  endHistoryGroup() {
+    this._historyGrouping?.end();
+  }
+
   setOnDocumentChange(listener) {
     this._onDocumentChange = listener;
     this.notifyDocumentChange(true);
@@ -308,6 +324,7 @@ export default class Viewport {
 
   notifyDocumentChange(force = false) {
     this._inlineEditor?.update();
+    this._sourceInput?.update();
     if (!this._onDocumentChange) return;
     const root = this.widget();
     const node = root ? this.node() : null;
@@ -324,9 +341,17 @@ export default class Viewport {
     const target =
       nodeId === undefined ? this.node() : findNodeById(root, nodeId);
     if (!target) throw new Error("This entry is no longer in the document.");
-    const result = applyJsonCommand(root, target, command);
+    const result = runStructuredCommand(root, target, command);
     if (command.type === "setText") this.cancelCameraTravel();
     const keepSelection = nodeId !== undefined && nodeId !== currentId;
+    return this.applyStructuredResult(result, {
+      selectionId: keepSelection ? currentId : result.selectedNode.id(),
+      ensureVisible: command.type !== "setText",
+    });
+  }
+
+  applyStructuredResult(result, { selectionId = result.selectedNode.id(), ensureVisible = false } = {}) {
+    const root = this.widget();
     // A semantic edit stays in the current document. Retain its camera and
     // completed display while laying out the replacement graph.
     const styles = new Map();
@@ -337,12 +362,12 @@ export default class Viewport {
     result.root.paintGroup().forEach((group) => group.siblings().forEach((node) => {
       if (styles.has(node.id())) this._nodeStyles.set(node, styles.get(node.id()));
     }));
-    const selection = findNodeById(result.root, keepSelection ? currentId : result.selectedNode.id());
+    const selection = findNodeById(result.root, selectionId);
     if (selection) this._userCaret.moveTo(selection);
     this._nodeNavigationRequested = false;
     this._showInCamera = false;
     this._checkScale = false;
-    this._ensureVisible = command.type !== "setText";
+    this._ensureVisible = ensureVisible;
     const renderer = this.rendering();
     renderer?.replaceDocumentRoot?.();
     this.save();
@@ -412,9 +437,9 @@ export default class Viewport {
   }
 
   removeNode() {
-    if (isStructuredJson(this.widget())) {
+    if (isStructuredDocument(this.widget())) {
       try {
-        const selected = inspectJsonSelection(this.widget(), this.node());
+        const selected = inspectStructuredSelection(this.widget(), this.node());
         this.applyStructuredCommand({ type: selected.removeAction || "clear" });
       } catch (error) {
         this.logMessage(error.message);
@@ -494,7 +519,7 @@ export default class Viewport {
   }
 
   spawnMove(dir, pullIfOccupied, dontTouchCamera) {
-    if (isStructuredJson(this.widget())) {
+    if (isStructuredDocument(this.widget())) {
       // Directional input navigates the representation; only semantic commands
       // create content in a structured document.
       this.moveToNeighbor(dir);
@@ -773,12 +798,14 @@ export default class Viewport {
   }
 
   undo() {
+    if (!this.finishStructuredEditing()) return;
     if (this._undo) {
       this._undo();
     }
   }
 
   redo() {
+    if (!this.finishStructuredEditing()) return;
     if (this._redo) {
       this._redo();
     }
@@ -871,6 +898,7 @@ export default class Viewport {
       const more = this.rendering().crank();
       this.rendering().present();
       this._inlineEditor?.update();
+      this._sourceInput?.update();
       if (more || this.rendering().continueLatestFrame()) {
         this.updateStatus();
         if (attempts++ > MAX_RENDER_ATTEMPTS) {
@@ -936,6 +964,7 @@ export default class Viewport {
     );
     measureInteraction("Frame presentation", () => this.rendering().present());
     this._inlineEditor?.update();
+    this._sourceInput?.update();
     if (recording) {
       recordInteraction("slice", {
         durationMs: performance.now() - sliceStart,
@@ -1039,7 +1068,8 @@ export default class Viewport {
   }
 
   show(widget, viewport) {
-    this._inlineEditor?.close(false);
+    this._sourceInput?.discard();
+    this._inlineEditor?.discard();
     if (this._showEditor && this._editorContainer) this.hideEditor();
     if (!widget) {
       throw new Error("Refusing to show falsy widget");
@@ -1065,7 +1095,7 @@ export default class Viewport {
       this.load(viewport);
     }
     this._appearanceChanged = false;
-    const structured = isStructuredJson(widget);
+    const structured = isStructuredDocument(widget);
     if (this._carouselRoot && this._carouselStructured !== structured) {
       this._carouselStructured = structured;
       this._carouselRoot.render(<Carousel viewport={this} />);
@@ -1117,7 +1147,7 @@ export default class Viewport {
   }
 
   applyEditorValue() {
-    if (isStructuredJson(this.widget())) {
+    if (isStructuredDocument(this.widget())) {
       try {
         this.applyStructuredCommand({
           type: "setText",
@@ -1163,6 +1193,10 @@ export default class Viewport {
 
   hideEditor() {
     this._suspendedEditor = null;
+    if (this._sourceInput?.active()) {
+      this._sourceInput.close(true);
+      return;
+    }
     if (this._inlineEditor?.active()) {
       this._inlineEditor.close(true);
       return;
@@ -1180,7 +1214,8 @@ export default class Viewport {
   }
 
   showEditor() {
-    if (isStructuredJson(this.widget())) {
+    if (this._sourceInput?.active() && !this._sourceInput.close(false)) return;
+    if (isStructuredDocument(this.widget())) {
       this._inlineEditor ??= new ViewportInlineEditor(this);
       try {
         if (!this._inlineEditor.open()) this.rendering()?.showUI();
@@ -1212,13 +1247,32 @@ export default class Viewport {
   }
 
   canEditStructuredValue() {
-    if (!isStructuredJson(this.widget())) return false;
-    try { return inspectJsonSelection(this.widget(), this.node()).canEdit; }
+    if (!isStructuredDocument(this.widget())) return false;
+    try { return inspectStructuredSelection(this.widget(), this.node()).canEdit; }
     catch { return false; }
   }
 
+  showLispSourceInput(options) {
+    if (structuredDocumentAdapter(this.widget())?.id !== "lisp") return false;
+    if (this._inlineEditor?.active() && !this._inlineEditor.close(false)) return false;
+    this._sourceInput ??= new ViewportLispSourceInput(this);
+    try { return this._sourceInput.open(options); }
+    catch (error) { this.logMessage(error.message); return false; }
+  }
+
+  finishLispSourceInput() {
+    return !this._sourceInput?.active() || this._sourceInput.close(false);
+  }
+
+  finishStructuredEditing() {
+    if (!this.finishLispSourceInput()) return false;
+    return !this._inlineEditor?.active() || this._inlineEditor.close(false);
+  }
+
   handleStructuredKey(event) {
-    return handleStructuredJsonKey(this, event);
+    return structuredDocumentAdapter(this.widget())?.id === "lisp"
+      ? handleStructuredLispKey(this, event)
+      : handleStructuredJsonKey(this, event);
   }
 
   toggleEditor() {
@@ -1251,7 +1305,8 @@ export default class Viewport {
   getNodeStyle(node) {
     node = node ?? this.node();
     let curStyle = this._nodeStyles.get(node);
-    const appearance = jsonNodeAppearance(this.widget(), node);
+    const appearance = jsonNodeAppearance(this.widget(), node)
+      ?? lispNodeAppearance(this.widget(), node);
     if (curStyle === undefined && !appearance) {
       return this.defaultNodeStyle();
     }
@@ -1330,7 +1385,7 @@ export default class Viewport {
   }
 
   showingEditor() {
-    return this._showEditor || !!this._inlineEditor?.active();
+    return this._showEditor || !!this._inlineEditor?.active() || !!this._sourceInput?.active();
   }
 
   ensuringVisible() {

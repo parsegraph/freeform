@@ -122,7 +122,7 @@ export const TEMPLATE_CATALOG = [
     id: "lisp",
     name: "Sample Lisp",
     category: "Documents",
-    description: "Follow the structure of a Lisp program.",
+    description: "Edit Scheme-style forms, lists, and literal values.",
   },
   {
     id: "svg",

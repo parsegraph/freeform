@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { readGraph, graphViewport, graphSelection } from "../graphDocument";
 import { createJsonDraft, createStructuredJson } from "../structuredJson";
+import { createLispDraft } from "../structuredLisp";
 
 import * as importers from "../importers";
 
@@ -71,7 +72,14 @@ function ImportFromFile({ openGraph, onClose }) {
             openFile(build(() => importers.graphWords(text)));
             break;
           case "lisp":
-            openFile(build(() => importers.graphLisp(text)));
+            openFile(
+              build(() => importers.graphLisp(text)),
+              null,
+              null,
+              undefined,
+              null,
+              true
+            );
             break;
           case "json": {
             const data = measureBenchmark(benchmark, "JSON parsing", () =>
@@ -135,6 +143,11 @@ function ImportFromFile({ openGraph, onClose }) {
           setImportType("jpeg");
           break;
         case "lisp":
+        case "scm":
+        case "ss":
+        case "sld":
+        case "scheme":
+        case "lsp":
           setImportType("lisp");
           break;
         case "parsegraph":
@@ -184,7 +197,7 @@ function ImportFromFile({ openGraph, onClose }) {
           {importData ? importName ?? "File selected" : "Choose file"}
         </strong>
         <span className="document-file-hint">
-          Parsegraph, JSON, XML, SVG, text, or image metadata
+          Parsegraph, JSON, Lisp/Scheme, XML, SVG, text, or image metadata
         </span>
       </label>
       <input
@@ -203,7 +216,7 @@ function ImportFromFile({ openGraph, onClose }) {
           <option value="words">Words</option>
           <option value="parsegraph">Parsegraph</option>
           <option value="lines">Lines</option>
-          <option value="lisp">Lisp</option>
+          <option value="lisp">Lisp / Scheme</option>
           <option value="json">JSON</option>
           <option value="xml">XML / SVG</option>
           <option value="png">PNG</option>
@@ -214,6 +227,12 @@ function ImportFromFile({ openGraph, onClose }) {
         <p className="document-note">
           Preserves text and whitespace. External DOCTYPEs are kept as data;
           custom DTDs and entity declarations are unsupported.
+        </p>
+      )}
+      {importType === "lisp" && (
+        <p className="document-note">
+          Edit Scheme-style forms while preserving source line breaks, spacing,
+          comments, and literal spellings. Unsupported reader syntax is reported.
         </p>
       )}
       {importError && <p role="alert">Could not open file: {importError}</p>}
@@ -423,6 +442,33 @@ function ImportFromTemplate({ openGraph, onClose }) {
           <strong>New JSON document</strong>
           <span>Build structured content with editable slots.</span>
         </button>
+        <button
+          className="document-start"
+          type="button"
+          disabled={loading}
+          aria-label="New Lisp/Scheme document"
+          onClick={() =>
+            openGraph(
+              createLispDraft(),
+              null,
+              null,
+              undefined,
+              null,
+              true,
+              null,
+              "Untitled.scm"
+            )
+          }
+        >
+          <span
+            className="document-start-icon document-start-lisp"
+            aria-hidden="true"
+          >
+            ( )
+          </span>
+          <strong>New Lisp/Scheme document</strong>
+          <span>Compose forms, lists, and editable slots.</span>
+        </button>
       </div>
       <form
         className="document-form document-examples"
@@ -490,7 +536,10 @@ function ImportFromTemplate({ openGraph, onClose }) {
           )}
           {importType === "proportion_v1" && (
             <div className="template-column-options">
-              <label id="template-columns-label" htmlFor="template-columns-slider">
+              <label
+                id="template-columns-label"
+                htmlFor="template-columns-slider"
+              >
                 Columns
               </label>
               <input
@@ -562,6 +611,10 @@ export default function ImportModal({
 }) {
   const [activeTab, setActiveTab] = useState("template");
   const [loadError, setLoadError] = useState(null);
+  const recoveryLanguage =
+    recovery?.document?.metadata?.freeform?.structuredLisp !== undefined
+      ? "Lisp/Scheme"
+      : "JSON";
 
   useEffect(() => {
     if (initialDocument != null || !initialSession) return;
@@ -659,9 +712,9 @@ export default function ImportModal({
       {recoveryError && <p role="alert">{recoveryError}</p>}
       {recovery && (
         <div className="document-recovery">
-          <span>Your last JSON draft is available.</span>
+          <span>Your last {recoveryLanguage} draft is available.</span>
           <button type="button" onClick={onRestoreRecovery}>
-            Recover JSON draft
+            Recover {recoveryLanguage} draft
           </button>
         </div>
       )}

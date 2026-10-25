@@ -4,8 +4,84 @@ import fixture from "../fixtures/v1/appearance-colors.json";
 import { readGraph } from "../graphDocument";
 import { graphXml } from "../xmlGraph";
 import { createJsonDraft, createStructuredJson, structuredJsonStatus } from "../structuredJson";
+import {
+  createLispDraft,
+  createStructuredLisp,
+  exportStructuredLisp,
+  structuredLispStatus,
+} from "../structuredLisp";
 
 afterEach(() => jest.restoreAllMocks());
+
+test("Lisp/Scheme source export preserves comments and numeric spelling with its filename", () => {
+  const source = "; keep\r\n(define value\r\n\t#xFF)\r\n\r\n'(a . b)\r\n";
+  const root = createStructuredLisp(source);
+  let downloaded;
+  let filename;
+  jest
+    .spyOn(HTMLAnchorElement.prototype, "click")
+    .mockImplementation(function () {
+      downloaded = decodeURIComponent(
+        this.getAttribute("href").split(",").slice(1).join(",")
+      );
+      filename = this.getAttribute("download");
+    });
+  render(
+    <ExportModal
+      graph={root}
+      viewport={{}}
+      initialFormat="lisp"
+      documentName="source.scm"
+    />
+  );
+  expect(
+    screen.queryByRole("option", { name: "JSON", exact: true })
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("option", { name: /legacy/ })
+  ).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Save", exact: true }));
+  expect(downloaded).toBe(exportStructuredLisp(root));
+  expect(downloaded).toBe(source);
+  expect(downloaded).toContain("; keep");
+  expect(downloaded).toContain("#xFF");
+  expect(filename).toBe("source.scm");
+});
+
+test("unfinished Lisp forms block source downloads but save as native drafts", () => {
+  const root = createLispDraft();
+  const downloads = [];
+  jest
+    .spyOn(HTMLAnchorElement.prototype, "click")
+    .mockImplementation(function () {
+      downloads.push(
+        decodeURIComponent(
+          this.getAttribute("href").split(",").slice(1).join(",")
+        )
+      );
+    });
+  const onExport = jest.fn();
+  render(
+    <ExportModal
+      graph={root}
+      viewport={{ node: () => root, toJSON: () => ({}) }}
+      initialFormat="lisp"
+      onExport={onExport}
+    />
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Save", exact: true }));
+  expect(screen.getByRole("alert")).toHaveTextContent(/draft/i);
+  expect(downloads).toHaveLength(0);
+  expect(onExport).not.toHaveBeenCalled();
+  fireEvent.change(screen.getByRole("combobox"), {
+    target: { value: "parsegraph" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save", exact: true }));
+  expect(downloads).toHaveLength(1);
+  expect(
+    structuredLispStatus(readGraph(JSON.parse(downloads[0])))
+  ).toMatchObject({ validStructure: true, complete: false });
+});
 
 test("incomplete JSON blocks source export but can be downloaded as a recoverable v1 draft", () => {
   const root = createJsonDraft();

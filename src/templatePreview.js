@@ -3,6 +3,8 @@ import Color from "parsegraph-color";
 import { documentState, nodeLabel, presentationStyle } from "./graphDocument";
 import { createLegacyLayout } from "./graphLayout";
 import { createDocumentLayout } from "./graphPresentation";
+import { jsonNodeAppearance } from "./structuredJsonAppearance";
+import { lispNodeAppearance } from "./structuredLispAppearance";
 import {
   BORDER_ROUNDEDNESS,
   BORDER_THICKNESS,
@@ -221,6 +223,7 @@ export function renderTemplatePreview(
     const id = String(node.id());
     const style = {
       ...defaults,
+      ...(jsonNodeAppearance(graph, node) ?? lispNodeAppearance(graph, node)),
       ...(own(appearance?.nodeStyles, id) ? appearance.nodeStyles[id] : {}),
       ...(own(viewportData?.styles, id) ? viewportData.styles[id] : {}),
     };

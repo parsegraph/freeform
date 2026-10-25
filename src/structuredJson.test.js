@@ -1,6 +1,8 @@
 import {
   Alignment,
+  CommitLayout,
   Direction,
+  DirectionCaret,
   DirectionNode,
   Fit,
   SHRINK_SCALE,
@@ -526,6 +528,213 @@ test("semantic edits preserve surviving node scale, fit, and edge alignment", ()
     Alignment.POSITIVE
   );
   expect(exportStructuredJson(result.root)).toEqual({ renamed: [1, 2] });
+});
+
+test("editing JSON preserves container and explicit paint groups without uncreasing their ordinary members", () => {
+  let root = createStructuredJson({ service: { port: 3000 }, routes: ["/", "/health"] });
+  const port = graphNodes(root).find((node) => node.value() === "3000");
+  port.paintGroups().crease();
+  const groups = () => graphNodes(root).filter((node) => node.paintGroups().isPaintGroup()).map((node) => node.id()).sort();
+  const before = groups();
+  expect(before.length).toBeGreaterThan(3);
+  for (const text of ["3001", "8080"]) {
+    root = applyJsonCommand(root, port.id(), { type: "setText", text }).root;
+    expect(groups()).toEqual(before);
+    root = readGraph(writeGraph(root));
+    expect(groups()).toEqual(before);
+  }
+});
+
+test("promoting an entry to the first position retains the new INWARD paint group", () => {
+  for (const command of [{ type: "move", offset: 1 }, { type: "remove" }]) {
+    const original = createStructuredJson([1, 2]);
+    const root = applyJsonCommand(original, first(original), command).root;
+    expect(inward(root).paintGroups().isPaintGroup()).toBe(true);
+    expect(inward(readGraph(writeGraph(root))).paintGroups().isPaintGroup()).toBe(true);
+  }
+  const original = createStructuredJson([1, 2]);
+  inward(original).paintGroups().uncrease();
+  const edited = applyJsonCommand(original, first(original), { type: "setText", text: "10" }).root;
+  expect(inward(edited).paintGroups().isPaintGroup()).toBe(false);
+});
+
+test("a configuration refactor preserves nested identities, validates drafts, and survives native history", () => {
+  const input = {
+    service: { name: "worker", port: 3000, enabled: true },
+    routes: [{ path: "/old", method: "GET" }, { path: "/health", method: "GET" }],
+    deprecated: "remove me",
+  };
+  const original = createStructuredJson(input);
+  let root = original;
+  const at = (path) => graphNodes(root).find((node) => inspectJsonSelection(root, node).path === path);
+  const serviceKey = at('$["service"].key').id();
+  const service = at('$["service"]').id();
+  const nameKey = at('$["service"]["name"].key').id();
+  const name = at('$["service"]["name"]').id();
+  const port = at('$["service"]["port"]').id();
+  const enabled = at('$["service"]["enabled"]').id();
+  const routes = at('$["routes"]').id();
+  const oldRoute = at('$["routes"][0]').id();
+  const deprecated = at('$["deprecated"].key').id();
+  const healthIds = graphNodes(root).filter((node) => inspectJsonSelection(root, node).path.startsWith('$["routes"][1]')).map((node) => node.id());
+  const history = new GraphStack();
+  history.save(root, root);
+  const edit = (id, command) => {
+    const changed = applyJsonCommand(root, id, command);
+    history.save(changed.root, changed.selectedNode);
+    root = readGraph(JSON.parse(JSON.stringify(writeGraph(changed.root))));
+    return changed.selectedNode.id();
+  };
+  edit(serviceKey, { type: "setText", text: "app" });
+  expect(at('$["app"]').id()).toBe(service);
+  edit(name, { type: "setText", text: "api" });
+  edit(port, { type: "setText", text: "1e" });
+  expect(structuredJsonStatus(root)).toMatchObject({ validStructure: true, complete: false, slotCount: 1 });
+  expect(() => exportStructuredJson(root)).toThrow(/finite JSON number/);
+  edit(port, { type: "setText", text: "8080" });
+  edit(enabled, { type: "replace", kind: "boolean", text: "false" });
+  edit(nameKey, { type: "setText", text: "port" });
+  expect(() => exportStructuredJson(root)).toThrow(/Duplicate key/);
+  edit(nameKey, { type: "setText", text: "label" });
+  const retryKey = edit(service, { type: "add" });
+  edit(retryKey, { type: "setText", text: "retry" });
+  edit(inspectJsonSelection(root, retryKey).valueNodeId, { type: "paste", text: '{"attempts":3,"delayMs":250}' });
+  edit(retryKey, { type: "move", offset: -1 });
+  const wrappedKey = edit(routes, { type: "wrap", kind: "object" });
+  expect(structuredJsonStatus(root).complete).toBe(false);
+  edit(wrappedKey, { type: "setText", text: "items" });
+  const addedRoute = edit(oldRoute, { type: "insertSibling", offset: 1 });
+  edit(addedRoute, { type: "paste", text: '{"path":"/v2","method":"POST"}' });
+  edit(addedRoute, { type: "move", offset: -1 });
+  edit(oldRoute, { type: "remove" });
+  edit(deprecated, { type: "remove" });
+  const expected = {
+    app: { label: "api", port: 8080, retry: { attempts: 3, delayMs: 250 }, enabled: false },
+    routes: { items: [{ path: "/v2", method: "POST" }, { path: "/health", method: "GET" }] },
+  };
+  expect(exportStructuredJson(root)).toEqual(expected);
+  expect(Object.keys(exportStructuredJson(root).app)).toEqual(["label", "port", "retry", "enabled"]);
+  expect(at('$["routes"]["items"]').id()).toBe(routes);
+  expect(graphNodes(root).map((node) => node.id())).toEqual(expect.arrayContaining(healthIds));
+  while (history.undoCount()) history.undo();
+  expect(exportStructuredJson(history.widget())).toEqual(input);
+  while (history.redoCount()) history.redo();
+  expect(exportStructuredJson(history.widget())).toEqual(expected);
+  expect(exportStructuredJson(original)).toEqual(input);
+});
+
+test("new vertical multislots reserve space along the spine without loosening their node fit", () => {
+  const root = createStructuredJson({ items: [1, { nested: [2, 3] }], other: 4 });
+  for (const bud of nodesOfKind(root, "entry")) {
+    expect(bud.nodeFit()).toBe(Fit.EXACT);
+    expect(bud.separationFit(Direction.DOWNWARD)).toBe(Fit.LOOSE);
+    expect(bud.separationFit(Direction.UPWARD)).toBe(Fit.LOOSE);
+    expect(bud.separationFit(Direction.FORWARD)).toBe(Fit.EXACT);
+    expect(bud.separationFit(Direction.BACKWARD)).toBe(Fit.EXACT);
+  }
+});
+
+test("semantic edits and reordering preserve tightened and dormant separation settings while new buds get defaults", () => {
+  let root = createStructuredJson([1, 2]);
+  const [firstBud, secondBud] = entryBuds(root);
+  const firstId = first(root).id();
+  new DirectionCaret(firstBud).tighten();
+  firstBud.setSeparationFit(Direction.BACKWARD, Fit.LOOSE);
+  secondBud.setSeparationFit(Direction.FORWARD, Fit.LOOSE);
+  const directions = [Direction.DOWNWARD, Direction.UPWARD, Direction.FORWARD, Direction.BACKWARD];
+  const settings = new Map(entryBuds(root).map((bud) => [
+    bud.id(), directions.map((direction) => bud.separationFit(direction)),
+  ]));
+  root = applyJsonCommand(root, firstId, { type: "setText", text: "10" }).root;
+  root = applyJsonCommand(root, firstId, { type: "move", offset: 1 }).root;
+  root = applyJsonCommand(root, firstId, { type: "insertSibling", offset: 1 }).root;
+  const buds = entryBuds(root);
+  for (const bud of buds.filter((item) => settings.has(item.id()))) {
+    expect(directions.map((direction) => bud.separationFit(direction))).toEqual(settings.get(bud.id()));
+  }
+  const added = buds.find((bud) => !settings.has(bud.id()));
+  expect(directions.map((direction) => added.separationFit(direction)))
+    .toEqual([Fit.LOOSE, Fit.LOOSE, Fit.EXACT, Fit.EXACT]);
+  expect(added.nodeFit()).toBe(Fit.EXACT);
+  expect(exportStructuredJson(applyJsonCommand(root, forward(added), {
+    type: "replace", kind: "number", text: "3",
+  }).root)).toEqual([2, 10, 3]);
+});
+
+test("draft reconstruction retains live separation and focus settings instead of stale capability records", () => {
+  const original = createStructuredJson([1, 2]);
+  const selected = first(original);
+  const budId = inward(original).id();
+  new DirectionCaret(inward(original)).tighten();
+  original.setFocus(Direction.INWARD);
+  selected.setFocus();
+  let root = readGraph(JSON.parse(JSON.stringify(writeGraph(original))));
+  root = applyJsonCommand(root, selected.id(), { type: "setText", text: "10" }).root;
+  expect(inward(root).id()).toBe(budId);
+  expect(inward(root).separationFit(Direction.DOWNWARD)).toBe(Fit.EXACT);
+  expect(inward(root).separationFit(Direction.UPWARD)).toBe(Fit.EXACT);
+  expect(root.focusDirections()).toEqual([Direction.INWARD]);
+  expect(first(root).focusDirections()).toEqual([]);
+  let saved = writeGraph(root);
+  expect(saved.capabilities["focus/1"].nodeDirections).toEqual({
+    [root.id()]: ["inward"], [selected.id()]: [],
+  });
+  expect(saved.capabilities["separation/1"].nodeDirections).not.toHaveProperty(budId);
+  root.clearFocus();
+  root = applyJsonCommand(root, selected.id(), { type: "setText", text: "11" }).root;
+  saved = writeGraph(root);
+  expect(saved.capabilities["focus/1"].nodeDirections).toEqual({ [selected.id()]: [] });
+  const restored = readGraph(JSON.parse(JSON.stringify(saved)));
+  expect(restored.focusDirections()).toBeUndefined();
+  expect(first(restored).focusDirections()).toEqual([]);
+  expect(inward(restored).separationFit(Direction.DOWNWARD)).toBe(Fit.EXACT);
+  expect(exportStructuredJson(restored)).toEqual([11, 2]);
+});
+
+test("wrapping keeps focus intent except directions that become parent-facing", () => {
+  const original = createStructuredJson(1);
+  original.setFocus(Direction.BACKWARD, Direction.DOWNWARD);
+  const { root } = applyJsonCommand(original, original, { type: "wrap", kind: "array" });
+  expect(root.focusDirections()).toBeUndefined();
+  expect(first(root).id()).toBe(original.id());
+  expect(first(root).focusDirections()).toEqual([Direction.DOWNWARD]);
+  const restored = readGraph(writeGraph(root));
+  expect(first(restored).focusDirections()).toEqual([Direction.DOWNWARD]);
+  expect(exportStructuredJson(restored)).toEqual([1]);
+});
+
+test("loose vertical multislot separation prevents exact-contour prongs from interlocking", () => {
+  const root = createStructuredJson({ long: 1, short: 2 });
+  // Loose-fit child contours are already rectangular. Exact contours expose
+  // the interlocking case without changing the JSON topology or centering.
+  graphNodes(root).forEach((node) => node.setNodeFit(Fit.EXACT));
+  const buds = entryBuds(root);
+  const keys = buds.map(forward);
+  const values = keys.map(down);
+  const sizes = new Map([
+    [keys[0], [100, 10]], [keys[1], [20, 10]],
+    [values[0], [10, 100]], [values[1], [10, 100]],
+  ]);
+  const commit = () => {
+    const layout = new CommitLayout(root, {
+      size: (node, out) => {
+        const size = sizes.get(node) ?? [10, 10];
+        out[0] = size[0]; out[1] = size[1];
+      },
+    });
+    let steps = 0;
+    while (layout.crank()) expect(++steps).toBeLessThan(10000);
+  };
+  const spacing = () => buds[1].layout().absoluteY() - buds[0].layout().absoluteY();
+  commit();
+  const looseSpacing = spacing();
+  const prongPositions = [...keys, ...values].map((node) => [node.neighbors().parentX(), node.neighbors().parentY()]);
+  buds.forEach((bud) => new DirectionCaret(bud).tighten());
+  commit();
+  expect(looseSpacing).toBeGreaterThan(spacing());
+  expect([...keys, ...values].map((node) => [node.neighbors().parentX(), node.neighbors().parentY()]))
+    .toEqual(prongPositions);
+  expect(buds.every((bud) => bud.nodeFit() === Fit.EXACT)).toBe(true);
 });
 
 test("container contents shrink once per nesting level, with equally sized siblings and key/value pairs", () => {

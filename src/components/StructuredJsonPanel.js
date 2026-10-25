@@ -25,6 +25,8 @@ export default function StructuredJsonPanel({
   recoveryMessage,
   onEditValue,
   onFinishEditing,
+  onBeginEditing,
+  onEndEditing,
 }) {
   const inspection = useMemo(
     () => inspect(root, selectedNode),
@@ -53,6 +55,16 @@ export default function StructuredJsonPanel({
     dirty: false,
   }));
   const editRef = useRef(edit);
+  const editing = useRef(false);
+  const editingCallbacks = useRef({ onBeginEditing, onEndEditing });
+  editingCallbacks.current = { onBeginEditing, onEndEditing };
+  const finishRef = useRef(() => true);
+  const finishSession = useCallback(() => finishRef.current(), []);
+  const endSession = useCallback(() => {
+    if (!editing.current) return;
+    editing.current = false;
+    editingCallbacks.current.onEndEditing?.(finishSession);
+  }, [finishSession]);
 
   const updateEdit = useCallback((next) => {
     editRef.current = next;
@@ -86,22 +98,50 @@ export default function StructuredJsonPanel({
     [onCommand, updateEdit]
   );
 
+  const commitAll = useCallback(() => {
+    for (const pending of [...drafts.current.values()]) {
+      if (!commit(pending)) return false;
+    }
+    return commit();
+  }, [commit]);
+  finishRef.current = () => {
+    if (!commitAll()) return false;
+    endSession();
+    return true;
+  };
+  const beginSession = () => {
+    if (editing.current) return true;
+    editing.current = true;
+    if (editingCallbacks.current.onBeginEditing?.(finishSession) === false) {
+      editing.current = false;
+      return false;
+    }
+    return true;
+  };
+  // Never replay an old field into another document during inspector teardown.
+  // Accepted text already lives in the graph and recovery record.
+  useLayoutEffect(() => () => {
+    endSession();
+    editingCallbacks.current.onEndEditing?.(finishSession, true);
+  }, [endSession, finishSession]);
+
   // A graph click can change selection before an input's blur event arrives.
   // Commit against the original node ID, never against the new selection.
   useLayoutEffect(() => {
     const previous = editRef.current;
     if (previous.nodeId !== nodeId) {
       commit(previous);
+      endSession();
       updateEdit(
         drafts.current.get(nodeId) ?? { nodeId, text: sourceText, dirty: false }
       );
     } else if (!previous.dirty && previous.text !== sourceText) {
       updateEdit({ nodeId, text: sourceText, dirty: false });
     }
-  }, [nodeId, sourceText, commit, updateEdit]);
+  }, [nodeId, sourceText, commit, updateEdit, endSession]);
 
   const run = (action) => {
-    if (!commit()) return false;
+    if (!finishSession()) return false;
     try {
       if (action() === false) return false;
       setError(null);
@@ -113,16 +153,22 @@ export default function StructuredJsonPanel({
   };
   const command = (value) => run(() => onCommand(value));
   const changeText = (event) => {
+    const started = beginSession();
     const next = { nodeId, text: event.target.value, dirty: true };
     drafts.current.set(nodeId, next);
     updateEdit(next);
     // Unfinished tokens are document content, including while this field has
     // focus. Recovery and Undo must capture them without waiting for blur.
-    commit(next);
+    if (started) commit(next);
+  };
+  const blurText = () => {
+    commit();
+    endSession();
   };
   const finishTextEdit = (element) => {
     if (!commit(editRef.current, selection?.kind === "key" && selection.isSlot))
       return;
+    if (!finishSession()) return;
     element?.blur();
     onFinishEditing?.();
   };
@@ -233,8 +279,9 @@ export default function StructuredJsonPanel({
                     id="structured-json-text"
                     value={edit.text}
                     onChange={changeText}
+                    onFocus={beginSession}
                     onKeyDown={handleTextKeyDown}
-                    onBlur={() => commit()}
+                    onBlur={blurText}
                     rows={3}
                     spellCheck={false}
                   />
@@ -245,8 +292,9 @@ export default function StructuredJsonPanel({
                     inputMode={selection.kind === "number" ? "decimal" : "text"}
                     value={edit.text}
                     onChange={changeText}
+                    onFocus={beginSession}
                     onKeyDown={handleTextKeyDown}
-                    onBlur={() => commit()}
+                    onBlur={blurText}
                     spellCheck={false}
                     autoComplete="off"
                   />
@@ -446,7 +494,7 @@ export default function StructuredJsonPanel({
             </button>
             <button
               type="button"
-              disabled={!status.complete || edit.dirty}
+              disabled={!status.complete || edit.dirty || drafts.current.size > 0}
               onClick={() => run(onExportJson)}
             >
               Export JSON

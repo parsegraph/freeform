@@ -1,10 +1,10 @@
 import { Direction } from "parsegraph";
 import "./Carousel.css";
 import { DONT_TOUCH_CAMERA } from "../settings";
-import { isStructuredJson } from "../structuredJson";
+import { isStructuredDocument } from "../structuredDocument";
 
 export default function Carousel({ viewport }) {
-  if (isStructuredJson(viewport.widget())) return null;
+  if (isStructuredDocument(viewport.widget())) return null;
   return (
     <>
       <button

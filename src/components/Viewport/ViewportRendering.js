@@ -2,7 +2,6 @@ import {
   Direction,
   CommitLayout,
   LayoutPhase,
-  Alignment,
   Axis,
   getDirectionAxis,
   directionSign,
@@ -993,7 +992,7 @@ export default class ViewportRendering {
       return dirty;
     }
 
-    const { glyphPainter } = this._painters.get(pg);
+    const { glyphPainter, textLayouts } = this._painters.get(pg);
     if (!glyphPainter) {
       return false;
     }
@@ -1018,47 +1017,35 @@ export default class ViewportRendering {
         if (!nodeHasValue(node)) {
           return;
         }
-        const kind = jsonNodeKind(this.widget(), node);
         if (!this.collectWorldLabel(node, node.value().toString(), cam, renderData) && !this._frame?.textImage) {
           const style = this.viewport().getNodeStyle(node);
-          const nodeSize = [0, 0];
-          node.layout().size(nodeSize);
           this.drawText(
-            node.value(),
+            textLayouts.get(node),
             node.layout().absoluteX(),
             node.layout().absoluteY(),
             node.layout().absoluteScale(),
-            `${FONT_SIZE}px sans-serif`,
             Color.fromHex(style.textColor)
               .setA(style.textAlpha)
-              .asRGBA(),
-            node.neighbors().hasNode(Direction.INWARD),
-            nodeSize,
-            node.neighbors().getAlignment(Direction.INWARD) === Alignment.INWARD_VERTICAL,
-            hasJsonNodeBorder(kind) ? JSON_BORDER_PADDING : 0
+              .asRGBA()
           );
         }
     }));
     return dirty;
   }
 
-  drawText(text, worldX, worldY, worldScale, font, fillStyle, hasInward, nodeSize, inwardVertical, nodeLabelPadding = 0)
+  drawText(layout, worldX, worldY, worldScale, fillStyle)
   {
-    if (!this._textRenderer) {
+    if (!this._textRenderer || !layout) {
       return;
     }
     this._textRenderer.postMessage({
       event: "text",
-      text,
+      glyphs: layout.glyphs,
       worldX,
       worldY,
       worldScale,
-      font,
-      fillStyle,
-      hasInward,
-      nodeSize,
-      inwardVertical,
-      nodeLabelPadding
+      font: layout.font,
+      fillStyle
     });
   }
 

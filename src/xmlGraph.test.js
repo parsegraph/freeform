@@ -1,4 +1,11 @@
-import { Direction, DirectionNode, PreferredAxis } from "parsegraph";
+import {
+  CommitLayout,
+  Direction,
+  DirectionCaret,
+  DirectionNode,
+  Fit,
+  PreferredAxis,
+} from "parsegraph";
 import { TextDecoder, TextEncoder } from "util";
 import { readFileSync } from "fs";
 import { resolve } from "path";
@@ -10,6 +17,7 @@ import {
   readXmlFile,
 } from "./xmlGraph";
 import { graphNodes, readGraph, writeGraph } from "./graphDocument";
+import { createLegacyLayout } from "./graphLayout";
 
 const svg = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <!--before--><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 100 100">
@@ -40,6 +48,37 @@ function tree(xml) {
     };
   }
   return snapshot(doc);
+}
+
+function expectMultislotSeparation(root) {
+  const buds = graphNodes(root).filter((node) => node.value() === undefined);
+  expect(buds.length).toBeGreaterThan(0);
+  buds.forEach((bud) => {
+    expect(bud.nodeFit()).toBe(Fit.EXACT);
+    expect(bud.siblings().layoutOrder()[1]).toBe(Direction.DOWNWARD);
+    expect(bud.separationFit(Direction.FORWARD)).toBe(Fit.LOOSE);
+    expect(bud.separationFit(Direction.BACKWARD)).toBe(Fit.LOOSE);
+    expect(bud.separationFit(Direction.DOWNWARD)).toBe(Fit.EXACT);
+    expect(bud.separationFit(Direction.UPWARD)).toBe(Fit.EXACT);
+  });
+}
+
+function layoutXml(root) {
+  const layout = new CommitLayout(
+    root,
+    createLegacyLayout({
+      resetTransform() {},
+      measureText: (text) => ({ width: [...text].length * 6 }),
+    })
+  );
+  let steps = 0;
+  while (layout.crank()) expect(++steps).toBeLessThan(10000);
+  return Object.fromEntries(
+    graphNodes(root).map((node) => [
+      String(node.id()),
+      [node.layout().absoluteX(), node.layout().absoluteY()],
+    ])
+  );
 }
 
 afterEach(() => jest.restoreAllMocks());
@@ -77,6 +116,54 @@ test("attributes are inward and a horizontal multislot has a forward spine with 
   expect(content.map((node) => node.value())).toEqual(["<rect>", "<g>", "#text", "<path>"]);
   expect(children(content[1]).map((node) => node.value())).toEqual(["<circle>", "<ellipse>"]);
   expect(at(content[2], Direction.DOWNWARD).value()).toBe(" tail");
+  expectMultislotSeparation(root);
+  expect(exportGraphToXml(root)).toBe(source);
+});
+
+test("loose spine separation keeps uneven XML branches apart without changing the mapping", () => {
+  const source =
+    "<root><a><b><c>Long content across the deep branch</c></b></a>" +
+    "<d>Wide shallow content</d><e><f>Middle-depth content</f></e></root>";
+  const root = graphXml(source);
+  const parent = graphNodes(root).find((node) => node.value() === "<root>");
+  const first = parent.neighbors().nodeAt(Direction.DOWNWARD);
+  const second = first.neighbors().nodeAt(Direction.FORWARD);
+  const third = second.neighbors().nodeAt(Direction.FORWARD);
+  layoutXml(root);
+  const looseGap = second.layout().absoluteX() - first.layout().absoluteX();
+  expect(second.layout().absoluteY()).toBeCloseTo(first.layout().absoluteY());
+  expect(third.layout().absoluteY()).toBeCloseTo(first.layout().absoluteY());
+  expectMultislotSeparation(root);
+  const branchBounds = (bud) => {
+    const jobs = [bud.neighbors().nodeAt(Direction.DOWNWARD)];
+    let left = Infinity;
+    let right = -Infinity;
+    while (jobs.length) {
+      const node = jobs.pop();
+      const size = [0, 0];
+      node.layout().size(size);
+      const halfWidth = (size[0] * node.layout().absoluteScale()) / 2;
+      left = Math.min(left, node.layout().absoluteX() - halfWidth);
+      right = Math.max(right, node.layout().absoluteX() + halfWidth);
+      [Direction.INWARD, Direction.DOWNWARD, Direction.FORWARD].forEach(
+        (direction) => {
+          if (node.neighbors().hasChild(direction))
+            jobs.push(node.neighbors().nodeAt(direction));
+        }
+      );
+    }
+    return { left, right };
+  };
+  const branches = [first, second, third].map(branchBounds);
+  expect(branches[1].left).toBeGreaterThan(branches[0].right);
+  expect(branches[2].left).toBeGreaterThan(branches[1].right);
+
+  graphNodes(root)
+    .filter((node) => node.value() === undefined)
+    .forEach((bud) => new DirectionCaret(bud).tighten());
+  layoutXml(root);
+  const exactGap = second.layout().absoluteX() - first.layout().absoluteX();
+  expect(looseGap).toBeGreaterThan(exactGap);
   expect(exportGraphToXml(root)).toBe(source);
 });
 
@@ -104,7 +191,14 @@ test("SVG round-trip preserves namespaces, attributes, mixed content, whitespace
 });
 
 test("the XML mapping survives v1 save/reload and exports current graph edits", () => {
-  const root = readGraph(writeGraph(graphXml(svg), undefined, undefined, 1));
+  const original = graphXml(svg);
+  const saved = writeGraph(original);
+  expect(saved.version).toBe(1);
+  expect(saved.capabilities["separation/1"]).toBeDefined();
+  const positions = layoutXml(original);
+  const root = readGraph(saved);
+  expectMultislotSeparation(root);
+  expect(layoutXml(root)).toEqual(positions);
   const nodes = graphNodes(root);
   nodes
     .find((node) => node.value() === "@viewBox")
@@ -135,15 +229,23 @@ test("normal Freeform snapshots and undo/redo retain XML nodes and whitespace", 
   const root = graphXml(svg);
   const history = new GraphStack();
   history.save(root);
+  const originalPositions = layoutXml(root);
   const attribute = graphNodes(root).find(
     (node) => node.value() === "@viewBox"
   );
   attribute.neighbors().nodeAt(Direction.FORWARD).setValue("0 0 999 999");
   history.save(root);
+  const editedPositions = layoutXml(root);
   history.undo();
-  expect(tree(exportGraphToSvg(history.widget()))).toEqual(tree(svg));
+  const undone = history.widget();
+  expectMultislotSeparation(undone);
+  expect(layoutXml(undone)).toEqual(originalPositions);
+  expect(tree(exportGraphToSvg(undone))).toEqual(tree(svg));
   history.redo();
-  expect(exportGraphToSvg(history.widget())).toContain('viewBox="0 0 999 999"');
+  const redone = history.widget();
+  expectMultislotSeparation(redone);
+  expect(layoutXml(redone)).toEqual(editedPositions);
+  expect(exportGraphToSvg(redone)).toContain('viewBox="0 0 999 999"');
 });
 
 test("external DOCTYPEs round-trip as data and never reach the XML parser", () => {

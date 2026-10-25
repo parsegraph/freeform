@@ -62,10 +62,11 @@ jest.mock("parsegraph-glyphpainter", () => ({
   GL_TEXTURE_SIZE: 1024,
   Font: jest.fn(function () {
     this.glyphs = new Map();
+    this.font = () => "80px sans-serif";
     this.pageTextureSize = () => 512;
     this.getGlyph = (letter) => {
       if (!this.glyphs.has(letter)) {
-        this.glyphs.set(letter, { letter, ascent: 8, descent: 2 });
+        this.glyphs.set(letter, { letter, ascent: 8, descent: 2, height: 26 });
       }
       return this.glyphs.get(letter);
     };
@@ -198,16 +199,48 @@ test("repainting and editing labels preserve the atlas and existing per-group pa
     );
   makeLayout().paint(node);
   const painter = painters.get(node).glyphPainter;
+  const originalTextLayout = painters.get(node).textLayouts.get(node);
   const firstGlyph = painter.drawGlyph.mock.calls[0][0];
   node.setValue("AΩ");
   makeLayout().paint(node);
   expect(painters.get(node).glyphPainter).toBe(painter);
+  const updatedTextLayout = painters.get(node).textLayouts.get(node);
+  expect(updatedTextLayout).not.toBe(originalTextLayout);
+  expect(updatedTextLayout.glyphs.map(([letter]) => letter)).toEqual(["A", "Ω"]);
   expect(painter.clear).toHaveBeenCalledTimes(1);
   expect(painter.initBuffer).toHaveBeenLastCalledWith({ 0: 2 });
   expect(painter.drawGlyph.mock.calls.at(-2)[0]).toBe(firstGlyph);
   expect(painter.drawGlyph.mock.calls.at(-1)[0].letter).toBe("Ω");
   expect(Font).toHaveBeenCalledTimes(1);
   expect(GlyphPainter).toHaveBeenCalledTimes(1);
+});
+
+test.each([
+  ["scalar", false, Alignment.NONE],
+  ["horizontal inward", true, Alignment.NONE],
+  ["vertical inward", true, Alignment.INWARD_VERTICAL],
+])("%s worker text retains the exact GPU positions across nested scales", (name, hasInward, alignment) => {
+  for (const scale of [0.125, 0.75, 2]) {
+    const node = group("AVyg");
+    node.layout = () => ({ groupScale: () => scale });
+    node.neighbors = () => ({ hasNode: () => hasInward, getAlignment: () => alignment });
+    const painters = new WeakMap();
+    createLayoutPainter(
+      painters, new WeakMap(), {}, {}, () => style(), undefined, undefined,
+      new Font(), () => "object"
+    ).paint(node);
+    const { glyphPainter, textLayouts } = painters.get(node);
+    const text = textLayouts.get(node);
+    expect(text.font).toBe("80px sans-serif");
+    expect(text.glyphs).toHaveLength(4);
+    glyphPainter.drawGlyph.mock.calls.forEach(([glyph, x, y, fontScale], index) => {
+      const [letter, workerX, workerY] = text.glyphs[index];
+      expect(letter).toBe(glyph.letter);
+      expect(workerX * scale / FONT_UPSCALE).toBeCloseTo(x);
+      // The GPU quad includes the atlas's eight-pixel SDF margin above ink.
+      expect(workerY * scale / FONT_UPSCALE).toBeCloseTo(y + 8 * fontScale);
+    });
+  }
 });
 
 test("replacing the document font or GL provider rebuilds a stale glyph painter", () => {

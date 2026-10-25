@@ -1,5 +1,5 @@
 import { graphNodes } from "../../graphDocument";
-import { inspectJsonSelection } from "../../structuredJson";
+import { inspectStructuredSelection, structuredDocumentAdapter } from "../../structuredDocument";
 import { FONT_SIZE, LINE_HEIGHT } from "../../settings";
 import "./ViewportInlineEditor.css";
 
@@ -28,9 +28,9 @@ export default class ViewportInlineEditor {
 
   open() {
     const viewport = this.viewport;
-    const selection = inspectJsonSelection(viewport.widget(), viewport.node());
+    const selection = inspectStructuredSelection(viewport.widget(), viewport.node());
     if (!selection.canEdit) return false;
-    this.close(false);
+    if (!this.close(false)) return false;
     viewport.moveToId(selection.nodeId);
     viewport.input()?.stopPan?.();
     viewport.cancelCameraTravel();
@@ -39,6 +39,12 @@ export default class ViewportInlineEditor {
     viewport.clearEnsuringVisible();
     this.nodeId = selection.nodeId;
     this.kind = selection.kind;
+    this.language = structuredDocumentAdapter(viewport.widget()).id;
+    viewport.beginHistoryGroup();
+    this.rawHistoryGroup = true;
+    // Lisp edits raw tokens, including block comments and quoted symbols;
+    // preserve their line breaks while the grammar reports unfinished syntax.
+    this.multiline = this.kind === "string" || this.language === "lisp";
     this.geometryRoot = null;
     this.geometryNode = null;
     const element = document.createElement("textarea");
@@ -58,27 +64,19 @@ export default class ViewportInlineEditor {
     }
     element.addEventListener("compositionstart", () => { this.composing = true; });
     element.addEventListener("compositionend", () => { this.composing = false; });
-    element.addEventListener("input", () => {
-      try {
-        viewport.applyStructuredCommand({ type: "setText", text: element.value }, this.nodeId);
-        element.setCustomValidity("");
-      } catch (error) {
-        element.setCustomValidity(error.message);
-        viewport.logMessage(error.message);
-      }
-    });
+    element.addEventListener("input", () => this.acceptInput());
     element.addEventListener("keydown", (event) => {
       event.stopPropagation();
       if (this.composing || event.isComposing || event.keyCode === 229) return;
       if (event.key === "Escape" ||
-          (event.key === "Enter" && !(event.shiftKey && this.kind === "string"))) {
+          (event.key === "Enter" && !(event.shiftKey && this.multiline))) {
         event.preventDefault();
         if (event.repeat) return;
         // Finishing an untouched key slot explicitly accepts the valid key "".
-        if (event.key === "Enter" && this.kind === "key") {
+        if (event.key === "Enter" && this.language === "json" && this.kind === "key") {
           try {
-            const selected = inspectJsonSelection(viewport.widget(), viewport.node());
-            if (selected.isSlot) viewport.applyStructuredCommand({ type: "setText", text: element.value }, this.nodeId);
+            const selected = inspectStructuredSelection(viewport.widget(), viewport.node());
+            if (selected.isSlot && !this.acceptInput()) return;
           } catch (error) { viewport.logMessage(error.message); return; }
         }
         this.close(true);
@@ -91,7 +89,26 @@ export default class ViewportInlineEditor {
     return true;
   }
 
+  acceptInput() {
+    if (!this.element) return false;
+    this.applying = true;
+    try {
+      if (this.viewport.applyStructuredCommand(
+        { type: "setText", text: this.element.value }, this.nodeId
+      ) === false) throw new Error("The edit could not be applied. Your text is still here.");
+      this.element.setCustomValidity("");
+      this.failedInput = false;
+      return true;
+    } catch (error) {
+      this.failedInput = true;
+      this.element.setCustomValidity(error.message);
+      this.viewport.logMessage(error.message);
+      return false;
+    } finally { this.applying = false; }
+  }
+
   update() {
+    if (this.applying) return;
     const element = this.element;
     if (!element) return;
     const viewport = this.viewport;
@@ -131,13 +148,31 @@ export default class ViewportInlineEditor {
   }
 
   close(focusGraph = false) {
+    if (!this.element) return true;
+    if (this.composing || (this.failedInput && !this.acceptInput())) {
+      this.element.focus({ preventScroll: true });
+      return false;
+    }
+    this.discard();
+    if (focusGraph) this.viewport.container()?.focus({ preventScroll: true });
+    return true;
+  }
+
+  /** Document changes discard the field without replaying input into another graph. */
+  discard() {
     if (!this.element) return;
     const element = this.element;
     this.element = null;
     this.nodeId = null;
+    this.language = null;
+    this.multiline = false;
     this.lastBox = null;
     this.composing = false;
+    this.failedInput = false;
     element.remove();
-    if (focusGraph) this.viewport.container()?.focus({ preventScroll: true });
+    if (this.rawHistoryGroup) {
+      this.rawHistoryGroup = false;
+      this.viewport.endHistoryGroup();
+    }
   }
 }

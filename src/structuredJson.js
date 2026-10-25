@@ -23,6 +23,12 @@ const KINDS = [
 const DIRECTIONS = Object.values(Direction).filter(
   (value) => typeof value === "number"
 );
+const PLANAR_DIRECTIONS = [
+  Direction.DOWNWARD,
+  Direction.UPWARD,
+  Direction.FORWARD,
+  Direction.BACKWARD,
+];
 const NUMBER = /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/;
 const own = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
 const copy = (value) => JSON.parse(JSON.stringify(value));
@@ -402,8 +408,14 @@ function build(tree, previousRoot, selected) {
         buds.push(bud);
         previousBud = bud;
       }
-      // Set pulls after the complete spine exists, so siblings do not override it.
-      buds.forEach((bud) => bud.siblings().pull(Direction.FORWARD));
+      // Lay out each prong before reserving its rectangular height along the
+      // spine. Set the pull after construction so siblings do not override it;
+      // loose separation keeps the bud's detailed Fit.EXACT combined extents.
+      buds.forEach((bud) => {
+        const caret = new DirectionCaret(bud);
+        caret.pull(Direction.FORWARD);
+        caret.loosen();
+      });
     }
     return node;
   };
@@ -434,6 +446,20 @@ function build(tree, previousRoot, selected) {
       );
       after.setNodeFit(before.nodeFit());
       after.setRightToLeft(before.rightToLeft());
+      // Separation belongs to concrete directions on the node, including
+      // currently absent and parent-facing edges. Copy EXACT too: a deliberate
+      // tightening must not be replaced by a new bud's loose default.
+      for (const direction of PLANAR_DIRECTIONS) {
+        after.setSeparationFit(direction, before.separationFit(direction));
+      }
+      const focus = before.focusDirections();
+      if (focus !== undefined) {
+        // A reparented node cannot focus toward its new parent. Retain all
+        // remaining intent, including an explicit body-only selection.
+        after.setFocus(...focus.filter(
+          (direction) => direction !== after.neighbors().parentDirection()
+        ));
+      }
       after
         .siblings()
         .setLayoutPreference(before.siblings().getLayoutPreference());
@@ -455,7 +481,12 @@ function build(tree, previousRoot, selected) {
       if (!after.neighbors().isRoot()) {
         if (!before.neighbors().isRoot() && before.paintGroups().isPaintGroup())
           after.paintGroups().crease();
-        else after.paintGroups().uncrease();
+        // uncrease() on an ordinary member removes its owning ancestor group.
+        // Only undo an actual crease on this node, and retain a new first-bud
+        // crease when reordering changes the structural INWARD boundary.
+        else if (after.paintGroups().isPaintGroup() &&
+            before.neighbors().parentDirection() === after.neighbors().parentDirection())
+          after.paintGroups().uncrease();
       }
     }
   }

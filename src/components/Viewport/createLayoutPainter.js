@@ -25,6 +25,7 @@ import { presentationStyle } from "../../graphDocument";
 import { hasJsonNodeBorder, JSON_BORDER_PADDING } from "../../structuredJsonBorders";
 import { measureBenchmark } from "../../benchmark";
 import { recordInteractionGroup } from "../../interactionBenchmark";
+import { captureGlyphText } from "../../glyphText";
 
 const paint = (pg, painters, bounds, glProvider, getNodeStyle, presentation, glyphFont, getNodeShape) => {
   if (!painters.has(pg)) {
@@ -54,6 +55,10 @@ const paint = (pg, painters, bounds, glProvider, getNodeStyle, presentation, gly
   } else {
     glyphPainter.clear();
   }
+  // Record the atlas's actual glyph placements once per repaint. The text
+  // worker refines these same positions instead of laying out the text again.
+  const textLayouts = new WeakMap();
+  painterData.textLayouts = textLayouts;
 
   const b = new Rect();
 
@@ -112,38 +117,37 @@ const paint = (pg, painters, bounds, glProvider, getNodeStyle, presentation, gly
         );
         if (!presentation && nodeHasValue(node) && node.value() !== "") {
           label.setText("" + node.value());
-          let maxAscent = 0;
           const scale = node.layout().groupScale();
-          let maxDescent = scale*12;
-          label.lineAt(0).glyphs().forEach(({ascent, descent}) => {
-            maxAscent = Math.max(ascent, maxAscent);
-            maxDescent = Math.max(descent, maxDescent);
-          });
+          const textLayout = { font: glyphPainter.font().font(), glyphs: [] };
+          textLayouts.set(node, textLayout);
+          const drawGlyph = (glyph, glyphX, glyphY, fontScale) => {
+            textLayout.glyphs.push(captureGlyphText(
+              glyph, glyphX, glyphY, fontScale, x, y, scale
+            ));
+            glyphPainter.drawGlyph(glyph, glyphX, glyphY, fontScale);
+          };
           glyphPainter.setColor(Color.fromHex(style.textColor).setA(style.textAlpha));
           if (!node.neighbors().hasNode(Direction.INWARD)) {
             label.paint(
               x - (scale/FONT_UPSCALE)*label.width()/2,
               y - (scale/FONT_UPSCALE)*label.height()/2,
               scale/FONT_UPSCALE,
-              (glyph, x, y, scale) => {
-                glyphPainter.drawGlyph(glyph, x, y, scale);
-            });
+              drawGlyph
+            );
           } else if (node.neighbors().getAlignment(Direction.INWARD) === Alignment.INWARD_VERTICAL) {
             label.paint(
               x - (scale/FONT_UPSCALE)*label.width()/2,
               y - h/2 + scale*INWARD_SEPARATION/4,
               scale/FONT_UPSCALE,
-              (glyph, x, y, scale) => {
-                glyphPainter.drawGlyph(glyph, x, y, scale);
-            });
+              drawGlyph
+            );
           } else {
             label.paint(
               x - w/2 + scale*(INWARD_SEPARATION/4 + sidePadding),
               y - (scale/FONT_UPSCALE)*label.height()/2,
               scale/FONT_UPSCALE,
-              (glyph, x, y, scale) => {
-                glyphPainter.drawGlyph(glyph, x, y, scale);
-            });
+              drawGlyph
+            );
           }
         }
       } else {

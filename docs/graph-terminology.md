@@ -22,6 +22,14 @@ string, `null`, or an empty container. Native editor drafts preserve slots even
 when the document cannot yet be exported to its source format. See the
 [structured JSON editor](structured-json.md) for the first implementation.
 
+The [Lisp/Scheme editor](structured-lisp.md) additionally preserves source line
+grouping through direct form links. A container connects INWARD to its first
+form; FORWARD connects siblings on the same line, and DOWNWARD connects the
+first form of each row to the next row's first form. Each form keeps its own
+contents INWARD, so these sibling links need no organizing buds. These are
+**source rows**, not multislots: the forms themselves carry the row links,
+without a separate bud spine. Unfinished slots remain visible form nodes.
+
 A multislot's buds organize and offer positions for entries; the entries can
 contain complete content or unfinished slots. An empty bud alone does not imply
 a missing document value.
@@ -97,10 +105,42 @@ one) so the child's subtree is laid out snugly before the next spine segment.
 Pulling and center alignment are separate choices; neither changes the graph's
 connections or child order.
 
+## Cross-axis separation
+
+**Separation fit** controls clearance between facing subtrees independently of
+node fit and pulling. Exact separation compares their detailed contours; loose
+separation compares rectangular envelopes. This keeps neighboring multislot
+prongs from fitting into gaps in each other's contours while retaining detailed
+extents for the rest of the layout.
+
+For a horizontal multislot, configure each bud after attaching it:
+
+```js
+caret.fitExact();
+caret.pull(Direction.DOWNWARD);
+caret.loosen();
+```
+
+The bud keeps `Fit.EXACT`. Pulling DOWNWARD lays out the child first; `loosen()`
+then sets FORWARD and BACKWARD separation to `Fit.LOOSE` so the spine accounts
+for that child's footprint. For a vertical multislot, pull FORWARD instead;
+loosen then affects DOWNWARD and UPWARD separation. Apply this to every bud,
+and preserve the pull preference when adding later spine connections.
+
+`loosen()` resolves the perpendicular axis when called; it does not track later
+pull changes. `tighten()` sets that current cross-axis separation back to exact.
+Neither operation changes node fit or alignment. Loose separation is a
+conservative comparison of complete subtrees, including the remaining spine;
+it does not force a gap when their perpendicular spans do not overlap.
+
+These directional settings are preserved by Parsegraph v1's `separation/1`
+capability. Legacy v0 saves discard them, so builders using this spacing must
+initialize their document as v1 before creating history snapshots.
+
 ## XML mapping
 
 XML elements keep their attributes INWARD, as a downward list of keys with
-values FORWARD. Their child content uses a centered horizontal multislot,
-including preserved text and whitespace nodes. See the
+values FORWARD. Their child content uses a centered horizontal multislot with
+loose spine separation, including preserved text and whitespace nodes. See the
 [XML / SVG mapping](../src/fixtures/xml/README.md) and
 [implementation](../src/xmlGraph.js) for the complete grammar.

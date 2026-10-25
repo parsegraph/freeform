@@ -16,3 +16,18 @@
   white-space: pre;
   box-shadow: 0 2px 9px #0004;
 }
+
+.graph-source-input {
+  text-align: left;
+}
+
+.graph-source-mode {
+  position: fixed;
+  z-index: 21;
+  padding: 3px 7px;
+  border-radius: 4px;
+  background: #46685e;
+  color: white;
+  font: 11px/16px sans-serif;
+  pointer-events: none;
+}

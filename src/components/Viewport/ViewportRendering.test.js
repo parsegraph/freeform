@@ -76,6 +76,28 @@ test("nested JSON labels are collected even with a cached text frame, and the La
   harness.restore();
 });
 
+test("panning enqueues the cached GPU glyph layout with the node's absolute pose", () => {
+  const root = new DirectionNode("AVyg");
+  const harness = labelRenderer(root, undefined, { scale: 1 });
+  harness.renderer._frame.textImage = null;
+  const glyphs = [["A", -10.5, 9.25], ["V", -2.125, 9.25]];
+  const textLayout = { font: "80px sans-serif", glyphs };
+  harness.renderer._painters.get(root).textLayouts = new WeakMap([[root, textLayout]]);
+  harness.draw();
+  expect(harness.renderer.drawText).toHaveBeenCalledWith(
+    textLayout, 0, 0, 1, "rgba(18, 52, 86, 1)"
+  );
+  const worker = { postMessage: jest.fn() };
+  harness.renderer._textRenderer = worker;
+  ViewportRendering.prototype.drawText.call(harness.renderer, textLayout, 12.25, -8.5, 0.75, "red");
+  expect(worker.postMessage).toHaveBeenCalledWith({
+    event: "text", glyphs, font: "80px sans-serif",
+    worldX: 12.25, worldY: -8.5, worldScale: 0.75, fillStyle: "red",
+  });
+  expect(worker.postMessage.mock.calls[0][0].glyphs).toBe(glyphs);
+  harness.restore();
+});
+
 test.each([
   ["small text", 0.5, 10, true, true],
   ["normal zoom", 1, 10, true, false],

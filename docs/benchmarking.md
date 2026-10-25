@@ -554,3 +554,30 @@ Raw captures, before/after screenshots, build provenance, and comparison caveats
 are in `out/benchmarks/2026-10-21-cross-11/antialiasing/`. Its exploratory
 `baseline.jsonl` is excluded from the comparison; all six controlled captures
 are retained. The full 248-test suite and production build passed.
+
+### Keyboard zoom and repeated input (2026-10-24)
+
+Keyboard `+`/`-` still used a document refresh, abandoning unfinished rendering
+and invalidating text-worker results on every press. It now uses the same
+camera-only update path as wheel and pinch input, retaining the drawing budget
+and allowing the current frame to finish. Keyboard zoom also uses a short
+120 ms ease-out instead of restarting the node-travel ease-in on every repeat.
+Node navigation and Fit graph retain their existing travel animation.
+
+A deterministic test of 30 presses over one second reproduced the animation
+problem in both directions: the old animation reached only 4.1% of the requested
+log-scale change while input continued. The regression requires more than 90%
+before release and the exact accumulated destination within another 150 ms.
+A separate rendering test checks that repeated keyboard zoom preserves the
+unfinished frame, camera snapshot, and text revision without notifying a
+document change.
+
+Local development captures of recursive cross at 11 rounds (32,765 nodes,
+4,113 paint groups), using six `+` presses followed by six `-` presses, are in
+`out/benchmarks/keyboard-zoom/{before,after}.jsonl`. The before/after captures
+discarded 11/0 unfinished passes and both published 11 complete frames. Every
+publication visited all 4,113 groups. Maximum frame gaps remained 110.4/105.7 ms;
+this does not eliminate occasional rendering stalls. These are one exploratory
+capture per version in Chrome 156, development mode, at 2400 × 1145, with detailed
+instrumentation enabled. Key-delivery timing and capture duration differed
+(4.06/3.73 seconds), so they establish the discarded-work fix, not an FPS speedup.

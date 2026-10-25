@@ -111,6 +111,24 @@ test("structured shortcuts run in View mode and stop an already moving camera", 
   expect(viewport.moveToNeighbor).not.toHaveBeenCalled();
 });
 
+test.each([false, true])("View-mode keyboard zoom works with node navigation = %s", (selected) => {
+  viewport.rendering = () => ({ showingUI: () => false });
+  viewport.navigatingNodes = () => selected;
+  viewport.zoomCamera = jest.fn();
+  for (const value of ["+", "=", "-"]) {
+    expect(key(canvas, "keydown", value).defaultPrevented).toBe(true);
+  }
+  expect(viewport.zoomCamera.mock.calls.map(([factor]) => factor)).toEqual([1.1, 1.1, 1 / 1.1]);
+  expect(viewport.moveToNeighbor).not.toHaveBeenCalled();
+});
+
+test("structured minus input takes precedence over camera zoom", () => {
+  viewport.handleStructuredKey = jest.fn(() => true);
+  viewport.zoomCamera = jest.fn();
+  expect(key(canvas, "keydown", "-").defaultPrevented).toBe(true);
+  expect(viewport.zoomCamera).not.toHaveBeenCalled();
+});
+
 test("an unselected View-mode document keeps panning when its dispatcher declines a key", () => {
   viewport.rendering = () => ({ showingUI: () => false });
   viewport.handleStructuredKey = jest.fn(() => false);

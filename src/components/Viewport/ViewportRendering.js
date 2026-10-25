@@ -21,7 +21,7 @@ import {
 import { showNodeInCamera } from "parsegraph-showincamera";
 import Rect from "parsegraph-rect";
 import Camera from "parsegraph-camera";
-import { cameraPose, nodeTravelTarget } from "./ViewportCameraTravel";
+import { cameraPose, graphTravelTarget, nodeTravelTarget } from "./ViewportCameraTravel";
 import {
   USE_LOCAL_STORAGE,
   TEXT_IS_VISIBLE_SCALE,
@@ -358,6 +358,23 @@ export default class ViewportRendering {
     const navigationRequested = viewport._nodeNavigationRequested;
     viewport._nodeNavigationRequested = false;
 
+    if (viewport._fitGraphRequested) {
+      const target = graphTravelTarget(camera, this.widget().layout());
+      if (!target) return true;
+      viewport._fitGraphRequested = false;
+      viewport._cameraZoomTarget = null;
+      viewport.clearShowingInCamera();
+      viewport.clearCheckScale();
+      viewport.clearEnsuringVisible();
+      viewport.input().stopPan();
+      if (previousNode) travel.start(target, true);
+      else {
+        travel.cancel();
+        travel.apply(target);
+      }
+      return true;
+    }
+
     if (previousNode && (previousNode !== this.node() || navigationRequested) &&
       (viewport.ensuringVisible() || viewport.showingInCamera())) {
       const target = nodeTravelTarget(camera, layout, previousScale,
@@ -382,7 +399,8 @@ export default class ViewportRendering {
     const applyTarget = (animate) => {
       if (animate && previousNode) {
         viewport.input().stopPan();
-        travel.start(cameraPose(cam), camera.containsAny(bounds));
+        if (zoomTarget) travel.startZoom(cameraPose(cam));
+        else travel.start(cameraPose(cam), camera.containsAny(bounds));
       } else {
         travel.cancel();
         camera.copy(cam);

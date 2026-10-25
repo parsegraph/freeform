@@ -1,4 +1,25 @@
 import { cameraTravelSettings } from "./cameraTravelSettings";
+import { Direction } from "parsegraph";
+
+// Root extents include every branch, even when the root is near a corner.
+// Use committed layout data: fitting must not walk a potentially huge graph.
+export function graphTravelTarget(camera, layout) {
+  const size = [0, 0];
+  layout.extentSize(size);
+  const scale = layout.absoluteScale();
+  const backward = [0, 0, 0], upward = [0, 0, 0];
+  layout.extentsAt(Direction.BACKWARD).boundingValues(backward);
+  layout.extentsAt(Direction.UPWARD).boundingValues(upward);
+  const width = size[0] * scale, height = size[1] * scale;
+  if (![width, height, camera.width(), camera.height()].every(value =>
+    Number.isFinite(value) && value > 0)) return null;
+  const target = {
+    x: layout.absoluteX() + width / 2 - backward[2] * scale,
+    y: layout.absoluteY() + height / 2 - upward[2] * scale,
+    scale: Math.min(1, camera.width() * 0.8 / width, camera.height() * 0.8 / height),
+  };
+  return validPose(target) ? target : null;
+}
 
 export function cameraPose(camera) {
   return {
@@ -52,8 +73,11 @@ export function sampleTravel(plan, progress) {
   const t = Math.max(0, Math.min(1, progress));
   if (t === 0) return { ...plan.from };
   if (t === 1) return { ...plan.to };
-  // Quintic smoothstep gives zero velocity and acceleration at both ends.
-  const u = t * t * t * (10 + t * (-15 + t * 6));
+  // Node travel eases in and out. Repeated zoom presses need an immediate
+  // response: restarting a slow ease-in on every key repeat stalls movement.
+  const u = plan.easing === "ease-out"
+    ? 1 - Math.pow(1 - t, 3)
+    : t * t * t * (10 + t * (-15 + t * 6));
   const logScale = Math.log(plan.from.scale) * (1 - u) + Math.log(plan.to.scale) * u;
   return {
     x: plan.from.x * (1 - u) + plan.to.x * u,
@@ -89,10 +113,23 @@ export default class ViewportCameraTravel {
 
   start(to, nodeOnScreen) {
     const cam = this._viewport.camera();
-    const from = cameraPose(cam);
+    this.animate(planTravel(cameraPose(cam), to,
+      cam.width(), cam.height(), nodeOnScreen, this._settings));
+  }
+
+  startZoom(to) {
+    this.animate({
+      from: cameraPose(this._viewport.camera()), to,
+      duration: this._settings.baseTime === 0 ? 0 : 120,
+      dip: 0, easing: "ease-out",
+    });
+  }
+
+  animate(plan) {
+    const cam = this._viewport.camera();
+    const { from, to } = plan;
     this.cancel();
     if (!validPose(from) || !validPose(to) || !cam.canProject()) return;
-    const plan = planTravel(from, to, cam.width(), cam.height(), nodeOnScreen, this._settings);
     if (plan.duration === 0 || (Math.hypot(to.x - from.x, to.y - from.y) * cam.scale() < 0.1 &&
       Math.abs(Math.log(to.scale / from.scale)) < 1e-6)) {
       this.apply(to);

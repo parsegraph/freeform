@@ -2,7 +2,7 @@ import Viewport from "./Viewport";
 import ViewportRendering from "./ViewportRendering";
 import { cameraPose } from "./ViewportCameraTravel";
 import { handleKeyDown } from "./handleKeyDown";
-import { Direction } from "parsegraph";
+import { Direction, LayoutPhase } from "parsegraph";
 
 let viewport, renderer, frames, time;
 beforeEach(() => {
@@ -16,6 +16,7 @@ beforeEach(() => {
   jest.spyOn(window, "cancelAnimationFrame").mockImplementation((id) => frames.delete(id));
   viewport = new Viewport();
   const layout = {
+    phase: () => LayoutPhase.COMMITTED,
     absoluteX: () => 0, absoluteY: () => 0, absoluteScale: () => 1,
     absoluteSize: (size) => { size[0] = 100; size[1] = 100; },
     extentSize: (size) => { size[0] = 10000; size[1] = 10000; },
@@ -26,7 +27,7 @@ beforeEach(() => {
   viewport.hasWidget = () => true;
   viewport._input = { stopPan: jest.fn() };
   viewport.refresh = jest.fn();
-  viewport.refreshCamera = jest.fn();
+  viewport.scheduleRender = jest.fn();
   viewport.repaint = () => { viewport._ensureVisible = true; };
   viewport.camera().setSize(1000, 1000);
   viewport.camera().setOrigin(500, 500);
@@ -35,6 +36,8 @@ beforeEach(() => {
   viewport._ensureVisible = false;
   renderer = Object.create(ViewportRendering.prototype);
   renderer._viewport = viewport;
+  renderer.isDone = () => false;
+  viewport._rendering = renderer;
   renderer.focusCamera();
 });
 afterEach(() => jest.restoreAllMocks());
@@ -60,6 +63,21 @@ test("keyboard zoom works without a mouse position, tweens, and accumulates repe
   expect(pose.scale).toBeCloseTo(1.21);
   expect(pose.x).toBeCloseTo(0, 3);
   expect(pose.y).toBeCloseTo(0, 3);
+});
+
+test.each([1.1, 1 / 1.1])("repeating keyboard zoom (%s) keeps up while the key is held", (factor) => {
+  // 30 Hz repeat: a long ease-in restarted at every key event barely moves.
+  for (let i = 0; i < 30; i++) {
+    viewport.zoomCamera(factor);
+    renderer.focusCamera();
+    advance(1000 / 30);
+  }
+  const requestedLogScale = Math.log(factor) * 30;
+  expect(Math.log(viewport.camera().scale()) / requestedLogScale).toBeGreaterThan(0.9);
+  advance(150);
+  expect(viewport.camera().scale()).toBeCloseTo(factor ** 30);
+  expect(viewport.cameraTravel().active()).toBe(false);
+  expect(viewport.refresh).not.toHaveBeenCalled();
 });
 
 test("Re-center starts a transition and ends at the selected node", () => {

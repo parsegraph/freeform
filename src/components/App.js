@@ -657,6 +657,7 @@ function App() {
                       <button onClick={() => viewport.toggleNodeStyling()}>
                         Style
                       </button>
+                      <button onClick={() => viewport.fitGraph()}>Fit graph</button>
                       <button
                         onClick={() => {
                           viewport.rendering().toggleUI();
@@ -787,9 +788,9 @@ function App() {
           </div>
         )}
         {!showingUI && (
-          <div>
+          <div style={{ position: "fixed", bottom: "3px", right: "3px", display: "flex", gap: "4px" }}>
+            {hasWidget && <button onClick={() => viewport.fitGraph()}>Fit graph</button>}
             <button
-              style={{ position: "fixed", bottom: "3px", right: "3px" }}
               onClick={() => viewport.rendering().toggleUI()}
             >
               Edit

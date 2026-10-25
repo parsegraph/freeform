@@ -19,7 +19,10 @@ from replacing another document.
 
 The existing importer reads v0 and v1 Parsegraph JSON, preserving supported and
 unknown optional capabilities as usual. Saved selection and camera are restored;
-documents without a camera are fitted into view. This is a document import, not
+documents without a camera are centered and fitted using the full graph bounds,
+with a margin on every side. **Fit graph** repeats that operation in View or Edit
+mode without changing the selected node. View mode also supports `+`, `=`, and
+`-` for keyboard zoom. This is a document import, not
 a regeneration from the gallery's generator parameters.
 
 The normalized `document` query remains after loading so refresh opens the

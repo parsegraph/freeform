@@ -2,6 +2,7 @@ import Camera from "parsegraph-camera";
 import { Direction, DirectionNode, LayoutPhase } from "parsegraph";
 import Viewport from "./Viewport";
 import ViewportRendering from "./ViewportRendering";
+import ViewportCameraTravel from "./ViewportCameraTravel";
 import { MAX_PAINT_TIME_MS } from "../../settings";
 
 // Exercise the real rendering phases and scheduling without allocating a GPU.
@@ -118,6 +119,27 @@ test("camera changes preserve the in-flight pose and pass while zoom limits affe
   expect(camera.scale()).toBe(1.5);
   expect(renderer.camera().toJSON()).toEqual(frozen);
   expect(renderer._renderPass).toBe(pass);
+});
+
+test("keyboard zoom preserves an unfinished frame and its text revision", () => {
+  const { renderer, viewport } = setup();
+  viewport._cameraTravel = new ViewportCameraTravel(viewport);
+  viewport._input = { stopPan: jest.fn() };
+  const frame = beginFrame(renderer);
+  const frozen = frame.camera.toJSON();
+  const pass = renderer._renderPass;
+  const revision = renderer._revision;
+  viewport.notifyDocumentChange = jest.fn();
+  jest.spyOn(renderer, "focusCamera").mockImplementation(() => viewport.clearCheckScale());
+  for (let i = 0; i < 10; i++) viewport.zoomCamera(1.1);
+  expect(renderer._frame).toBe(frame);
+  expect(renderer._renderPass).toBe(pass);
+  expect(renderer._revision).toBe(revision);
+  expect(frame.camera.toJSON()).toEqual(frozen);
+  expect(viewport.notifyDocumentChange).not.toHaveBeenCalled();
+  expect(renderer.focusCamera).toHaveBeenCalled();
+  finishFrame(renderer);
+  expect(renderer._frontFrame).toBe(frame);
 });
 
 test("finishing a pass coalesces all camera changes into one replacement at the newest pose", () => {

@@ -797,6 +797,15 @@ export default class ViewportInput {
         return;
       }
 
+      // Camera-only shortcuts also work in View mode. Keep this after structured
+      // editing so a minus sign can still begin a JSON number in an empty slot.
+      if (["+", "=", "-"].includes(e.key)) {
+        pan.stop();
+        viewport.zoomCamera(e.key === "-" ? 1 / 1.1 : 1.1, mouseX, mouseY);
+        e.preventDefault();
+        return;
+      }
+
       if (!e.isComposing && !e.ctrlKey && !e.metaKey && !e.altKey &&
           (this.canInteract() || viewport.navigatingNodes()) &&
           (e.key === "Enter" || e.key === "Insert") && viewport.canEditStructuredValue?.()) {

@@ -117,6 +117,7 @@ export default class Viewport {
     this._showInCamera = true;
     this._ensureVisible = true;
     this._checkScale = true;
+    this._fitGraphRequested = false;
 
     // Create and restore the camera if possible
     this._cam = new Camera();
@@ -403,6 +404,15 @@ export default class Viewport {
     this.repaint();
   }
 
+  fitGraph() {
+    this.container()?.focus();
+    this._cameraTravel.cancel();
+    this._cameraZoomTarget = null;
+    this.input()?.stopPan();
+    this._fitGraphRequested = true;
+    this.refresh();
+  }
+
   removeNode() {
     if (isStructuredJson(this.widget())) {
       try {
@@ -626,7 +636,9 @@ export default class Viewport {
       Number.isFinite(y) ? y : target.height() / 2
     );
     this._cameraZoomTarget = target;
-    this.checkScale();
+    // Keyboard zoom is a camera update, just like wheel/pinch zoom. A graph
+    // refresh would abandon the unfinished frame and invalidate worker text.
+    this.refreshCamera(true);
   }
 
   cancelCameraTravel() {
@@ -663,6 +675,7 @@ export default class Viewport {
         });
     }
     if (viewportData.cam) {
+      this._fitGraphRequested = false;
       this._cameraZoomTarget = null;
       this._cameraTravel.cancel();
       this.camera().restore(viewportData.cam);
@@ -683,6 +696,7 @@ export default class Viewport {
   }
 
   resetSettings() {
+    this._fitGraphRequested = true;
     this._navigatingNodes = false;
     this._nodeNavigationRequested = false;
     this._cameraZoomTarget = null;

@@ -343,7 +343,9 @@ export default class ViewportRendering {
   focusCamera() {
     const viewport = this.viewport();
     const camera = viewport.camera();
-    if (!camera.canProject()) return true;
+    // Camera.canProject() only rejects NaN, so zero dimensions still pass it.
+    // Fitting against them would zoom to zero and make the transform singular.
+    if (![camera.width(), camera.height()].every((size) => Number.isFinite(size) && size > 0)) return true;
     const previousNode = this._cameraNode;
     const previousScale = this._cameraNodeScale;
     const layout = this.node().layout();
@@ -405,7 +407,7 @@ export default class ViewportRendering {
           Math.min(cam.height(), cam.width()) /
           scaleFactor /
           (cam.scale() * Math.max(...graphSize));
-        if (!isNaN(scale)) {
+        if (Number.isFinite(scale) && scale > 0) {
           let scaleFactor = 1 / 4;
           if (Math.abs(1 - scale) < FUZZINESS) {
             //this.viewport().logMessage("Showing node at max scale")
@@ -413,14 +415,14 @@ export default class ViewportRendering {
             if (graphSize[0] < graphSize[1]) {
               const scale =
                 (cam.width() * scaleFactor) / (graphSize[0] * cam.scale());
-              if (!isNaN(scale)) {
+              if (Number.isFinite(scale) && scale > 0) {
                 //this.viewport().logMessage("Zooming out camera to keep node horizontally within scale");
                 cam.zoomToPoint(scale, cam.width() / 2, cam.height() / 2);
               }
             } else {
               const scale =
                 (cam.height() * scaleFactor) / (graphSize[1] * cam.scale());
-              if (!isNaN(scale)) {
+              if (Number.isFinite(scale) && scale > 0) {
                 //this.viewport().logMessage("Zooming out camera to keep node vertically within scale");
                 cam.zoomToPoint(scale, cam.width() / 2, cam.height() / 2);
               }
@@ -447,7 +449,7 @@ export default class ViewportRendering {
       if (graphSize[0] * cam.scale() > cam.width() * scaleFactor) {
         const scale =
           (cam.width() * scaleFactor) / (graphSize[0] * cam.scale());
-        if (!isNaN(scale)) {
+        if (Number.isFinite(scale) && scale > 0) {
           //this.viewport().logMessage("Zooming out camera to keep node horizontally within scale");
           cam.zoomToPoint(scale, cam.width() / 2, cam.height() / 2);
           adjusted = true;
@@ -456,7 +458,7 @@ export default class ViewportRendering {
       if (graphSize[1] * cam.scale() > cam.height() * scaleFactor) {
         const scale =
           (cam.height() * scaleFactor) / (graphSize[1] * cam.scale());
-        if (!isNaN(scale)) {
+        if (Number.isFinite(scale) && scale > 0) {
           //this.viewport().logMessage("Zooming out camera to keep node vertically within scale");
           cam.zoomToPoint(scale, cam.width() / 2, cam.height() / 2);
           adjusted = true;
@@ -473,7 +475,7 @@ export default class ViewportRendering {
             Math.min(cam.height(), cam.width()) /
             scaleFactor /
             (cam.scale() * Math.max(...graphSize));
-          if (!isNaN(scale)) {
+          if (Number.isFinite(scale) && scale > 0) {
             //this.viewport().logMessage("Zooming in camera to keep graph within scale");
             cam.zoomToPoint(scale, cam.width() / 2, cam.height() / 2);
             adjusted = true;

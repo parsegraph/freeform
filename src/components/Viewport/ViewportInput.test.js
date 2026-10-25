@@ -412,10 +412,34 @@ test("pinch zoom coalesces camera updates without restarting graph drawing", () 
 });
 
 test("resize still invalidates rendering instead of reusing the previous frame dimensions", () => {
+  Object.defineProperties(canvas, {
+    offsetWidth: { configurable: true, value: 800 },
+    offsetHeight: { configurable: true, value: 600 },
+  });
   window.ResizeObserver.mock.calls[0][0]();
   expect(viewport.camera().setSize).toHaveBeenCalledWith(canvas.offsetWidth, canvas.offsetHeight);
   expect(viewport.checkScale).toHaveBeenCalledTimes(1);
   expect(viewport.refreshCamera).not.toHaveBeenCalled();
+});
+
+test("temporary zero-sized resize notifications preserve the camera until the viewport returns", () => {
+  const resize = window.ResizeObserver.mock.calls[0][0];
+  for (const [width, height] of [[0, 0], [800, 0], [0, 600]]) {
+    Object.defineProperties(canvas, {
+      offsetWidth: { configurable: true, value: width },
+      offsetHeight: { configurable: true, value: height },
+    });
+    resize();
+  }
+  expect(viewport.camera().setSize).not.toHaveBeenCalled();
+  expect(viewport.checkScale).not.toHaveBeenCalled();
+  Object.defineProperties(canvas, {
+    offsetWidth: { configurable: true, value: 800 },
+    offsetHeight: { configurable: true, value: 600 },
+  });
+  resize();
+  expect(viewport.camera().setSize).toHaveBeenCalledWith(800, 600);
+  expect(viewport.checkScale).toHaveBeenCalledTimes(1);
 });
 
 test("a pinch or canceled touch never selects a node", () => {

@@ -265,6 +265,36 @@ test("neighbor focus schedules travel once and rapid moves use the planned zoom"
   expect(travel.start).toHaveBeenCalledTimes(2);
 });
 
+test.each([[0, 600], [800, 0], [0, 0]])("camera focus waits through a %s by %s viewport and resumes with a valid size", (width, height) => {
+  const camera = new Camera();
+  camera.setSize(width, height);
+  camera.setOrigin(120, 80);
+  const selected = node(0);
+  selected.layout = () => ({
+    absoluteX: () => 0, absoluteY: () => 0, absoluteScale: () => 1,
+    absoluteSize: (out) => { out[0] = 100; out[1] = 50; },
+    extentSize: (out) => { out[0] = 1000; out[1] = 1000; },
+  });
+  let checking = true;
+  const renderer = Object.create(ViewportRendering.prototype);
+  renderer._viewport = {
+    camera: () => camera, node: () => selected, widget: () => selected,
+    cameraTravel: () => ({ active: () => false, cancel: jest.fn() }),
+    showingInCamera: () => false, checkingScale: () => checking,
+    ensuringVisible: () => false,
+    clearCheckScale: () => { checking = false; },
+  };
+  const original = camera.toJSON();
+  expect(() => renderer.focusCamera()).not.toThrow();
+  expect(camera.toJSON()).toEqual(original);
+  expect(checking).toBe(true);
+  camera.setSize(800, 600);
+  expect(() => renderer.focusCamera()).not.toThrow();
+  expect(checking).toBe(false);
+  expect(camera.scale()).toBeGreaterThan(0);
+  expect([camera.x(), camera.y(), camera.scale()].every(Number.isFinite)).toBe(true);
+});
+
 test("initial render timing follows all phases and detaches before later worker redraws", () => {
   jest.useFakeTimers();
   window.history.replaceState({}, "", "/?benchmark=1");

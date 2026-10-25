@@ -848,8 +848,13 @@ export default class ViewportInput {
     });
 
     new ResizeObserver(() => {
+      const width = canvas.offsetWidth;
+      const height = canvas.offsetHeight;
+      // Hidden/detached viewports can briefly have no area. Keep the last
+      // usable camera until a later resize supplies real dimensions.
+      if (width <= 0 || height <= 0) return;
       viewport.cancelCameraTravel?.();
-      viewport.camera().setSize(canvas.offsetWidth, canvas.offsetHeight);
+      viewport.camera().setSize(width, height);
       if (this.viewport().hasWidget()) {
         viewport.checkScale();
         return;

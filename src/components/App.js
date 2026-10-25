@@ -45,6 +45,7 @@ const loadRoom = (openGraph, roomName) => {
 let initialRoom;
 const loadInitialRoom = (openGraph) => {
   const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.has("document")) return;
   const roomName = urlParams.get("public");
   if (!roomName) {
     return;
@@ -66,6 +67,9 @@ function App() {
     initialExampleSession(window.location.search)
   );
   const [exampleSource, setExampleSource] = useState(null);
+  const [initialDocument, setInitialDocument] = useState(() =>
+    new URLSearchParams(window.location.search).get("document")
+  );
 
   const [needsSave, setNeedsSave] = useState(false);
 
@@ -90,7 +94,9 @@ function App() {
   const [nodeStylingModalOpen, setNodeStylingModalOpen] = useState(false);
 
   const urlParams = new URLSearchParams(window.location.search);
-  const [roomName, setRoomName] = useState(urlParams.get("public"));
+  const [roomName, setRoomName] = useState(
+    urlParams.has("document") ? null : urlParams.get("public")
+  );
 
   const refresh = useCallback(
     (dontTouchCamera, benchmark) => {
@@ -267,12 +273,14 @@ function App() {
       roomName,
       viewportData,
       example = null,
-      showingUI
+      showingUI,
+      documentURL = null
     ) => {
       // Flush before switching even when the debounced recovery write has not run.
       persistJsonDraft();
       const benchmark = benchmarkFor(graph);
       setInitialSession(null);
+      setInitialDocument(null);
       setRoomName(roomName);
       setImportModalOpen(false);
       setNeedsSave(false);
@@ -289,8 +297,11 @@ function App() {
       // Imported files must not reopen an unrelated example or inherit its camera.
       clearExampleSession();
       setExampleSource(example);
-      // Consume launch links so refresh follows the source opened most recently.
+      // Linked documents reload their original source on refresh. Switching to a
+      // file or example consumes that link so it cannot reopen the wrong graph.
       const url = new URL(window.location.href);
+      if (documentURL) url.searchParams.set("document", documentURL);
+      else url.searchParams.delete("document");
       url.searchParams.delete("sample");
       if (!roomName) url.searchParams.delete("public");
       if (url.href !== window.location.href) {
@@ -565,6 +576,15 @@ function App() {
                 }
               }}
               initialSession={initialSession}
+              initialDocument={initialDocument}
+              onCancelDocument={() => {
+                setInitialDocument(null);
+                const url = new URL(window.location.href);
+                url.searchParams.delete("document");
+                url.searchParams.delete("sample");
+                url.searchParams.delete("public");
+                window.history.replaceState(window.history.state, "", url);
+              }}
               onClose={hasWidget ? () => setImportModalOpen(false) : null}
               openGraph={openGraph}
             />

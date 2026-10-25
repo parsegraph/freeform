@@ -10,6 +10,7 @@ import { DirectionNode } from "parsegraph";
 import Viewport from "./Viewport/Viewport";
 import {
   graphNodes,
+  documentState,
   graphSelection,
   readGraph,
   writeGraph,
@@ -24,6 +25,7 @@ import {
   readJsonRecovery,
   writeJsonRecovery,
 } from "../structuredJsonRecovery";
+import galleryFixture from "../fixtures/v1/appearance-colors.json";
 
 // Exercise App, the actual document chooser/editor/exporter, history, and codecs.
 // Only the WebGL viewport is replaced with an adapter using the real commands.
@@ -131,6 +133,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  delete global.fetch;
   cleanup();
   window.onbeforeunload = null;
   jest.clearAllTimers();
@@ -162,6 +165,51 @@ function renderApp() {
   const App = require("./App").default;
   return render(<App />);
 }
+
+test("gallery launch overrides saved examples, preserves capabilities, and reloads until another source opens", async () => {
+  localStorage.setItem("parsegraph-example-session", JSON.stringify({
+    version: 1, example: { type: "cross", rounds: 3 },
+  }));
+  const cam = { cameraX: 12, cameraY: -24, scale: 0.6 };
+  const document = {
+    ...galleryFixture,
+    capabilities: { ...galleryFixture.capabilities, "future/1": { preserved: true } },
+    metadata: { freeform: { viewport: { cam, showingUI: true } } },
+  };
+  window.history.replaceState({}, "", "/freeform/?document=%2Fexamples%2Fcolors.parsegraph&sample=rainbow");
+  global.fetch = jest.fn().mockResolvedValue({ ok: true, text: async () => JSON.stringify(document) });
+  const app = renderApp();
+  await act(async () => {});
+  let viewport = Viewport.mock.results.at(-1).value;
+  expect(documentState(viewport.widget()).capabilities).toEqual(document.capabilities);
+  expect(viewport.toJSON().cam).toEqual(cam);
+  expect(viewport.showInCamera).not.toHaveBeenCalled();
+  expect(localStorage.getItem("parsegraph-example-session")).toBeNull();
+  expect(new URLSearchParams(window.location.search).get("document")).toBe("/examples/colors.parsegraph");
+  expect(window.location.search).not.toContain("sample");
+  app.unmount();
+  renderApp();
+  await act(async () => {});
+  expect(fetch).toHaveBeenCalledTimes(2);
+  viewport = Viewport.mock.results.at(-1).value;
+  expect(documentState(viewport.widget()).capabilities).toEqual(document.capabilities);
+  await importOrdinaryGraph();
+  expect(viewport.widget().value()).toBe("ordinary");
+  expect(window.location.search).not.toContain("document");
+});
+
+test("invalid explicit links show an error without fetching or restoring a saved example", async () => {
+  window.history.replaceState({}, "", "/freeform/?document=https%3A%2F%2Fother.test%2Fgraph&sample=rainbow");
+  global.fetch = jest.fn();
+  renderApp();
+  await act(async () => {});
+  expect(screen.getByRole("alert")).toHaveTextContent("this website");
+  expect(fetch).not.toHaveBeenCalled();
+  expect(Viewport.mock.results.at(-1).value.widget()).toBeUndefined();
+  fireEvent.click(screen.getByRole("button", { name: "Choose another document" }));
+  expect(screen.getByRole("heading", { name: "New Parsegraph" })).toBeInTheDocument();
+  expect(window.location.search).toBe("");
+});
 
 function recover() {
   fireEvent.click(screen.getByRole("button", { name: "Recover JSON draft" }));

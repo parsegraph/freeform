@@ -24,6 +24,41 @@ beforeEach(() => {
   loadExample.mockResolvedValue(loaded);
 });
 
+afterEach(() => { delete global.fetch; });
+
+test("linked documents take priority and hand off only once in StrictMode", async () => {
+  global.fetch = jest.fn().mockResolvedValue({ ok: true, text: async () => JSON.stringify(fixture) });
+  const openGraph = jest.fn();
+  const { unmount } = render(<StrictMode><ImportModal openGraph={openGraph}
+    initialDocument="/examples/colors.parsegraph" initialSession={{ example }} /></StrictMode>);
+  await waitFor(() => expect(openGraph).toHaveBeenCalledTimes(1));
+  expect(loadExample).not.toHaveBeenCalled();
+  expect(documentState(openGraph.mock.calls[0][0]).capabilities).toEqual(fixture.capabilities);
+  expect(openGraph.mock.calls[0][6]).toBe("/examples/colors.parsegraph");
+  unmount();
+  expect(fetch.mock.calls.every(([, options]) => options.signal.aborted)).toBe(true);
+});
+
+test("failed linked loads can retry, and abandoned downloads cannot replace another document", async () => {
+  global.fetch = jest.fn().mockRejectedValueOnce(new Error("offline"));
+  const openGraph = jest.fn();
+  const onCancelDocument = jest.fn();
+  const { rerender } = render(<ImportModal openGraph={openGraph}
+    initialDocument="/examples/colors.parsegraph" onCancelDocument={onCancelDocument} />);
+  expect(await screen.findByRole("alert")).toHaveTextContent("offline");
+  let finish;
+  fetch.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+  fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+  expect(screen.getByRole("status")).toHaveTextContent("Loading");
+  fireEvent.click(screen.getByRole("button", { name: "Choose another document" }));
+  expect(onCancelDocument).toHaveBeenCalledTimes(1);
+  rerender(<ImportModal openGraph={openGraph} initialDocument={null} />);
+  expect(fetch.mock.calls[1][1].signal.aborted).toBe(true);
+  await act(async () => finish({ ok: true, text: async () => JSON.stringify(fixture) }));
+  expect(openGraph).not.toHaveBeenCalled();
+  expect(screen.getByRole("combobox", { name: "Template:" })).toBeInTheDocument();
+});
+
 test("restores camera and mode once even under StrictMode", async () => {
   const openGraph = jest.fn();
   const cam = { cameraX: 10, cameraY: 20, scale: 0.5 };

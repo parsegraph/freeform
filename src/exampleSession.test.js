@@ -69,6 +69,8 @@ test("explicit example links override another saved example; public links do not
   expect(initialExampleSession("?sample=cross_3")).toEqual({ example: { type: "cross", rounds: 3 } });
   expect(initialExampleSession("?sample=grid_12").cam).toEqual(cam);
   expect(initialExampleSession("?public=room")).toBeNull();
+  expect(initialExampleSession("?document=/examples/colors.parsegraph&sample=grid_12")).toBeNull();
+  expect(initialExampleSession("?document=")).toBeNull();
   expect(initialExampleSession("?sample=unknown")).toBeNull();
 });
 

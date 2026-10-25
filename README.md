@@ -13,5 +13,8 @@ Graph structure and layout vocabulary is documented in
 horizontal multislots, centering, and pulling. See also the
 [XML / SVG mapping](src/fixtures/xml/README.md).
 
+Gallery documents can open directly with `/freeform/?document=…`.
+See [document links](docs/document-links.md) for the URL contract and refresh behavior.
+
 See [Benchmarking imports and initial layout](docs/benchmarking.md) to capture
 stage timings and responsiveness before comparing performance changes.

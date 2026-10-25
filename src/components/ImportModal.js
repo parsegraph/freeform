@@ -7,6 +7,7 @@ import * as importers from "../importers";
 
 import "./modal.css";
 import { createExample, loadExample } from "../examples";
+import DocumentImport from "./DocumentImport";
 import { readXmlFile } from "../xmlGraph";
 import {
   attachBenchmark,
@@ -451,6 +452,8 @@ export default function ImportModal({
   onClose,
   openGraph,
   initialSession,
+  initialDocument,
+  onCancelDocument,
   recovery,
   recoveryError,
   onRestoreRecovery,
@@ -459,7 +462,7 @@ export default function ImportModal({
   const [loadError, setLoadError] = useState(null);
 
   useEffect(() => {
-    if (!initialSession) return;
+    if (initialDocument != null || !initialSession) return;
     let cancelled = false;
     let handedOff = false;
     const benchmark = beginBenchmark({
@@ -497,7 +500,12 @@ export default function ImportModal({
       cancelled = true;
       if (!handedOff) cancelBenchmark(benchmark);
     };
-  }, [initialSession, openGraph]);
+  }, [initialSession, initialDocument, openGraph]);
+
+  if (initialDocument != null) {
+    return <DocumentImport documentURL={initialDocument} openGraph={openGraph}
+      onCancel={onCancelDocument} />;
+  }
 
   if (initialSession && !loadError) {
     return <div style={{ padding: "12px" }}>Loading Parsegraph…</div>;

@@ -22,7 +22,7 @@ export function readExampleSession() {
 
 export function initialExampleSession(search) {
   const params = new URLSearchParams(search);
-  if (params.has("public")) return null;
+  if (params.has("public") || params.has("document")) return null;
   const saved = readExampleSession();
   if (!params.has("sample")) return saved;
   const example = exampleFromSample(params.get("sample"));

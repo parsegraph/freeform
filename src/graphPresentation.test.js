@@ -54,6 +54,18 @@ test.each([
   }
 });
 
+test.each([undefined, ""])("drawing an empty presentation label %p touches neither layout nor canvas", (value) => {
+  const node = { value: () => value, layout: jest.fn() };
+  const ctx = context();
+  drawDocumentLabel(ctx, node, null, createPresentation(), null);
+  expect(node.layout).not.toHaveBeenCalled();
+  for (const name of ["save", "restore", "resetTransform", "scale", "translate", "fillText"]) {
+    expect(ctx[name]).not.toHaveBeenCalled();
+  }
+  expect(ctx.font).toBeUndefined();
+  expect(ctx.fillStyle).toBeUndefined();
+});
+
 test("text drawing and measurement use the same newline, font, and line-height policy", () => {
   const root = readGraph(standard);
   root.setValue("A\r\n😀\r");

@@ -998,9 +998,12 @@ export default class ViewportRendering {
           dirty = true;
           return;
         }
+        // Empty presentation slots still occupy space, but have no text work.
+        const label = nodeLabel(node, presentation);
+        if (label === null || label === "") return;
         const style = this.viewport().getNodeStyle(node);
         if (style.textAlpha > 0 && this.collectWorldLabel(
-          node, nodeLabel(node, presentation), cam, renderData, presentation.text.fontSize
+          node, label, cam, renderData, presentation.text.fontSize
         )) return;
         const sidePadding = hasJsonNodeBorder(jsonNodeKind(this.widget(), node)) ? JSON_BORDER_PADDING : 0;
         drawDocumentLabel(ctx, node, cam, presentation, style, sidePadding);

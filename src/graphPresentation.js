@@ -29,7 +29,7 @@ export function createDocumentLayout(presentation, ctx) {
 
 export function drawDocumentLabel(ctx, node, camera, presentation, appearance, sidePadding = 0) {
   const label = nodeLabel(node, presentation);
-  if (label === null) return;
+  if (label === null || label === "") return;
   const layout = node.layout();
   const size = [0, 0];
   layout.size(size);

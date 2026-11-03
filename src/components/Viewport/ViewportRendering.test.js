@@ -4,7 +4,8 @@ import ViewportRendering from "./ViewportRendering";
 import DocumentFont from "./DocumentFont";
 import { createPresentation, Direction, DirectionNode, LayoutPhase } from "parsegraph";
 import { createStructuredJson } from "../../structuredJson";
-import { graphNodes } from "../../graphDocument";
+import { documentState, graphNodes, readGraph } from "../../graphDocument";
+import { buildPrimesDocument } from "../../builders/primes";
 import { WorldLabels } from "../WorldLabel";
 import { attachBenchmark, beginBenchmark, benchmarkFor, cancelBenchmark, getBenchmarkRuns } from "../../benchmark";
 import {
@@ -122,11 +123,48 @@ test.each([
   harness.restore();
 });
 
-test.each([undefined, "", { text: "unsupported" }])("presentation value %p does not produce an empty or invented WorldLabel", (value) => {
+test.each([undefined, "", { text: "unsupported" }])("presentation value %p skips style lookup, canvas drawing, and WorldLabels", (value) => {
   const harness = labelRenderer(new DirectionNode(value), createPresentation());
+  const getStyle = jest.fn();
+  harness.renderer._viewport.getNodeStyle = getStyle;
   harness.draw();
+  harness.renderer.toggleWorldLabels();
+  harness.draw();
+  expect(getStyle).not.toHaveBeenCalled();
+  Object.values(harness.ctx).forEach((method) => expect(method).not.toHaveBeenCalled());
   expect(harness.renderer._worldLabels.labels()).toEqual([]);
   expect(harness.data.k).toBe(0);
+  harness.restore();
+});
+
+test("numeric zero remains visible in presentation documents", () => {
+  const harness = labelRenderer(new DirectionNode(0), createPresentation(), { scale: 1 });
+  harness.draw();
+  expect(harness.ctx.fillText.mock.calls.map(([line]) => line)).toEqual(["0"]);
+  harness.restore();
+});
+
+test("an empty child with pending positions still marks the text pass dirty", () => {
+  const root = new DirectionNode("parent");
+  const child = new DirectionNode("");
+  root.connect(Direction.FORWARD, child);
+  const harness = labelRenderer(root, createPresentation());
+  child.layout().needsAbsolutePos = () => true;
+  expect(harness.renderer.renderPaintGroupText(root, harness.data)).toBe(true);
+  harness.restore();
+});
+
+test("a Primes text pass draws its 73 numbered cells and skips all 138 empty cells", () => {
+  const root = readGraph(buildPrimesDocument(30));
+  const harness = labelRenderer(root, documentState(root).presentation, { scale: 1 });
+  // Count a full-chart text pass independently of the synthetic group bounds.
+  harness.renderer.camera().containsAny = () => true;
+  harness.draw();
+  expect(graphNodes(root)).toHaveLength(211);
+  expect(harness.ctx.save).toHaveBeenCalledTimes(73);
+  expect(harness.ctx.restore).toHaveBeenCalledTimes(73);
+  expect(harness.ctx.fillText).toHaveBeenCalledTimes(73);
+  expect(harness.ctx.fillText.mock.calls.every(([line]) => line !== "")).toBe(true);
   harness.restore();
 });
 

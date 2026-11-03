@@ -17,6 +17,15 @@
     "width": 480,
     "height": 300
   },
+  "primes": {
+    "example": {
+      "type": "primes",
+      "max": 30
+    },
+    "nodes": 211,
+    "width": 480,
+    "height": 300
+  },
   "rainbow": {
     "example": {
       "type": "rainbow"

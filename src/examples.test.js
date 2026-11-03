@@ -16,6 +16,7 @@ jest.mock("./builders", () => ({
   buildRandom: jest.fn((steps, random) => Array.from({ length: steps }, random)),
   buildAlternatingColumns: jest.fn((random) => ["columns", null, null, { styles: [random(), random()] }]),
   buildProportionDocument: jest.fn(),
+  buildPrimesDocument: jest.fn(),
 }));
 
 beforeEach(() => {
@@ -26,6 +27,7 @@ beforeEach(() => {
   builders.buildRandom.mockImplementation((steps, random) => Array.from({ length: steps }, random));
   builders.buildAlternatingColumns.mockImplementation((random) => ["columns", null, null, { styles: [random(), random()] }]);
   builders.buildProportionDocument.mockReturnValue(proportional);
+  builders.buildPrimesDocument.mockImplementation((max) => jest.requireActual("./builders/primes").buildPrimesDocument(max));
 });
 
 function documentById(document) {
@@ -82,6 +84,35 @@ test("invalid or unbounded stored recipes are rejected or bounded", async () => 
   await expect(loadExample({ type: "unknown" })).rejects.toThrow();
   expect(createExample("grid", { size: -1 })).toBeNull();
   expect(createExample("cross", { rounds: 100000 }).rounds).toBe(11);
+});
+
+test("Primes links and recipes use an inclusive maximum and retain native presentation", async () => {
+  expect(exampleFromSample("primes")).toEqual({ type: "primes", max: 30 });
+  const recipe = exampleFromSample("primes", new URLSearchParams("max=12"));
+  expect(recipe).toEqual({ type: "primes", max: 12 });
+  const loaded = await loadExample(JSON.parse(JSON.stringify(recipe)));
+  expect(loaded.example).toEqual(recipe);
+  expect(builders.buildPrimesDocument).toHaveBeenCalledWith(12);
+  const document = writeGraph(loaded.graph);
+  expect(document.version).toBe(2);
+  expect(document.nodes.some((node) => node.id === "primes-12")).toBe(true);
+  expect(document.nodes.some((node) => node.id === "primes-13")).toBe(false);
+  expect(documentState(loaded.graph).presentation.nodeStyles["primes-12-factor-5"]).toBe("slot");
+});
+
+test("Primes accepts positive safe integer maxima, and max does not affect other templates", async () => {
+  for (const max of [1, 30, 1000, 2310, Number.MAX_SAFE_INTEGER]) {
+    expect(createExample("primes", { max })).toEqual({ type: "primes", max });
+    expect(exampleFromSample("primes", new URLSearchParams({ max }))).toEqual({ type: "primes", max });
+  }
+  for (const max of [0, -1, Number.MAX_SAFE_INTEGER + 1, 2.5, "30", null, NaN, Infinity]) {
+    expect(createExample("primes", { max })).toBeNull();
+    await expect(loadExample({ type: "primes", max })).rejects.toThrow();
+  }
+  for (const max of ["", "no", "0", "-1", "2.5", String(Number.MAX_SAFE_INTEGER + 1), "Infinity"]) {
+    expect(exampleFromSample("primes", new URLSearchParams({ max }))).toBeNull();
+  }
+  expect(exampleFromSample("grid_12", new URLSearchParams("max=100"))).toEqual({ type: "grid", size: 12 });
 });
 
 test("explicit Proportion columns survive reconstruction and reach the document builder", async () => {

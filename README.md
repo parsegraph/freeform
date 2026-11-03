@@ -57,6 +57,17 @@ or description, filter by category, and select a preview before choosing
 **Create**. Tournament and Recursive cross retain their rounds controls;
 Tournament also supports a vertical bracket. Proportion accepts 1–200 columns
 per side, mirrored around its central spine; refresh restores the chosen count.
+Primes shows integers from 1 through a chosen maximum (default 30), with their
+distinct prime divisors in upward columns. Any positive whole number within
+JavaScript's safe integer range is accepted. Set the maximum with its
+slider or number field, or open `?sample=primes&max=100` to render through 100
+(locally, `http://localhost:3000/?sample=primes&max=100`; under a subpath,
+`/freeform/?sample=primes&max=100`). The slider starts with a range of 1–1,000
+and expands when a larger maximum is entered. Refresh restores the maximum and camera.
+This is the prime-divisor chart from the Parsegraph site, using equal square
+cells and full-size empty cells to keep prime rows aligned.
+Prime-number cells have stable colors by value, so repeated prime divisors match;
+composite numbers, 1, and empty cells stay neutral. Native saves preserve these colors.
 Browsing does not change the current document. Blank graph, New JSON document,
 and New Lisp/Scheme document remain separate shortcuts.
 

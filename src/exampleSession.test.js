@@ -50,6 +50,41 @@ test("out-of-range saved Proportion columns return to the chooser", () => {
   expect(initialExampleSession("")).toBeNull();
 });
 
+test("Primes refresh preserves its maximum and camera, but a changed maximum refits", async () => {
+  const recipe = createExample("primes", { max: 12 });
+  stop = watchExampleSession(viewport, recipe);
+  const saved = { example: recipe, cam, showingUI: false };
+  expect(initialExampleSession("")).toEqual(saved);
+  expect(initialExampleSession("?sample=primes&max=12")).toEqual(saved);
+  expect((await loadExample(readExampleSession().example)).example).toEqual(recipe);
+  expect(initialExampleSession("?sample=primes&max=100")).toEqual({ example: { type: "primes", max: 100 } });
+  expect(initialExampleSession("?sample=primes")).toEqual({ example: { type: "primes", max: 30 } });
+  expect(initialExampleSession("?sample=primes&max=2310")).toEqual({ example: { type: "primes", max: 2310 } });
+  expect(initialExampleSession(`?sample=primes&max=${Number.MAX_SAFE_INTEGER + 1}`)).toBeNull();
+  expect(initialExampleSession("?document=/example.parsegraph&sample=primes&max=12")).toBeNull();
+  expect(viewport.toJSON).not.toHaveBeenCalled();
+});
+
+test("implicit and explicit Primes defaults share their saved camera", () => {
+  stop = watchExampleSession(viewport, createExample("primes"));
+  expect(initialExampleSession("?sample=primes&max=30").cam).toEqual(cam);
+  expect(initialExampleSession("?sample=primes").cam).toEqual(cam);
+});
+
+test("large Primes recipes restore their maximum and camera without a size cap", () => {
+  const recipe = createExample("primes", { max: 2310 });
+  stop = watchExampleSession(viewport, recipe);
+  const saved = { example: recipe, cam, showingUI: false };
+  expect(initialExampleSession("")).toEqual(saved);
+  expect(initialExampleSession("?sample=primes&max=2310")).toEqual(saved);
+  expect(viewport.toJSON).not.toHaveBeenCalled();
+});
+
+test("unsafe saved Primes maxima return to the chooser", () => {
+  localStorage.setItem(KEY, JSON.stringify({ version: 1, example: { type: "primes", max: Number.MAX_SAFE_INTEGER + 1 }, cam }));
+  expect(initialExampleSession("")).toBeNull();
+});
+
 test("camera movement saves periodically and the final position flushes on pagehide", () => {
   stop = watchExampleSession(viewport, example);
   const moved = { ...cam, cameraX: 123 };

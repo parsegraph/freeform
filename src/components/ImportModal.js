@@ -8,6 +8,7 @@ import * as importers from "../importers";
 
 import "./modal.css";
 import { createExample, loadExample } from "../examples";
+import { DEFAULT_PRIMES_MAX, PRIMES_SLIDER_MAX } from "../builders/primes";
 import DocumentImport from "./DocumentImport";
 import TemplateGallery from "./TemplateGallery";
 import { templateName } from "../templateCatalog";
@@ -332,6 +333,20 @@ function ImportFromTemplate({ openGraph, onClose }) {
     Number.isInteger(columnCount) &&
     columnCount >= 1 &&
     columnCount <= 200;
+  const [primesMax, setPrimesMax] = useState(String(DEFAULT_PRIMES_MAX));
+  const [primesSliderMax, setPrimesSliderMax] = useState(PRIMES_SLIDER_MAX);
+  const maximumNumber = Number(primesMax);
+  const validPrimesMax =
+    primesMax.trim() !== "" &&
+    Number.isSafeInteger(maximumNumber) &&
+    maximumNumber >= 1;
+  const changePrimesMax = (value) => {
+    setPrimesMax(value);
+    const number = Number(value);
+    if (Number.isSafeInteger(number) && number > 0) {
+      setPrimesSliderMax((current) => Math.max(current, number));
+    }
+  };
 
   const [loading, setLoading] = useState(false);
   const loadingRef = useRef(false);
@@ -349,6 +364,7 @@ function ImportFromTemplate({ openGraph, onClose }) {
   const createFromTemplate = async (type = importType) => {
     if (loadingRef.current) return;
     if (type === "proportion_v1" && !validColumns) return;
+    if (type === "primes" && !validPrimesMax) return;
     loadingRef.current = true;
     setLoading(true);
     setError(null);
@@ -356,6 +372,7 @@ function ImportFromTemplate({ openGraph, onClose }) {
       rounds: numRounds,
       vertical,
       ...(type === "proportion_v1" ? { columns: columnCount } : {}),
+      ...(type === "primes" ? { max: maximumNumber } : {}),
     });
     const benchmark = beginBenchmark({
       kind: "example",
@@ -495,7 +512,8 @@ function ImportFromTemplate({ openGraph, onClose }) {
                 ? "Preview shows a smaller grid. Create opens the full example."
                 : importType === "march" ||
                   importType === "cross" ||
-                  importType === "proportion_v1"
+                  importType === "proportion_v1" ||
+                  importType === "primes"
                 ? "Preview shows the default settings."
                 : importType.startsWith("daily_planner_")
                 ? "Preview shows the start of the day."
@@ -576,6 +594,55 @@ function ImportFromTemplate({ openGraph, onClose }) {
               )}
             </div>
           )}
+          {importType === "primes" && (
+            <div className="template-column-options">
+              <label
+                id="template-primes-max-label"
+                htmlFor="template-primes-max-slider"
+              >
+                Maximum number
+              </label>
+              <input
+                id="template-primes-max-slider"
+                type="range"
+                min="1"
+                max={primesSliderMax}
+                step="1"
+                value={Math.max(
+                  1,
+                  Math.min(
+                    primesSliderMax,
+                    maximumNumber || DEFAULT_PRIMES_MAX
+                  )
+                )}
+                disabled={loading}
+                aria-describedby="template-primes-max-note"
+                onChange={(event) => changePrimesMax(event.target.value)}
+              />
+              <input
+                id="template-primes-max"
+                type="number"
+                min="1"
+                step="1"
+                value={primesMax}
+                disabled={loading}
+                aria-labelledby="template-primes-max-label"
+                aria-invalid={!validPrimesMax}
+                aria-describedby={`template-primes-max-note${
+                  validPrimesMax ? "" : " template-primes-max-error"
+                }`}
+                onChange={(event) => changePrimesMax(event.target.value)}
+              />
+              <small id="template-primes-max-note">
+                Integers from 1 through the maximum, inclusive
+              </small>
+              {!validPrimesMax && (
+                <p id="template-primes-max-error" role="alert">
+                  Enter a positive whole number.
+                </p>
+              )}
+            </div>
+          )}
           <div className="buttons template-create-actions">
             <input
               type="submit"
@@ -583,7 +650,9 @@ function ImportFromTemplate({ openGraph, onClose }) {
               value={loading ? "Loading…" : "Create"}
               aria-describedby="selected-template-title"
               disabled={
-                loading || (importType === "proportion_v1" && !validColumns)
+                loading ||
+                (importType === "proportion_v1" && !validColumns) ||
+                (importType === "primes" && !validPrimesMax)
               }
             />
             {onClose && (

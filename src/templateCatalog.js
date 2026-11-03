@@ -23,6 +23,13 @@ export const TEMPLATE_CATALOG = [
     description: "A branching cross repeated at smaller scales.",
   },
   {
+    id: "primes",
+    name: "Primes",
+    category: "Patterns",
+    description:
+      "A number line with columns showing each number's prime divisors.",
+  },
+  {
     id: "rainbow",
     name: "Rainbow",
     category: "Patterns",

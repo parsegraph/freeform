@@ -1,5 +1,6 @@
 import { Direction, DirectionNode } from "parsegraph";
 import * as builders from "./builders";
+import { DEFAULT_PRIMES_MAX } from "./builders/primes";
 import * as importers from "./importers";
 import { MAX_ROUNDS } from "./settings";
 import { readGraph } from "./graphDocument";
@@ -19,7 +20,7 @@ const TYPES = new Set([
   "daily_planner_15", "daily_planner_30", "daily_planner_60", "random",
   "alt_columns", "march_madness", "march_madness_vert", "playoffs",
   "playoffs_vert", "march", "rainbow", "rainbow_vert", "rainbow_random", "cross",
-  "svg",
+  "svg", "primes",
   ...Object.keys(DOCUMENT_EXAMPLES),
 ]);
 const RANDOM_TYPES = new Set(["random", "alt_columns", "rainbow_random"]);
@@ -40,6 +41,11 @@ export function normalizeExample(value) {
     if (!Number.isInteger(value.columns) || value.columns < 1 || value.columns > 200) return null;
     result.columns = value.columns;
   }
+  if (value.type === "primes") {
+    const max = value.max === undefined ? DEFAULT_PRIMES_MAX : value.max;
+    if (!Number.isSafeInteger(max) || max < 1) return null;
+    result.max = max;
+  }
   if (RANDOM_TYPES.has(value.type)) {
     if (!Number.isInteger(value.seed) || value.seed < 0 || value.seed > 0xffffffff) return null;
     result.seed = value.seed;
@@ -55,8 +61,11 @@ export function createExample(type, options = {}) {
   });
 }
 
-export function exampleFromSample(sample) {
+export function exampleFromSample(sample, params = new URLSearchParams()) {
   if (!sample) return null;
+  if (sample === "primes") {
+    return createExample(sample, params.has("max") ? { max: Number(params.get("max")) } : {});
+  }
   if (TYPES.has(sample)) return createExample(sample);
   const parts = sample.split("_");
   switch (parts[0]) {
@@ -133,6 +142,7 @@ export async function loadExample(value, benchmark) {
         break;
       }
       case "grid": args = [builders.buildGrid(example.size)]; break;
+      case "primes": args = [readGraph(builders.buildPrimesDocument(example.max))]; break;
       case "daily_planner_5":
       case "daily_planner_10":
       case "daily_planner_15":

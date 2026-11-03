@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import Viewport from "./Viewport/Viewport";
 
 jest.mock("./Viewport/Viewport", () =>
   jest.fn().mockImplementation(() => {
@@ -45,6 +46,12 @@ jest.mock(
     }
 );
 
+const createViewport = Viewport.getMockImplementation();
+
+beforeEach(() => {
+  Viewport.mockImplementation(createViewport);
+});
+
 beforeAll(() => {
   Object.defineProperty(global, "crypto", {
     configurable: true,
@@ -72,4 +79,17 @@ test("opening a v1 document exposes applied and preserved capabilities", () => {
   expect(
     screen.getByText(/Preserved without interpretation/)
   ).toHaveTextContent("future/1");
+});
+
+test("opening another graph consumes the Primes launch limit and preserves unrelated URL options", () => {
+  const App = require("./App").default;
+  localStorage.clear();
+  window.history.replaceState({}, "", "/?sample=primes&max=12&other=keep");
+  try {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Open fixture" }));
+    expect(window.location.search).toBe("?other=keep");
+  } finally {
+    window.history.replaceState({}, "", "/");
+  }
 });

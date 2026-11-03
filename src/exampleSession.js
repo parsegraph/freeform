@@ -25,7 +25,7 @@ export function initialExampleSession(search) {
   if (params.has("public") || params.has("document")) return null;
   const saved = readExampleSession();
   if (!params.has("sample")) return saved;
-  const example = exampleFromSample(params.get("sample"));
+  const example = exampleFromSample(params.get("sample"), params);
   if (!example) return null;
   return JSON.stringify(saved?.example) === JSON.stringify(example)
     ? saved : { example };

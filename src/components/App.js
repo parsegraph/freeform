@@ -385,6 +385,7 @@ function App() {
       const url = new URL(window.location.href);
       if (documentURL) url.searchParams.set("document", documentURL);
       else url.searchParams.delete("document");
+      if (url.searchParams.get("sample") === "primes") url.searchParams.delete("max");
       url.searchParams.delete("sample");
       if (!roomName) url.searchParams.delete("public");
       if (url.href !== window.location.href) {
@@ -977,6 +978,7 @@ function App() {
               setInitialDocument(null);
               const url = new URL(window.location.href);
               url.searchParams.delete("document");
+              if (url.searchParams.get("sample") === "primes") url.searchParams.delete("max");
               url.searchParams.delete("sample");
               url.searchParams.delete("public");
               window.history.replaceState(window.history.state, "", url);

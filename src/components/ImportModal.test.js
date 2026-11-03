@@ -122,7 +122,7 @@ test("the gallery keeps Proportion and appearance while removing the extra fixtu
   fireEvent.click(screen.getByRole("button", { name: "Presentation", exact: true }));
   expect(screen.getByRole("button", { name: "Proportion", exact: true })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Appearance colors", exact: true })).toBeInTheDocument();
-  expect(screen.getByText("2 of 22 templates")).toBeInTheDocument();
+  expect(screen.getByText("2 of 23 templates")).toBeInTheDocument();
 });
 
 test.each([3, 7])("Proportion creates %s columns and freezes its controls while loading", async (columns) => {
@@ -168,6 +168,85 @@ test("invalid Proportion columns cannot submit, and switching templates remains 
   fireEvent.change(input, { target: { value: "" } });
   fireEvent.click(screen.getByRole("button", { name: "Grid", exact: true }));
   expect(screen.queryByRole("spinbutton", { name: "Columns", exact: true })).not.toBeInTheDocument();
+  expect(create).toBeEnabled();
+  fireEvent.click(create);
+  await waitFor(() => expect(openGraph).toHaveBeenCalledTimes(1));
+  expect(createExample).toHaveBeenCalledWith("grid", { rounds: 5, vertical: false });
+});
+
+test.each([1, 30, 100, 1000, 2310])("Primes creates integers through %s and freezes both controls while loading", async (max) => {
+  let finish;
+  loadExample.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+  const openGraph = jest.fn();
+  render(<ImportModal openGraph={openGraph} />);
+  fireEvent.click(screen.getByRole("button", { name: "Patterns", exact: true }));
+  fireEvent.click(screen.getByRole("button", { name: "Primes", exact: true }));
+  const input = screen.getByRole("spinbutton", { name: "Maximum number", exact: true });
+  const slider = screen.getByRole("slider", { name: "Maximum number", exact: true });
+  expect(input).toHaveValue(30);
+  expect(input).not.toHaveAttribute("max");
+  expect(slider).toHaveValue("30");
+  if (max !== 30) fireEvent.change(input, { target: { value: String(max) } });
+  expect(slider).toHaveValue(String(max));
+  expect(slider).toHaveAttribute("max", String(Math.max(1000, max)));
+  fireEvent.click(screen.getByRole("button", { name: "Create", exact: true }));
+  const options = { rounds: 5, vertical: false, max };
+  expect(createExample).toHaveBeenCalledWith("primes", options);
+  expect(loadExample).toHaveBeenCalledWith({ type: "primes", ...options });
+  expect(input).toBeDisabled();
+  expect(slider).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Loading…", exact: true })).toBeDisabled();
+  const recipe = { type: "primes", max };
+  await act(async () => finish({ ...loaded, example: recipe }));
+  expect(openGraph).toHaveBeenCalledWith(loaded.graph, null, null, loaded.viewportData, recipe, undefined, null, "Primes");
+});
+
+test("Primes slider updates its numeric field and retains the maximum when browsing other templates", () => {
+  render(<ImportModal openGraph={jest.fn()} />);
+  fireEvent.click(screen.getByRole("button", { name: "Primes", exact: true }));
+  const slider = screen.getByRole("slider", { name: "Maximum number", exact: true });
+  fireEvent.change(screen.getByRole("spinbutton", { name: "Maximum number", exact: true }), {
+    target: { value: "2310" },
+  });
+  expect(slider).toHaveAttribute("max", "2310");
+  fireEvent.change(slider, {
+    target: { value: "123" },
+  });
+  expect(screen.getByRole("spinbutton", { name: "Maximum number", exact: true })).toHaveValue(123);
+  expect(slider).toHaveAttribute("max", "2310");
+  fireEvent.click(screen.getByRole("button", { name: "Grid", exact: true }));
+  expect(screen.queryByRole("slider", { name: "Maximum number", exact: true })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Primes", exact: true }));
+  expect(screen.getByRole("spinbutton", { name: "Maximum number", exact: true })).toHaveValue(123);
+  expect(screen.getByRole("slider", { name: "Maximum number", exact: true })).toHaveValue("123");
+  expect(screen.getByRole("slider", { name: "Maximum number", exact: true })).toHaveAttribute("max", "2310");
+  expect(loadExample).not.toHaveBeenCalled();
+});
+
+test("invalid Primes maxima block submission without preventing another template from loading", async () => {
+  const openGraph = jest.fn();
+  render(<ImportModal openGraph={openGraph} />);
+  fireEvent.click(screen.getByRole("button", { name: "Primes", exact: true }));
+  const input = screen.getByRole("spinbutton", { name: "Maximum number", exact: true });
+  const create = screen.getByRole("button", { name: "Create", exact: true });
+  for (const value of ["", "0", "-1", String(Number.MAX_SAFE_INTEGER + 1), "2.5"]) {
+    fireEvent.change(input, { target: { value } });
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByRole("alert")).toHaveTextContent("Enter a positive whole number.");
+    expect(create).toBeDisabled();
+    fireEvent.submit(create.closest("form"));
+    expect(createExample).not.toHaveBeenCalled();
+    expect(loadExample).not.toHaveBeenCalled();
+  }
+  fireEvent.change(screen.getByRole("slider", { name: "Maximum number", exact: true }), {
+    target: { value: "100" },
+  });
+  expect(input).toHaveValue(100);
+  expect(input).toHaveAttribute("aria-invalid", "false");
+  expect(create).toBeEnabled();
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  fireEvent.change(input, { target: { value: "" } });
+  fireEvent.click(screen.getByRole("button", { name: "Grid", exact: true }));
   expect(create).toBeEnabled();
   fireEvent.click(create);
   await waitFor(() => expect(openGraph).toHaveBeenCalledTimes(1));

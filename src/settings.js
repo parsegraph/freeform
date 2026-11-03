@@ -1,5 +1,9 @@
 import Color from "parsegraph-color";
 
+// Freeform's surrounding layout context. Node declarations may override it;
+// inherited nodes remain inherited when a document is saved.
+const DEFAULT_LAYOUT_DIRECTION = "ltr";
+
 const USE_LOCAL_STORAGE = false;
 
 const PUBLIC_SERVERS = false;
@@ -53,6 +57,7 @@ const SHOW_WORLD_LABELS = true;
 const SHOW_NODE_SPOTLIGHTS = true;
 
 export {
+  DEFAULT_LAYOUT_DIRECTION,
   LINE_SPACING,
   WORLD_LABEL_SIZE,
   NODE_SEPARATION,

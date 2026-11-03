@@ -369,6 +369,21 @@ body {
   margin-top: 12px;
   margin-bottom: 0;
 }
+.node-direction-controls {
+  margin: 0 18px 20px;
+}
+.node-inspector .node-direction-controls {
+  margin: 24px 0 0;
+}
+.node-direction-controls label {
+  display: grid;
+  gap: 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.node-direction-controls select {
+  width: 100%;
+}
 .node-inspector textarea {
   width: 100%;
   min-height: 100px;

@@ -3,6 +3,7 @@ import { WebGLBlockPainter } from "parsegraph-blockpainter";
 import SpotlightPainter from "parsegraph-spotlightpainter";
 import {
   Alignment,
+  Bidi,
   Axis,
   CommitLayout,
   createPresentation,
@@ -108,6 +109,7 @@ jest.mock("parsegraph-glyphpainter", () => ({
 
 function group(text) {
   const node = {
+    effectiveBidi: () => "ltr",
     value: () => text,
     setValue: (value) => {
       text = value;
@@ -438,6 +440,24 @@ test.each([Alignment.NONE, Alignment.INWARD_VERTICAL])(
   }
 );
 
+test.each([Bidi.LTR, Bidi.RTL])("legacy glyphs anchor horizontal inward labels on the %s leading side without mirroring letters", (direction) => {
+  const node = group("AB");
+  node.effectiveBidi = () => direction;
+  node.neighbors = () => ({ hasNode: () => true, getAlignment: () => Alignment.NONE });
+  const painters = new WeakMap();
+  createLayoutPainter(
+    painters, new WeakMap(), {}, {}, () => style(), undefined, undefined,
+    new Font(), () => "object"
+  ).paint(node);
+  const calls = painters.get(node).glyphPainter.drawGlyph.mock.calls;
+  const padding = INWARD_SEPARATION / 4 + JSON_BORDER_PADDING;
+  expect(calls[0][1]).toBe(direction === Bidi.RTL
+    ? 20 / 2 - padding - 10 / FONT_UPSCALE
+    : -20 / 2 + padding);
+  expect(calls[1][1]).toBeGreaterThan(calls[0][1]);
+  expect(calls.map(([glyph]) => glyph.letter)).toEqual(["A", "B"]);
+});
+
 function measurementContext() {
   return {
     save: () => {},
@@ -455,7 +475,7 @@ function geometry(getNodeShape, presentation) {
 }
 
 function commit(root, painter) {
-  const layout = new CommitLayout(root, painter);
+  const layout = new CommitLayout(root, painter, "ltr");
   let steps = 0;
   while (layout.crank()) expect(++steps).toBeLessThan(10000);
 }

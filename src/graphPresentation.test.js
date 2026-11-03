@@ -1,4 +1,4 @@
-import { Alignment, CommitLayout, createPresentation } from "parsegraph";
+import { Alignment, Bidi, CommitLayout, createPresentation, Direction, DirectionNode } from "parsegraph";
 import { readGraph, documentState, graphNodes } from "./graphDocument";
 import { createDocumentLayout, drawDocumentLabel } from "./graphPresentation";
 import standard from "./fixtures/v1/proportion-standard.json";
@@ -32,7 +32,7 @@ test.each([
     documentState(root).presentation,
     context()
   );
-  const layout = new CommitLayout(root, painter);
+  const layout = new CommitLayout(root, painter, "ltr");
   let steps = 0;
   while (layout.crank()) expect(++steps).toBeLessThan(10000);
   graphNodes(root).forEach((node) => {
@@ -61,7 +61,7 @@ test("text drawing and measurement use the same newline, font, and line-height p
   presentation.text = { fontFamily: "serif", fontSize: 14, lineHeight: 18 };
   const ctx = context();
   const painter = createDocumentLayout(presentation, ctx);
-  const layout = new CommitLayout(root, painter);
+  const layout = new CommitLayout(root, painter, "ltr");
   while (layout.crank());
   drawDocumentLabel(
     ctx,
@@ -109,6 +109,7 @@ test.each([
   presentation.styles.custom = { ...presentation.styles.block, square };
   presentation.nodeStyles.label = "custom";
   const node = {
+    effectiveBidi: () => "ltr",
     id: () => "label",
     value: () => "label",
     layout: () => ({
@@ -142,7 +143,8 @@ test("Memory Piers keeps static slider geometry and its original recipe after ed
   const state = documentState(root);
   const layout = new CommitLayout(
     root,
-    createDocumentLayout(state.presentation, context())
+    createDocumentLayout(state.presentation, context()),
+    "ltr"
   );
   while (layout.crank());
   const sliders = graphNodes(root).filter(
@@ -161,4 +163,30 @@ test("Memory Piers keeps static slider geometry and its original recipe after ed
   expect(
     writeGraph(root).nodes.find((node) => node.id === root.id()).value
   ).toBe("edited");
+});
+
+test.each([Bidi.LTR, Bidi.RTL])("horizontal inward labels follow each resolved scope in a %s layout", (surrounding) => {
+  const root = new DirectionNode("outer");
+  const inward = new DirectionNode("inner");
+  const nested = new DirectionNode("nested");
+  root.connect(Direction.INWARD, inward);
+  inward.connect(Direction.INWARD, nested);
+  inward.setBidi(surrounding === Bidi.LTR ? Bidi.RTL : Bidi.LTR);
+  const presentation = createPresentation();
+  const ctx = context();
+  const job = new CommitLayout(root, createDocumentLayout(presentation, ctx), surrounding);
+  while (job.crank()) {}
+  for (const [node, rtl] of [[root, surrounding === Bidi.RTL], [inward, surrounding === Bidi.LTR]]) {
+    ctx.fillText.mockClear();
+    drawDocumentLabel(ctx, node, { scale: () => 1, x: () => 0, y: () => 0 },
+      presentation, { textColor: "#000000", textAlpha: 1 });
+    const [label, x] = ctx.fillText.mock.calls[0];
+    expect(label).toBe(node.value());
+    expect(Math.sign(x)).toBe(rtl ? 1 : -1);
+    expect(ctx.textAlign).toBe(rtl ? "right" : "left");
+    const child = node.neighbors().nodeAt(Direction.INWARD);
+    expect(Math.sign(child.layout().absoluteX() - node.layout().absoluteX())).toBe(rtl ? -1 : 1);
+  }
+  expect(root.bidi()).toBe(Bidi.INHERIT);
+  expect(nested.bidi()).toBe(Bidi.INHERIT);
 });

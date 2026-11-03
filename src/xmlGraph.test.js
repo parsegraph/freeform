@@ -1,4 +1,5 @@
 import {
+  Bidi,
   CommitLayout,
   Direction,
   DirectionCaret,
@@ -10,13 +11,14 @@ import { TextDecoder, TextEncoder } from "util";
 import { readFileSync } from "fs";
 import { resolve } from "path";
 import GraphStack from "./GraphStack";
+import { DEFAULT_LAYOUT_DIRECTION } from "./settings";
 import {
   graphXml,
   exportGraphToXml,
   exportGraphToSvg,
   readXmlFile,
 } from "./xmlGraph";
-import { graphNodes, readGraph, writeGraph } from "./graphDocument";
+import { documentState, graphNodes, readGraph, writeGraph } from "./graphDocument";
 import { createLegacyLayout } from "./graphLayout";
 
 const svg = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -63,13 +65,14 @@ function expectMultislotSeparation(root) {
   });
 }
 
-function layoutXml(root) {
+function layoutXml(root, defaultDirection = DEFAULT_LAYOUT_DIRECTION) {
   const layout = new CommitLayout(
     root,
     createLegacyLayout({
       resetTransform() {},
       measureText: (text) => ({ width: [...text].length * 6 }),
-    })
+    }),
+    defaultDirection
   );
   let steps = 0;
   while (layout.crank()) expect(++steps).toBeLessThan(10000);
@@ -190,10 +193,10 @@ test("SVG round-trip preserves namespaces, attributes, mixed content, whitespace
   expect(xml).toContain("&#9;&#10;&#13;");
 });
 
-test("the XML mapping survives v1 save/reload and exports current graph edits", () => {
+test("the XML mapping survives v2 save/reload and exports current graph edits", () => {
   const original = graphXml(svg);
   const saved = writeGraph(original);
-  expect(saved.version).toBe(1);
+  expect(saved.version).toBe(2);
   expect(saved.capabilities["separation/1"]).toBeDefined();
   const positions = layoutXml(original);
   const root = readGraph(saved);
@@ -246,6 +249,49 @@ test("normal Freeform snapshots and undo/redo retain XML nodes and whitespace", 
   expectMultislotSeparation(redone);
   expect(layoutXml(redone)).toEqual(editedPositions);
   expect(exportGraphToSvg(redone)).toContain('viewBox="0 0 999 999"');
+});
+
+test("XML v2 saves and undo preserve three bidi declarations while markup keeps logical child order", () => {
+  const source = '<root id="original"><left/><right><inside/></right></root>';
+  const root = graphXml(source);
+  expect(documentState(root)).toMatchObject({ version: 2, sourceVersion: 2 });
+  expect(graphNodes(root).every((node) => node.bidi() === Bidi.INHERIT)).toBe(true);
+  const element = graphNodes(root).find((node) => node.value() === "<root>");
+  const right = graphNodes(root).find((node) => node.value() === "<right>");
+  element.setBidi(Bidi.RTL);
+  right.setBidi(Bidi.LTR);
+  const declarations = (graph) => Object.fromEntries(graphNodes(graph).map((node) => [node.id(), node.bidi()]));
+  const originalBidi = declarations(root);
+  const originalTopology = Object.fromEntries(graphNodes(root).map((node) => [node.id(), {
+    parent: node.neighbors().isRoot() ? null : node.neighbors().parentNode().id(),
+    direction: node.neighbors().parentDirection(),
+  }]));
+  for (const direction of [Bidi.LTR, Bidi.RTL]) {
+    const before = layoutXml(root, direction);
+    expect(root.effectiveBidi()).toBe(direction);
+    expect(element.effectiveBidi()).toBe(Bidi.RTL);
+    expect(right.effectiveBidi()).toBe(Bidi.LTR);
+    const firstBud = element.neighbors().nodeAt(Direction.DOWNWARD);
+    const nextBud = firstBud.neighbors().nodeAt(Direction.FORWARD);
+    expect(nextBud.layout().absoluteX()).toBeLessThan(firstBud.layout().absoluteX());
+    const restored = readGraph(JSON.parse(JSON.stringify(writeGraph(root))));
+    expect(declarations(restored)).toEqual(originalBidi);
+    expect(Object.fromEntries(graphNodes(restored).map((node) => [node.id(), {
+      parent: node.neighbors().isRoot() ? null : node.neighbors().parentNode().id(),
+      direction: node.neighbors().parentDirection(),
+    }]))).toEqual(originalTopology);
+    expect(layoutXml(restored, direction)).toEqual(before);
+    expect(exportGraphToXml(restored)).toBe(source);
+  }
+  const history = new GraphStack(); history.save(root);
+  const attributeValue = element.neighbors().nodeAt(Direction.INWARD).neighbors().nodeAt(Direction.FORWARD);
+  attributeValue.setValue("edited");
+  history.save(root); history.undo();
+  expect(declarations(history.widget())).toEqual(originalBidi);
+  expect(exportGraphToXml(history.widget())).toBe(source);
+  history.redo();
+  expect(declarations(history.widget())).toEqual(originalBidi);
+  expect(exportGraphToXml(history.widget())).toBe(source.replace("original", "edited"));
 });
 
 test("external DOCTYPEs round-trip as data and never reach the XML parser", () => {

@@ -1,5 +1,6 @@
-import { Alignment, AxisOverlap, CommitLayout, Direction, DirectionCaret, DirectionNode, Fit, SHRINK_SCALE } from "parsegraph";
+import { Alignment, AxisOverlap, Bidi, CommitLayout, Direction, DirectionCaret, DirectionNode, Fit, SHRINK_SCALE } from "parsegraph";
 import GraphStack from "./GraphStack";
+import { DEFAULT_LAYOUT_DIRECTION } from "./settings";
 import { documentState, graphNodes, readGraph, writeGraph } from "./graphDocument";
 import { readLisp } from "./lispReader";
 import * as reader from "./lispReader";
@@ -30,12 +31,12 @@ test("layout upgrade resolves ordinary graph selections with legacy numeric IDs"
   for (const selection of [null, undefined, 99, {}, false])
     expect(upgradeLispLayout(root, selection).selectedNode).toBe(root);
 });
-const commit = (root) => {
+const commit = (root, defaultDirection = DEFAULT_LAYOUT_DIRECTION) => {
   const job = new CommitLayout(root, { size: (node, out) => {
     const lines = String(node.value() || "").split("\n");
     out[0] = Math.max(8, ...lines.map((line) => line.length * 6));
     out[1] = lines.length * 12;
-  } });
+  } }, defaultDirection);
   let steps = 0;
   while (job.crank()) expect(++steps).toBeLessThan(10000);
 };
@@ -43,6 +44,60 @@ const absoluteScales = (root) => {
   commit(root);
   return new Map(graphNodes(root).map((node) => [node.id(), node.layout().absoluteScale()]));
 };
+
+test("Lisp rebuilds and native history preserve nested bidi scopes without changing source order", () => {
+  let root = createStructuredLisp("(outer (inner leaf) tail)");
+  expect(documentState(root)).toMatchObject({ version: 2, sourceVersion: 2 });
+  expect(documentState(root).metadata.freeform.structuredLisp.version).toBe(1);
+  expect(graphNodes(root).every((node) => node.bidi() === Bidi.INHERIT)).toBe(true);
+  const outer = first(root);
+  const nested = forward(first(outer));
+  const tail = forward(nested);
+  outer.setBidi(Bidi.RTL);
+  nested.setBidi(Bidi.LTR);
+  const originalBidi = Object.fromEntries(graphNodes(root).map((node) => [node.id(), node.bidi()]));
+  const assertBidi = (graph) => {
+    expect(Object.fromEntries(graphNodes(graph).map((node) => [node.id(), node.bidi()])))
+      .toMatchObject(originalBidi);
+    expect(graphNodes(graph).filter((node) => !(node.id() in originalBidi))
+      .every((node) => node.bidi() === Bidi.INHERIT)).toBe(true);
+  };
+  const geometry = (graph, defaultDirection) => {
+    commit(graph, defaultDirection);
+    const byId = new Map(graphNodes(graph).map((node) => [node.id(), node]));
+    expect(graph.effectiveBidi()).toBe(defaultDirection);
+    expect(byId.get(outer.id()).effectiveBidi()).toBe(Bidi.RTL);
+    const inner = byId.get(nested.id());
+    expect(inner.effectiveBidi()).toBe(Bidi.LTR);
+    expect(forward(first(inner)).effectiveBidi()).toBe(Bidi.LTR);
+    expect(forward(first(inner)).layout().absoluteX()).toBeGreaterThan(first(inner).layout().absoluteX());
+    return Object.fromEntries(graphNodes(graph).map((node) => [node.id(), {
+      parent: node.neighbors().isRoot() ? null : node.neighbors().parentNode().id(),
+      direction: node.neighbors().parentDirection(), bidi: node.bidi(),
+      resolved: node.effectiveBidi(), x: node.layout().absoluteX(),
+      y: node.layout().absoluteY(), scale: node.layout().absoluteScale(),
+    }]));
+  };
+  const history = new GraphStack(); history.save(root);
+  root = applyLispCommand(root, tail.id(), { type: "setText", text: "changed" }).root;
+  root = applyLispCommand(root, tail.id(), { type: "wrap", kind: "quote" }).root;
+  assertBidi(root);
+  expect(exportStructuredLisp(root)).toBe("(outer (inner leaf) 'changed)");
+  history.save(root);
+  for (const direction of [Bidi.LTR, Bidi.RTL]) {
+    const before = geometry(root, direction);
+    const saved = writeGraph(root);
+    expect(saved.version).toBe(2);
+    expect(saved.nodes.every((node) => "bidi" in node && !("rightToLeft" in node))).toBe(true);
+    const restored = roundTrip(root);
+    assertBidi(restored);
+    expect(geometry(restored, direction)).toEqual(before);
+  }
+  history.undo(); assertBidi(history.widget());
+  expect(exportStructuredLisp(history.widget())).toBe("(outer (inner leaf) tail)");
+  history.redo(); assertBidi(history.widget());
+  expect(exportStructuredLisp(history.widget())).toBe("(outer (inner leaf) 'changed)");
+});
 
 test.each([
   "", "() #() #u8()", "(define (square x) (* x x)) (square 12)",
@@ -291,7 +346,7 @@ test("forms link directly across a row and row starts link vertically", () => {
   expect(inspectLispSelection(root, alpha).nodeId).toBe(alpha.id());
   const job = new CommitLayout(root, { size: (node, out) => {
     out[0] = Math.max(6, String(node.value() || "").length * 6); out[1] = 10;
-  } });
+  } }, DEFAULT_LAYOUT_DIRECTION);
   let steps = 0;
   while (job.crank()) expect(++steps).toBeLessThan(10000);
   expect(alpha.layout().absoluteY()).toBeCloseTo(beta.layout().absoluteY());

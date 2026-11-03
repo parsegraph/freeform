@@ -1,3 +1,5 @@
+import parsegraphPackage from "parsegraph/package.json";
+
 // Opt-in measurements for the work between opening a graph and its first render.
 // Keep collectors out of normal sessions; snapshots never contain graph data.
 const MAX_RUNS = 10;
@@ -249,6 +251,7 @@ export function beginBenchmark(source) {
     },
     environment: {
       buildMode: process.env.NODE_ENV,
+      parsegraphVersion: parsegraphPackage.version,
       userAgent: navigator.userAgent,
       viewport: { width: window.innerWidth, height: window.innerHeight },
       devicePixelRatio: window.devicePixelRatio,

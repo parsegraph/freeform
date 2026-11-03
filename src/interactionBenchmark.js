@@ -1,4 +1,5 @@
 import { benchmarkEnabled } from "./benchmark";
+import parsegraphPackage from "parsegraph/package.json";
 
 // Opt-in interaction diagnostics. Keep graph objects out of the exported trace.
 const MAX_EVENTS = 5000;
@@ -290,6 +291,7 @@ export function startInteractionBenchmark({
     },
     environment: {
       buildMode: process.env.NODE_ENV,
+      parsegraphVersion: parsegraphPackage.version,
       userAgent: navigator.userAgent,
       viewport: { width: window.innerWidth, height: window.innerHeight },
       devicePixelRatio: window.devicePixelRatio,

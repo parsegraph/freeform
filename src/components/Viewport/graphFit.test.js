@@ -6,6 +6,7 @@ import { readGraph, documentState, graphNodes } from "../../graphDocument";
 import { createDocumentLayout } from "../../graphPresentation";
 import memory from "../../fixtures/v1/memory-piers.json";
 import proportion from "../../fixtures/v1/proportion-proportional.json";
+import mixed from "../../fixtures/v2/bidi-contexts.json";
 
 function harness(width = 800, height = 600) {
   const viewport = new Viewport();
@@ -24,7 +25,7 @@ function open(viewport, document, saved) {
   viewport.show(root, saved);
   const ctx = { save() {}, restore() {}, resetTransform() {},
     measureText: (text) => ({ width: [...text].length * 6 }) };
-  const layout = new CommitLayout(root, createDocumentLayout(documentState(root).presentation, ctx));
+  const layout = new CommitLayout(root, createDocumentLayout(documentState(root).presentation, ctx), "ltr");
   while (layout.crank()) {}
   return root;
 }
@@ -81,6 +82,15 @@ test("initial fit waits through zero dimensions and does not consume its request
   expect(() => renderer.focusCamera()).not.toThrow();
   expect(viewport._fitGraphRequested).toBe(true);
   viewport.camera().setSize(800, 600);
+  renderer.focusCamera();
+  expectEntireGraphVisible(viewport);
+});
+
+test.each(["inherit", "rtl"])("camera fit includes nested opposite-direction regions with a %s root", (bidi) => {
+  const fixture = JSON.parse(JSON.stringify(mixed));
+  fixture.nodes.find((node) => node.id === fixture.root).bidi = bidi;
+  const { viewport, renderer } = harness(420, 700);
+  open(viewport, fixture);
   renderer.focusCamera();
   expectEntireGraphVisible(viewport);
 });

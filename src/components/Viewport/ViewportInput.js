@@ -265,6 +265,10 @@ export default class ViewportInput {
     return this.viewport().hasWidget() && this.viewport().rendering().showingUI();
   }
 
+  geometryReady() {
+    return this.viewport().rendering().layoutReady?.() !== false;
+  }
+
   constructor(viewport) {
     this._viewport = viewport;
     this._mousePos = [NaN, NaN];
@@ -359,7 +363,7 @@ export default class ViewportInput {
       mouseDownPos[0] = worldX;
       mouseDownPos[1] = worldY;
       isDown = Date.now();
-      if (!this.canInteract()) {
+      if (!this.canInteract() || !this.geometryReady()) {
         return;
       }
       let selectedNode = widget
@@ -413,7 +417,7 @@ export default class ViewportInput {
       if (
         includeFinalMovement && !dragged && !hadGesture && canvas.contains(e.target) &&
         !isNaN(isDown) &&
-        Date.now() - isDown < MAX_CLICK_DELAY_MS
+        Date.now() - isDown < MAX_CLICK_DELAY_MS && this.geometryReady()
       ) {
         const [worldX, worldY] = cam.transform(mouseX, mouseY);
         let selectedNode = car
@@ -466,10 +470,10 @@ export default class ViewportInput {
           dragTo(e);
         } else {
           const [worldX, worldY] = cam.transform(...localPoint(e));
-          let hoveredNode = car
+          let hoveredNode = this.geometryReady() ? car
             .root()
             .layout()
-            .nodeUnderCoords(worldX, worldY, 1, size);
+            .nodeUnderCoords(worldX, worldY, 1, size) : null;
           if (this._hoveredNode !== hoveredNode) {
             this._hoveredNode = hoveredNode;
             viewport.refreshOverlay();
@@ -546,7 +550,7 @@ export default class ViewportInput {
           mouseX,
           mouseY,
         });
-        if (!this.canInteract()) {
+        if (!this.canInteract() || !this.geometryReady()) {
           // View-mode taps select on release; drags and pinches keep panning.
           touchingNode = false;
           viewTouch = numActiveTouches() === 1 ? {
@@ -578,6 +582,7 @@ export default class ViewportInput {
     });
 
     const gesture = (mouseX, mouseY) => {
+      if (!this.geometryReady()) return false;
       const car = viewport.caret();
       const cam = viewport.camera();
       const layout = car.node().layout();
@@ -652,7 +657,7 @@ export default class ViewportInput {
         for (const touch of e.changedTouches) {
           if (viewTouch?.id === touch.identifier && isGesture && !viewTouch.moved &&
             Math.hypot(touch.clientX - viewTouch.x, touch.clientY - viewTouch.y) <= 8 &&
-            e.timeStamp - viewTouch.time < MAX_CLICK_DELAY_MS) {
+            e.timeStamp - viewTouch.time < MAX_CLICK_DELAY_MS && this.geometryReady()) {
             const [x, y] = cam.transform(...localPoint(touch));
             const selected = car.root().layout().nodeUnderCoords(x, y, 1, size);
             if (selected) viewport.selectNode(selected);
@@ -679,7 +684,7 @@ export default class ViewportInput {
       if (isNaN(mouseX)) {
         return;
       }
-      if (touchingNode && isGesture) {
+      if (touchingNode && isGesture && this.geometryReady()) {
         if (gesture(mouseX, mouseY)) {
           viewport.repaint();
         } else if (!isNaN(isDown) && Date.now() - isDown < MAX_CLICK_DELAY_MS) {

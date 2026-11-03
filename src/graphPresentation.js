@@ -2,6 +2,7 @@ import {
   createPresentationPainter,
   createTextMeasurer,
   Alignment,
+  Bidi,
   Direction,
 } from "parsegraph";
 import Color from "parsegraph-color";
@@ -46,8 +47,9 @@ export function drawDocumentLabel(ctx, node, camera, presentation, appearance, s
       y = -size[1] / 2 + style.paddingY + lineHeight / 2 +
         (style.square ? sidePadding : 0);
     } else {
-      x = -size[0] / 2 + style.paddingX + sidePadding;
-      align = "left";
+      const rtl = node.effectiveBidi() === Bidi.RTL;
+      x = (rtl ? 1 : -1) * (size[0] / 2 - style.paddingX - sidePadding);
+      align = rtl ? "right" : "left";
     }
   }
   ctx.save();

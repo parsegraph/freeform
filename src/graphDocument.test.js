@@ -1,4 +1,5 @@
 import {
+  Bidi,
   Direction,
   DirectionNode,
   Fit,
@@ -13,13 +14,63 @@ import {
   graphSelection,
   graphViewport,
   initializeGraphDocument,
+  CURRENT_DOCUMENT_VERSION,
 } from "./graphDocument";
 import GraphStack from "./GraphStack";
 import Viewport from "./components/Viewport/Viewport";
 import Color from "parsegraph-color";
 import fixture from "./fixtures/v1/appearance-colors.json";
+import { DEFAULT_NODE_STYLE, PAGE_BACKGROUND_COLOR } from "./settings";
 
 const copy = (value) => JSON.parse(JSON.stringify(value));
+
+test("native v2 preserves inherited and explicit bidi declarations with opaque document data", () => {
+  const data = copy(fixture);
+  data.version = 2;
+  data.nodes = data.nodes.map(({ rightToLeft, ...node }, index) => ({
+    ...node, bidi: [Bidi.INHERIT, Bidi.RTL, Bidi.LTR][index],
+  }));
+  data.capabilities["future/42"] = { nodes: ["root", { data: false }] };
+  data.metadata = { custom: { payload: [null, 0] }, freeform: { custom: "keep" } };
+  const root = readGraph(data);
+  expect(documentState(root)).toMatchObject({ version: 2, sourceVersion: 2 });
+  const saved = writeGraph(root, "child", {
+    cam: { cameraX: 4, cameraY: -5, scale: 2 }, showingUI: false,
+  });
+  expect(saved.version).toBe(2);
+  expect(saved.capabilities).toEqual(data.capabilities);
+  expect(saved.metadata.custom).toEqual(data.metadata.custom);
+  expect(saved.metadata.freeform.custom).toBe("keep");
+  const declarations = (nodes) => Object.fromEntries(nodes.map((node) => [node.id, node.bidi]));
+  expect(declarations(saved.nodes)).toEqual(declarations(data.nodes));
+  expect(saved.nodes.every((node) => !Object.hasOwn(node, "rightToLeft"))).toBe(true);
+  expect(graphSelection(saved)).toBe("child");
+  expect(graphViewport(saved)).toEqual({ cam: { cameraX: 4, cameraY: -5, scale: 2 }, showingUI: false });
+});
+
+test.each([0, 1])("legacy v%s imports discard inert RTL flags and save an explicit LTR root", (version) => {
+  const data = copy(fixture);
+  data.nodes.forEach((node) => { node.rightToLeft = true; });
+  const input = version === 1 ? data : serializeParsegraph(readGraph(data));
+  if (version === 0) Object.values(input.__parsegraph).forEach((node) => { node.rightToLeft = true; });
+  const root = readGraph(input);
+  expect(documentState(root)).toMatchObject({ version: 2, sourceVersion: version });
+  expect(root.bidi()).toBe(Bidi.LTR);
+  expect(graphNodes(root).filter((node) => node !== root).every((node) => node.bidi() === Bidi.INHERIT)).toBe(true);
+  const saved = writeGraph(root);
+  expect(saved.version).toBe(2);
+  expect(saved.nodes.find((node) => node.id === saved.root).bidi).toBe(Bidi.LTR);
+});
+
+test("fresh graphs save inherited direction without requiring document initialization", () => {
+  const root = new DirectionNode("new graph");
+  const saved = writeGraph(root);
+  expect(saved.version).toBe(2);
+  expect(saved.nodes[0].bidi).toBe(Bidi.INHERIT);
+  expect(documentState(readGraph(saved)).sourceVersion).toBe(2);
+  expect(() => readGraph({ ...saved, nodes: saved.nodes.map(({ bidi, ...node }) => node) })).toThrow();
+  expect(() => readGraph({ ...saved, nodes: saved.nodes.map((node) => ({ ...node, rightToLeft: false })) })).toThrow();
+});
 
 test.each(["structuredJson", "structuredLisp"])(
   "%s metadata cannot be silently discarded through a v0 export",
@@ -28,8 +79,8 @@ test.each(["structuredJson", "structuredLisp"])(
       const data = copy(fixture);
       data.metadata = { freeform: { [language]: marker } };
       const root = readGraph(data);
-      expect(() => writeGraph(root, null, null, 0)).toThrow("require Parsegraph v1");
-      expect(writeGraph(root, null, null, 1).metadata.freeform[language]).toEqual(marker);
+      expect(() => writeGraph(root, null, null, 0)).toThrow("require the native Parsegraph format");
+      expect(writeGraph(root, null, null).metadata.freeform[language]).toEqual(marker);
     }
   }
 );
@@ -48,7 +99,7 @@ test("builder documents retain node separation in their first history snapshot",
   const history = new GraphStack();
   history.save(root);
   const restored = history.widget();
-  expect(documentState(restored).version).toBe(1);
+  expect(documentState(restored).version).toBe(CURRENT_DOCUMENT_VERSION);
   expect(restored.nodeFit()).toBe(Fit.EXACT);
   expect(restored.separationFit(Direction.FORWARD)).toBe(Fit.LOOSE);
   expect(restored.separationFit(Direction.DOWNWARD)).toBe(Fit.EXACT);
@@ -199,20 +250,25 @@ test("deleting styled nodes repairs supported references and preserves unknown p
   expect(() => readGraph(saved)).not.toThrow();
 });
 
-test("core-only v1 remains valid without appearance, and v0 still round-trips as v0", () => {
+test("legacy inputs save as v2 while explicit v0 export remains available", () => {
   const data = copy(fixture);
   data.capabilities = {};
   const root = readGraph(data);
+  expect(documentState(root)).toMatchObject({ version: 2, sourceVersion: 1 });
   expect(
     writeGraph(root, root, viewportFor(root).toJSON()).capabilities
   ).toEqual({});
   const legacy = new DirectionNode("legacy");
   const v0 = serializeParsegraph(legacy);
-  expect(documentState(readGraph(v0)).version).toBe(0);
-  expect(writeGraph(readGraph(v0))).toEqual(v0);
-  const v1 = writeGraph(legacy, legacy, viewportFor(legacy).toJSON(), 1);
-  expect(v1.version).toBe(1);
-  expect(v1.capabilities["appearance/1"].defaults).toBeDefined();
+  const imported = readGraph(v0);
+  expect(documentState(imported)).toMatchObject({ version: 2, sourceVersion: 0 });
+  expect(writeGraph(imported).version).toBe(2);
+  expect(writeGraph(imported, undefined, undefined, 0)).toEqual(v0);
+  const native = writeGraph(legacy, legacy, viewportFor(legacy).toJSON());
+  expect(native.version).toBe(2);
+  expect(native.capabilities["appearance/1"].defaults).toBeDefined();
+  expect(writeGraph(legacy, undefined, undefined, 1).version).toBe(2);
+  expect(() => writeGraph(legacy, undefined, undefined, 99)).toThrow("Unsupported");
 });
 
 test("adding nodes uses unique string IDs and a default presentation style", () => {
@@ -250,6 +306,49 @@ test("legacy sparse colors and numeric IDs migrate together with separate page a
   expect(appearance.pageBackgroundAlpha).toBe(0.25);
   expect(Object.keys(appearance.defaults)).toHaveLength(8);
   expect(() => readGraph(saved)).not.toThrow();
+});
+
+test.each([
+  { styles: { 12: { backgroundColor: "#ff1234", backgroundAlpha: 0 } } },
+  { pageBackgroundColor: "rgba(12,34,56,0.25)" },
+  { defaultNodeStyle: { textColor: "#123456", textAlpha: 0 } },
+])("the first legacy native snapshot preserves sparse viewport colors before showing: %j", (viewportData) => {
+  const data = {
+    ...serializeParsegraph(new DirectionNode("legacy").setId(12)),
+    selectedNode: 12,
+    viewport: {
+      ...viewportData,
+      cam: { cameraX: 5, cameraY: -6, scale: 2 },
+      showingUI: true,
+    },
+  };
+  const imported = readGraph(data);
+  // This is App.openGraph's first snapshot, before any viewport loads defaults.
+  const saved = writeGraph(imported, graphSelection(data), graphViewport(data));
+  const restored = readGraph(saved);
+  const appearance = documentState(restored).appearance;
+  expect(saved.version).toBe(2);
+  expect(restored.bidi()).toBe(Bidi.LTR);
+  expect(appearance.nodeStyles).toEqual(viewportData.styles ?? {});
+  expect(appearance.defaults.textColor).toBe(viewportData.defaultNodeStyle?.textColor ?? DEFAULT_NODE_STYLE.textColor.asHex());
+  expect(appearance.defaults.textAlpha).toBe(viewportData.defaultNodeStyle?.textAlpha ?? DEFAULT_NODE_STYLE.textColor.a());
+  expect(appearance.defaults.borderColor).toBe(DEFAULT_NODE_STYLE.borderColor.asHex());
+  expect(appearance.pageBackgroundColor).toBe(viewportData.pageBackgroundColor ? "#0c2238" : PAGE_BACKGROUND_COLOR.asHex());
+  expect(appearance.pageBackgroundAlpha).toBe(viewportData.pageBackgroundColor ? 0.25 : PAGE_BACKGROUND_COLOR.a());
+  expect(graphSelection(saved)).toBe("12");
+  expect(graphViewport(saved)).toEqual({ cam: data.viewport.cam, showingUI: true });
+});
+
+test("fresh color-builder graphs preserve sparse styles in their first native history snapshot", () => {
+  const root = new DirectionNode("colored").setId(12);
+  const styles = { 12: { backgroundColor: "#123456", backgroundAlpha: 0.5 } };
+  const stack = new GraphStack();
+  stack.save(root, root, { styles, pageBackgroundColor: "#223344" });
+  const restored = stack.widget();
+  expect(restored.bidi()).toBe(Bidi.INHERIT);
+  expect(documentState(restored).appearance).toMatchObject({
+    nodeStyles: styles, pageBackgroundColor: "#223344", pageBackgroundAlpha: 1,
+  });
 });
 
 test("view annotations cannot override document appearance or apply an invalid camera", () => {

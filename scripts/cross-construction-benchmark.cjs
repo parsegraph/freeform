@@ -84,11 +84,15 @@ const readGraph = new Function(
   "deserializeParsegraphDocument",
   "graphNodes",
   "DOCUMENT_STATE",
+  "own",
+  "CURRENT_DOCUMENT_VERSION",
   `return (${readGraphSource});`
 )(
   parsegraph.deserializeParsegraphDocument,
   graphNodes,
-  Symbol.for("parsegraph.freeform.document")
+  Symbol.for("parsegraph.freeform.document"),
+  (value, key) => Object.prototype.hasOwnProperty.call(value ?? {}, key),
+  Number(documentSource.match(/export const CURRENT_DOCUMENT_VERSION = (\d+);/)?.[1] ?? 1)
 );
 
 function usage() {
@@ -281,8 +285,8 @@ function main() {
       timing:
         "Only synchronous buildCross or app readGraph calls; excludes fixture preparation, serialization, semantic validation, explicit GC, and output. No layout, paint preparation, rendering, or scrolling.",
       snapshotFormat:
-        "legacy v0 (__parsegraph), matching built-in cross writeGraph",
-      semanticValidationFormat: "v1, outside timed regions",
+        "legacy v0 (__parsegraph), held fixed for version comparisons; current native history may use a newer format",
+      semanticValidationFormat: "installed library document format, outside timed regions; legacy root direction migration checked separately",
     });
     const prepared = new Map();
     for (const rounds of config.rounds) {
@@ -297,7 +301,17 @@ function main() {
       const document = parsegraph.serializeParsegraph(root);
       const semanticDocument = parsegraph.serializeParsegraphDocument(root);
       const semanticFingerprint = fingerprint(semanticDocument);
-      prepared.set(rounds, { document, semanticFingerprint, counts });
+      // v2 intentionally migrates v0 to an explicit LTR root. Freshly built
+      // nodes inherit, so compare that one declaration against its expected
+      // migration rather than treating it as a construction regression.
+      const migratedDocument = JSON.parse(JSON.stringify(semanticDocument));
+      if (migratedDocument.version === 2) {
+        if (migratedDocument.nodes.some((node) => node.bidi !== "inherit"))
+          throw new Error("Review the benchmark: cross now authors explicit bidi declarations.");
+        migratedDocument.nodes.find((node) => node.id === migratedDocument.root).bidi = "ltr";
+      }
+      const legacyFingerprint = fingerprint(migratedDocument);
+      prepared.set(rounds, { document, semanticFingerprint, legacyFingerprint, counts });
       emit({
         type: "fixture",
         rounds,
@@ -307,6 +321,7 @@ function main() {
           (node) => node.paintGroup
         ).length,
         semanticFingerprint,
+        legacyFingerprint,
         snapshotBytes: Buffer.byteLength(JSON.stringify(document)),
       });
       root = null;
@@ -336,7 +351,7 @@ function main() {
         const actualFingerprint = fingerprint(actual);
         const counts = census(root);
         if (
-          actualFingerprint !== fixture.semanticFingerprint ||
+          actualFingerprint !== (kind === "deserialization" ? fixture.legacyFingerprint : fixture.semanticFingerprint) ||
           JSON.stringify(counts) !== JSON.stringify(fixture.counts)
         )
           throw new Error(

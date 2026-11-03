@@ -1,5 +1,6 @@
 import {
   Alignment,
+  Bidi,
   CommitLayout,
   Direction,
   DirectionCaret,
@@ -8,6 +9,7 @@ import {
   SHRINK_SCALE,
 } from "parsegraph";
 import GraphStack from "./GraphStack";
+import { DEFAULT_LAYOUT_DIRECTION } from "./settings";
 import {
   documentState,
   graphNodes,
@@ -70,6 +72,68 @@ test.each([{}, [], null, "", false, 0, { a: 1, b: [true, null, {}, [], ""] }])(
     expect(exportStructuredJson(readGraph(writeGraph(root)))).toEqual(value);
   }
 );
+
+test("JSON rebuilds and native history retain inherited and explicit bidi declarations by identity", () => {
+  let root = createStructuredJson([1, [2, 3], 4]);
+  expect(documentState(root)).toMatchObject({ version: 2, sourceVersion: 2 });
+  expect(documentState(root).metadata.freeform.structuredJson.version).toBe(1);
+  expect(graphNodes(root).every((node) => node.bidi() === Bidi.INHERIT)).toBe(true);
+  const nested = forward(entryBuds(root)[1]);
+  const explicit = first(nested);
+  nested.setBidi(Bidi.RTL);
+  explicit.setBidi(Bidi.LTR);
+  const originalBidi = Object.fromEntries(graphNodes(root).map((node) => [node.id(), node.bidi()]));
+  const assertBidi = (graph) => {
+    expect(Object.fromEntries(graphNodes(graph).map((node) => [node.id(), node.bidi()])))
+      .toMatchObject(originalBidi);
+    expect(graphNodes(graph).filter((node) => !(node.id() in originalBidi))
+      .every((node) => node.bidi() === Bidi.INHERIT)).toBe(true);
+  };
+  const geometry = (graph, defaultDirection) => {
+    const job = new CommitLayout(graph, { size: (node, out) => {
+      out[0] = 20; out[1] = 12;
+    } }, defaultDirection);
+    let steps = 0;
+    while (job.crank()) expect(++steps).toBeLessThan(10000);
+    for (const node of graphNodes(graph)) {
+      const inherited = node.neighbors().isRoot() ? defaultDirection : node.neighbors().parentNode().effectiveBidi();
+      expect(node.effectiveBidi()).toBe(node.bidi() === Bidi.INHERIT ? inherited : node.bidi());
+    }
+    const bud = inward(graph);
+    const dx = forward(bud).layout().absoluteX() - bud.layout().absoluteX();
+    expect(Math.sign(dx)).toBe(defaultDirection === Bidi.LTR ? 1 : -1);
+    return Object.fromEntries(graphNodes(graph).map((node) => [node.id(), {
+      parent: node.neighbors().isRoot() ? null : node.neighbors().parentNode().id(),
+      direction: node.neighbors().parentDirection(),
+      bidi: node.bidi(), resolved: node.effectiveBidi(),
+      x: node.layout().absoluteX(), y: node.layout().absoluteY(), scale: node.layout().absoluteScale(),
+    }]));
+  };
+  const history = new GraphStack();
+  history.save(root);
+  root = applyJsonCommand(root, explicit.id(), { type: "setText", text: "20" }).root;
+  root = applyJsonCommand(root, nested.id(), { type: "move", offset: 1 }).root;
+  const inserted = applyJsonCommand(root, nested.id(), { type: "insertSibling" });
+  root = applyJsonCommand(inserted.root, inserted.selectedNode, { type: "replace", kind: "number", text: "5" }).root;
+  assertBidi(root);
+  expect(exportStructuredJson(root)).toEqual([1, 4, [20, 3], 5]);
+  history.save(root);
+  for (const defaultDirection of [Bidi.LTR, Bidi.RTL]) {
+    const before = geometry(root, defaultDirection);
+    const saved = writeGraph(root);
+    expect(saved.version).toBe(2);
+    expect(saved.nodes.every((node) => "bidi" in node && !("rightToLeft" in node))).toBe(true);
+    const restored = readGraph(JSON.parse(JSON.stringify(saved)));
+    assertBidi(restored);
+    expect(geometry(restored, defaultDirection)).toEqual(before);
+  }
+  history.undo();
+  assertBidi(history.widget());
+  expect(exportStructuredJson(history.widget())).toEqual([1, [2, 3], 4]);
+  history.redo();
+  assertBidi(history.widget());
+  expect(exportStructuredJson(history.widget())).toEqual([1, 4, [20, 3], 5]);
+});
 
 test("new drafts have distinct key and value slots; an explicitly empty key and string are valid", () => {
   let root = createJsonDraft();
@@ -721,7 +785,7 @@ test("loose vertical multislot separation prevents exact-contour prongs from int
         const size = sizes.get(node) ?? [10, 10];
         out[0] = size[0]; out[1] = size[1];
       },
-    });
+    }, DEFAULT_LAYOUT_DIRECTION);
     let steps = 0;
     while (layout.crank()) expect(++steps).toBeLessThan(10000);
   };

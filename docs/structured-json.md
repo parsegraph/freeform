@@ -29,7 +29,7 @@ group, keeping container backgrounds behind their children.
 
 The **Labels** toggle enables WorldLabels: when node text becomes too small,
 readable labels remain over the graph, with overlapping labels filtered out.
-This also works with v1 presentation settings and their chosen font size.
+This also works with `presentation/1` settings and their chosen font size.
 
 **Developer** in the status bar opens Mouse feel, Node travel, rendering
 controls, Document capabilities, and benchmarks. It starts closed, separate
@@ -143,7 +143,7 @@ This downloads a file, using the document name as a starting point; it does not
 write back to the source file. The toolbar's unsaved indicator clears after a
 successful download and marks further edits, Undo, or Redo as unsaved.
 
-**Save draft** writes a native Parsegraph v1 document containing the graph and
+**Save draft** writes a native Parsegraph v2 document containing the graph and
 the editor's typed metadata. It preserves slots, partial input, and selection,
 and can be reopened in Freeform. JSON export produces ordinary JSON only when
 the draft is complete. Legacy Parsegraph v0 does not carry the typed metadata
@@ -156,7 +156,9 @@ disabled, or run out of space. Failed storage writes are reported; a malformed
 recovery record is retained instead of silently deleted.
 
 The storage key is `parsegraph-json-draft`. Its wrapper contains a version,
-save timestamp, and the native v1 document. Recovery accepts incomplete editor
+save timestamp, and the native v2 document. Existing v1 records remain readable
+and migrate on their next save; the recovery wrapper itself stays version 1.
+Recovery accepts incomplete editor
 drafts but rejects malformed graph structure or unsupported metadata versions.
 
 ## Graph mapping and implementation
@@ -174,7 +176,7 @@ children. Nested containers apply the same mapping.
 After building each spine, its buds use `DirectionCaret.pull(FORWARD)` followed
 by `loosen()`. This reserves rectangular space along the DOWNWARD/UPWARD axis
 so neighboring prongs do not interlock. The buds retain `Fit.EXACT` for their
-combined contours; separation fit is independent of node fit. Native v1 drafts
+combined contours; separation fit is independent of node fit. Native drafts
 save this spacing through `separation/1`. Child subtrees whose contours are
 already rectangular may keep the same spacing; the difference appears when
 exact contours would otherwise let neighboring prongs interlock.
@@ -185,6 +187,11 @@ the loose spine default. Existing drafts keep their stored spacing when edited.
 Edits also preserve `focus/1` intent, including explicit body-only focus. If
 reparenting makes a focused direction point toward the new parent, only that
 direction is removed. These preferences do not add camera behavior.
+
+Edits and undo also preserve each node's `inherit`, `ltr`, or `rtl` writing
+direction. The application layout default is LTR. Imported v0/v1 documents get
+an explicit LTR root to preserve their historical appearance; their descendants
+inherit. Native v2 stores these declarations without collapsing inheritance.
 
 Each container shrinks its first INWARD bud with `DirectionCaret.shrink()`
 (currently 0.85). The whole multislot inherits that scale: sibling entries stay

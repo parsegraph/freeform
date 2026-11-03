@@ -1,4 +1,4 @@
-import { readGraph } from "./graphDocument";
+import { CURRENT_DOCUMENT_VERSION, readGraph, writeGraph } from "./graphDocument";
 import { inspectJsonSelection, isStructuredJson } from "./structuredJson";
 
 export const JSON_RECOVERY_KEY = "parsegraph-json-draft";
@@ -9,8 +9,11 @@ function storageFor(storage) {
 }
 
 function validateDocument(document) {
-  if (document?.format !== "parsegraph" || document.version !== 1) {
-    throw new Error("Recovery requires a Parsegraph v1 document.");
+  if (
+    document?.format !== "parsegraph" ||
+    ![1, CURRENT_DOCUMENT_VERSION].includes(document.version)
+  ) {
+    throw new Error("Recovery requires a supported native Parsegraph document.");
   }
   const root = readGraph(document);
   if (!isStructuredJson(root)) {
@@ -20,6 +23,7 @@ function validateDocument(document) {
   // Slots and unfinished tokens are recoverable; corrupt topology or metadata
   // must not replace a working recovery record.
   inspectJsonSelection(root, root);
+  return root;
 }
 
 /** Read the latest draft without modifying it, including when validation fails. */
@@ -46,12 +50,15 @@ export function readJsonRecovery(storage) {
 /** Replace the one recovery record only after the complete draft is validated. */
 export function writeJsonRecovery(document, storage) {
   try {
-    validateDocument(document);
+    const root = validateDocument(document);
     const savedAt = Date.now();
     const data = JSON.stringify({
       version: RECOVERY_VERSION,
       savedAt,
-      document,
+      document:
+        document.version === CURRENT_DOCUMENT_VERSION
+          ? document
+          : writeGraph(root),
     });
     storageFor(storage).setItem(JSON_RECOVERY_KEY, data);
     return savedAt;

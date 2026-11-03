@@ -81,10 +81,17 @@ function setup() {
   renderer._extentBuffer = fakeBuffer();
   renderer.renderUI = jest.fn();
   renderer.restart();
+  renderer._completedLayoutRoot = root;
+  renderer._completedLayoutRevision = renderer._revision;
   return { renderer, viewport, camera, root };
 }
 
 function beginFrame(renderer) {
+  // This helper skips the layout phases. Model their completed result before
+  // testing framebuffer lifecycle independently of actual layout work.
+  renderer.widget().layout().setPhase(LayoutPhase.COMMITTED);
+  renderer._completedLayoutRoot = renderer.widget();
+  renderer._completedLayoutRevision = renderer._revision;
   expect(renderer.clearBackground()).toBe(false);
   renderer._phase = 3;
   return renderer._frame;

@@ -1,4 +1,4 @@
-import { Alignment, CommitLayout, Direction, paintNodeLines } from "parsegraph";
+import { Alignment, Bidi, CommitLayout, Direction, paintNodeLines } from "parsegraph";
 import Color from "parsegraph-color";
 import { documentState, nodeLabel, presentationStyle } from "./graphDocument";
 import { createLegacyLayout } from "./graphLayout";
@@ -9,6 +9,7 @@ import {
   BORDER_ROUNDEDNESS,
   BORDER_THICKNESS,
   DEFAULT_NODE_STYLE,
+  DEFAULT_LAYOUT_DIRECTION,
   FONT_SIZE,
   INWARD_SEPARATION,
   LINE_HEIGHT,
@@ -88,6 +89,7 @@ export function renderTemplatePreview(
     height = 300,
     measureText = (line, text) => Array.from(line).length * text.fontSize * 0.6,
     cropHeight,
+    defaultDirection = DEFAULT_LAYOUT_DIRECTION,
   } = {}
 ) {
   if (!loaded?.graph) throw new Error("A preview requires a graph");
@@ -127,7 +129,8 @@ export function renderTemplatePreview(
     graph,
     presentation
       ? createDocumentLayout(presentation, ctx)
-      : createLegacyLayout(ctx)
+      : createLegacyLayout(ctx),
+    defaultDirection
   );
   while (layout.crank()) {
     /* Asset generation deliberately completes layout. */
@@ -289,8 +292,9 @@ export function renderTemplatePreview(
         ) {
           labelY = -size[1] / 2 + paddingStyle.paddingY + text.lineHeight / 2;
         } else {
-          labelX = -size[0] / 2 + paddingStyle.paddingX;
-          anchor = "start";
+          const rtl = node.effectiveBidi() === Bidi.RTL;
+          labelX = (rtl ? 1 : -1) * (size[0] / 2 - paddingStyle.paddingX);
+          anchor = rtl ? "end" : "start";
         }
       }
       labelLines.forEach((line, index) => {

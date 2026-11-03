@@ -5,7 +5,7 @@ and pulling, see [Graph terminology](../../../docs/graph-terminology.md).
 
 `graphXml` imports XML 1.0 using the browser XML parser. XML and SVG files use
 the same mapping, which is carried by node values and connections rather than
-an opaque copy of the original source. It survives Parsegraph v1 save/reload,
+an opaque copy of the original source. It survives Parsegraph v2 save/reload,
 and XML export reads the graph's current contents.
 
 - The root is `#document`.
@@ -24,9 +24,10 @@ and XML export reads the graph's current contents.
 - `#text`, `#cdata`, `#comment`, `#doctype`, and `?target` have a value below.
 - `#xml` represents the optional XML declaration, with attributes inward too.
 
-New XML imports initialize a v1 document so normal save/reload and undo/redo
-preserve this spacing through `separation/1`. The capability stores concrete
-directions, not a link to the pull preference. Export to legacy Parsegraph v0
+New XML imports initialize a v2 document so normal save/reload and undo/redo
+preserve inherited writing direction and this spacing through `separation/1`.
+The capability stores concrete directions, not a link to the pull preference.
+Export to legacy Parsegraph v0
 loses these separation settings; XML/SVG source export retains the same markup
 regardless of this layout choice.
 

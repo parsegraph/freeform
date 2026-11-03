@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   readGraph,
   writeGraph,
+  CURRENT_DOCUMENT_VERSION,
   documentState,
   graphSelection,
   graphViewport,
@@ -29,6 +30,7 @@ import {
   SHOW_NODE_SPOTLIGHTS,
 } from "../settings";
 import NodeStylingModal from "./NodeStylingModal";
+import NodeDirectionControls from "./NodeDirectionControls";
 import { EditorIcon, EditorHeader, EditorDialog } from "./EditorShell";
 import MousePanControls from "./MousePanControls";
 import CameraTravelControls from "./CameraTravelControls";
@@ -217,7 +219,12 @@ function App() {
     const root = viewport.widget();
     if (!isStructuredDocument(root)) return;
     try {
-      const document = writeGraph(root, viewport.node(), viewport.toJSON(), 1);
+      const document = writeGraph(
+        root,
+        viewport.node(),
+        viewport.toJSON(),
+        CURRENT_DOCUMENT_VERSION
+      );
       const savedAt = writeStructuredRecovery(document);
       setRecoveryState({ recovery: { document, savedAt }, error: null });
       setRecoveryMessage("Draft recovery saved in this browser.");
@@ -255,6 +262,13 @@ function App() {
     if (!finishStructuredEditing()) return;
     setExportModalFormat(format);
     setExportModalOpen(true);
+  };
+
+  const changeNodeDirection = (direction) => {
+    if (!finishStructuredEditing()) return false;
+    // Finishing a source edit can replace the graph. Resolve the selection
+    // through the viewport after that edit has been committed.
+    return viewport.setNodeBidi(direction);
   };
 
   useEffect(() => {
@@ -712,11 +726,13 @@ function App() {
                       )}
                     </div>
                   </details>
-                  {documentInfo?.version === 1 && (
+                  {documentInfo && (
                     <details className="inspector-section">
                       <summary>Document capabilities</summary>
                       <p>
-                        V1 document.{" "}
+                        V{documentInfo.version} document.{" "}
+                        {documentInfo.sourceVersion < documentInfo.version &&
+                          `Imported from v${documentInfo.sourceVersion}. `}
                         {documentInfo.presentation
                           ? "Presentation applied. "
                           : "Local sizing. "}
@@ -818,6 +834,10 @@ function App() {
                     </button>
                   </div>
                   <ParsegraphEditor viewport={viewport} />
+                  <NodeDirectionControls
+                    node={viewport.node()}
+                    onChange={changeNodeDirection}
+                  />
                   <section className="inspector-section">
                     <h3>Navigate</h3>
                     <div className="inspector-actions">
@@ -874,6 +894,12 @@ function App() {
                     </section>
                   )}
                 </div>
+              )}
+              {!developerOpen && structuredView && (
+                <NodeDirectionControls
+                  node={viewport.node()}
+                  onChange={changeNodeDirection}
+                />
               )}
             </div>
           </section>

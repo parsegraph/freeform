@@ -1,4 +1,4 @@
-import { Alignment, Direction, DirectionNode } from "parsegraph";
+import { Alignment, Bidi, Direction, DirectionNode } from "parsegraph";
 import { renderTemplatePreview } from "./templatePreview";
 import { documentState, graphNodes, readGraph } from "./graphDocument";
 import { buildPlanner } from "./builders";
@@ -160,4 +160,35 @@ test("numeric and Canvas text measurers agree, and invalid measurements fail cle
   expect(() =>
     renderTemplatePreview({ graph: new DirectionNode() }, { cropHeight: -1 })
   ).toThrow("crop height");
+});
+
+test.each([Bidi.LTR, Bidi.RTL])("previews preserve inherited declarations and draw mixed-direction labels/connectors under %s", (defaultDirection) => {
+  const root = new DirectionNode("Outer");
+  const inner = new DirectionNode("Inner");
+  const opposite = new DirectionNode("Opposite");
+  const nested = new DirectionNode("Nested");
+  root.connect(Direction.INWARD, inner);
+  root.connect(Direction.FORWARD, opposite);
+  opposite.setBidi(defaultDirection === Bidi.LTR ? Bidi.RTL : Bidi.LTR);
+  opposite.connect(Direction.INWARD, nested);
+  opposite.connect(Direction.FORWARD, new DirectionNode("Inherited branch"));
+  opposite.paintGroups().crease();
+  const svg = parse(renderTemplatePreview({ graph: root }, { defaultDirection }));
+  const rtl = defaultDirection === Bidi.RTL;
+  expect(label(svg, "Outer").getAttribute("text-anchor")).toBe(rtl ? "end" : "start");
+  expect(label(svg, "Opposite").getAttribute("text-anchor")).toBe(rtl ? "start" : "end");
+  expect(Math.sign(opposite.layout().absoluteX())).toBe(rtl ? -1 : 1);
+  const line = Array.from(svg.children).filter((item) => item.localName === "rect")[1];
+  const middle = Number(line.getAttribute("x")) + Number(line.getAttribute("width")) / 2;
+  expect(Math.sign(middle)).toBe(rtl ? -1 : 1);
+  expect(Number(line.getAttribute("width"))).toBeGreaterThan(0);
+  const oppositeSize = [];
+  opposite.layout().absoluteSize(oppositeSize);
+  // At a bidi boundary the connector reaches the near extent silhouette,
+  // rather than crossing the region to its far-side entry body.
+  const nearBodyEdge = opposite.layout().absoluteX() + (rtl ? 1 : -1) * oppositeSize[0] / 2;
+  const endpoint = middle + (rtl ? -1 : 1) * Number(line.getAttribute("width")) / 2;
+  expect((endpoint - nearBodyEdge) * (rtl ? -1 : 1)).toBeLessThan(0);
+  expect(root.bidi()).toBe(Bidi.INHERIT);
+  expect(inner.bidi()).toBe(Bidi.INHERIT);
 });

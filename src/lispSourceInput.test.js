@@ -1,3 +1,4 @@
+import { Bidi } from "parsegraph";
 import { graphNodes, readGraph, writeGraph } from "./graphDocument";
 import { readLisp } from "./lispReader";
 import {
@@ -26,6 +27,24 @@ test("type a complete nested Scheme document key for key", () => {
   expect(sourceOf(session)).toBe(source);
   expect(exportStructuredLisp(readGraph(writeGraph(finish(session).root)))).toBe(source);
   expect(graphNodes(session.root).every((node) => node.value() !== undefined)).toBe(true);
+});
+
+test("source insertion preserves explicit bidi scopes and keeps new forms inheriting through native drafts", () => {
+  const root = createStructuredLisp("(define value 1)");
+  const original = graphNodes(root);
+  const name = original.find((node) => node.value() === "value");
+  const number = original.find((node) => node.value() === "1");
+  root.setBidi(Bidi.RTL);
+  name.setBidi(Bidi.LTR);
+  const declarations = Object.fromEntries(original.map((node) => [node.id(), node.bidi()]));
+  let session = type(start(root, number), "2 (extra value)");
+  session = finish(session);
+  expect(exportStructuredLisp(session.root)).toBe("(define value 12 (extra value))");
+  const restored = readGraph(writeGraph(session.root));
+  expect(Object.fromEntries(graphNodes(restored).map((node) => [node.id(), node.bidi()])))
+    .toMatchObject(declarations);
+  expect(graphNodes(restored).filter((node) => !(node.id() in declarations))
+    .every((node) => node.bidi() === Bidi.INHERIT)).toBe(true);
 });
 
 test.each([

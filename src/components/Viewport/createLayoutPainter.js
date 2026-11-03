@@ -1,5 +1,6 @@
 import {
   Alignment,
+  Bidi,
   Axis,
   Direction,
   paintNodeBounds,
@@ -142,8 +143,11 @@ const paint = (pg, painters, bounds, glProvider, getNodeStyle, presentation, gly
               drawGlyph
             );
           } else {
+            const labelX = node.effectiveBidi() === Bidi.RTL
+              ? x + w/2 - scale*(INWARD_SEPARATION/4 + sidePadding) - (scale/FONT_UPSCALE)*label.width()
+              : x - w/2 + scale*(INWARD_SEPARATION/4 + sidePadding);
             label.paint(
-              x - w/2 + scale*(INWARD_SEPARATION/4 + sidePadding),
+              labelX,
               y - (scale/FONT_UPSCALE)*label.height()/2,
               scale/FONT_UPSCALE,
               drawGlyph

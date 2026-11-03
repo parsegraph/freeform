@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import { Direction } from "parsegraph";
 import { createExample, exampleFromSample, loadExample } from "./examples";
-import { writeGraph } from "./graphDocument";
+import { documentState, readGraph, writeGraph } from "./graphDocument";
 import proportional from "./fixtures/v1/proportion-proportional.json";
 import standard from "./fixtures/v1/proportion-standard.json";
 import math from "./fixtures/v1/proportion-math.json";
@@ -31,6 +31,22 @@ beforeEach(() => {
 function documentById(document) {
   // Serialization may choose another traversal order without changing the graph.
   return { ...document, nodes: Object.fromEntries(document.nodes.map((node) => [node.id, node])) };
+}
+
+function expectMigratedExample(graph, fixture) {
+  const saved = writeGraph(graph);
+  expect(documentState(graph).sourceVersion).toBe(1);
+  expect(saved.version).toBe(2);
+  expect(documentById(saved)).toEqual(documentById(writeGraph(readGraph(fixture))));
+  expect(saved.nodes.find((node) => node.id === saved.root).bidi).toBe("ltr");
+  expect(saved.nodes.filter((node) => node.id !== saved.root)
+    .every((node) => node.bidi === "inherit")).toBe(true);
+  // Migration replaces only the inert legacy direction flag. Keep IDs,
+  // topology, values, scales, fitting, alignment, and paint groups unchanged.
+  const semanticNodes = (document) => Object.fromEntries(document.nodes.map(
+    ({ bidi, rightToLeft, ...node }) => [node.id, node]
+  ));
+  expect(semanticNodes(saved)).toEqual(semanticNodes(fixture));
 }
 
 test("template options survive reconstruction", async () => {
@@ -75,7 +91,7 @@ test("explicit Proportion columns survive reconstruction and reach the document 
   expect(loaded.example).toEqual(source);
   expect(builders.buildProportionDocument).toHaveBeenCalledTimes(1);
   expect(builders.buildProportionDocument).toHaveBeenCalledWith(7);
-  expect(documentById(writeGraph(loaded.graph))).toEqual(documentById(proportional));
+  expectMigratedExample(loaded.graph, proportional);
 });
 
 test("Proportion columns accept only bounded integers, while an omitted value retains its old recipe", async () => {
@@ -90,7 +106,7 @@ test("Proportion columns accept only bounded integers, while an omitted value re
   expect(source).toEqual({ type: "proportion_v1" });
   const loaded = await loadExample(source);
   expect(loaded.example).toEqual(source);
-  expect(documentById(writeGraph(loaded.graph))).toEqual(documentById(proportional));
+  expectMigratedExample(loaded.graph, proportional);
   expect(builders.buildProportionDocument).not.toHaveBeenCalled();
 });
 
@@ -103,7 +119,7 @@ test.each([
   expect(exampleFromSample(type)).toEqual(recipe);
   const loaded = await loadExample(recipe);
   expect(loaded.example).toEqual(recipe);
-  expect(documentById(writeGraph(loaded.graph))).toEqual(documentById(fixture));
+  expectMigratedExample(loaded.graph, fixture);
 });
 
 // Load the shipped assets through the real importers as well as checking URLs.

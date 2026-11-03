@@ -34,6 +34,8 @@ test("recovering an unfinished numeric slot preserves its draft, selection, and 
   const savedAt = writeJsonRecovery(data);
   const recovered = readJsonRecovery();
   expect(recovered).toEqual({ document: data, savedAt });
+  expect(recovered.document.version).toBe(2);
+  expect(JSON.parse(localStorage.getItem(JSON_RECOVERY_KEY)).version).toBe(1);
   expect(graphSelection(recovered.document)).toBe(root.id());
   expect(graphViewport(recovered.document)).toEqual({ cam, showingUI: true });
   const restored = readGraph(recovered.document);

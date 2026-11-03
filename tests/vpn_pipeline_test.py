@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import tarfile
 import threading
@@ -355,6 +356,30 @@ class PipelineTests(unittest.TestCase):
                                     "GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "not valid", "GIT_CONFIG_VALUE_0": "bad"}):
             self.assertEqual(actual.head(), commit)
             self.assertFalse(any(key.startswith("GIT_") for key in pipeline.clean_env()))
+
+    def test_command_children_receive_configured_ca_or_inherit_existing_trust(self):
+        ca_file = self.root / "VPN certificate.pem"
+        ca_file.write_text("test CA bundle")
+        command = [sys.executable, "-c", (
+            "import json,os; from pathlib import Path; "
+            "print(json.dumps({'environment':dict(os.environ), "
+            "'ca':Path(os.environ['NODE_EXTRA_CA_CERTS']).read_text()}))"
+        )]
+        for configured in (True, False):
+            with self.subTest(configured=configured):
+                config = dict(self.config)
+                if configured:
+                    config["ca_file"] = str(ca_file)
+                inherited = "/unused/inherited.pem" if configured else str(ca_file)
+                with patch.dict(os.environ, {"NODE_EXTRA_CA_CERTS": inherited,
+                                              "GIT_DIR": "/irrelevant/hook/repo"}, clear=True):
+                    result = json.loads(pipeline.Pipeline(config).run(command))
+                    self.assertEqual(os.environ["NODE_EXTRA_CA_CERTS"], inherited)
+                self.assertEqual(result["environment"]["NODE_EXTRA_CA_CERTS"], str(ca_file))
+                self.assertEqual(result["ca"], "test CA bundle")
+                self.assertEqual(result["environment"]["PYTHONDONTWRITEBYTECODE"], "1")
+                self.assertNotIn("GIT_DIR", result["environment"])
+                self.assertNotIn("NODE_TLS_REJECT_UNAUTHORIZED", result["environment"])
 
     def test_http_checks_hashes_mime_revision_headers_and_missing_routes(self):
         payloads = {"/freeform/": ("text/html", b"home"), "/freeform/index.html": ("text/html", b"home"),

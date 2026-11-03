@@ -1,4 +1,4 @@
-import { readGraph } from "./graphDocument";
+import { CURRENT_DOCUMENT_VERSION, readGraph, writeGraph } from "./graphDocument";
 import { inspectLispSelection, isStructuredLisp } from "./structuredLisp";
 import { readJsonRecovery, writeJsonRecovery } from "./structuredJsonRecovery";
 
@@ -7,8 +7,11 @@ const storageFor = (storage) =>
   storage === undefined ? window.localStorage : storage;
 
 function validateLispDocument(document) {
-  if (document?.format !== "parsegraph" || document.version !== 1)
-    throw new Error("Recovery requires a Parsegraph v1 document.");
+  if (
+    document?.format !== "parsegraph" ||
+    ![1, CURRENT_DOCUMENT_VERSION].includes(document.version)
+  )
+    throw new Error("Recovery requires a supported native Parsegraph document.");
   const root = readGraph(document);
   if (!isStructuredLisp(root))
     throw new Error(
@@ -16,6 +19,7 @@ function validateLispDocument(document) {
     );
   // Slots and incomplete tokens are recoverable; invalid topology is not.
   inspectLispSelection(root, root);
+  return root;
 }
 
 export function readLispRecovery(storage) {
@@ -38,11 +42,18 @@ export function readLispRecovery(storage) {
 
 export function writeLispRecovery(document, storage) {
   try {
-    validateLispDocument(document);
+    const root = validateLispDocument(document);
     const savedAt = Date.now();
     storageFor(storage).setItem(
       LISP_RECOVERY_KEY,
-      JSON.stringify({ version: 1, savedAt, document })
+      JSON.stringify({
+        version: 1,
+        savedAt,
+        document:
+          document.version === CURRENT_DOCUMENT_VERSION
+            ? document
+            : writeGraph(root),
+      })
     );
     return savedAt;
   } catch (error) {

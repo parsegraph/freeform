@@ -1,0 +1,166 @@
+{
+  "format": "parsegraph",
+  "version": 2,
+  "root": "root",
+  "nodes": [
+    {
+      "id": "root",
+      "value": "Viewer context",
+      "scale": 1,
+      "fit": "exact",
+      "layoutPreference": "horizontal",
+      "parentId": null,
+      "parentDir": null,
+      "alignment": "none",
+      "axisOverlap": "default",
+      "bidi": "inherit",
+      "paintGroup": false
+    },
+    {
+      "id": "below",
+      "value": "Down stays down",
+      "scale": 1,
+      "fit": "exact",
+      "layoutPreference": "horizontal",
+      "parentId": "root",
+      "parentDir": "upward",
+      "alignment": "none",
+      "axisOverlap": "default",
+      "bidi": "inherit",
+      "paintGroup": false
+    },
+    {
+      "id": "root-content",
+      "value": "Inherited inner content",
+      "scale": 1,
+      "fit": "exact",
+      "layoutPreference": "horizontal",
+      "parentId": "root",
+      "parentDir": "outward",
+      "alignment": "none",
+      "axisOverlap": "default",
+      "bidi": "inherit",
+      "paintGroup": false
+    },
+    {
+      "id": "nested-ltr",
+      "value": "Nested LTR container",
+      "scale": 1,
+      "fit": "exact",
+      "layoutPreference": "horizontal",
+      "parentId": "rtl-child",
+      "parentDir": "upward",
+      "alignment": "none",
+      "axisOverlap": "default",
+      "bidi": "ltr",
+      "paintGroup": true
+    },
+    {
+      "id": "ltr-child",
+      "value": "Inherited LTR",
+      "scale": 1,
+      "fit": "exact",
+      "layoutPreference": "horizontal",
+      "parentId": "nested-ltr",
+      "parentDir": "backward",
+      "alignment": "none",
+      "axisOverlap": "default",
+      "bidi": "inherit",
+      "paintGroup": false
+    },
+    {
+      "id": "ltr-content",
+      "value": "Content on the right",
+      "scale": 1,
+      "fit": "exact",
+      "layoutPreference": "horizontal",
+      "parentId": "nested-ltr",
+      "parentDir": "outward",
+      "alignment": "none",
+      "axisOverlap": "default",
+      "bidi": "inherit",
+      "paintGroup": false
+    },
+    {
+      "id": "rtl",
+      "value": "RTL container",
+      "scale": 1,
+      "fit": "exact",
+      "layoutPreference": "horizontal",
+      "parentId": "root",
+      "parentDir": "backward",
+      "alignment": "none",
+      "axisOverlap": "default",
+      "bidi": "rtl",
+      "paintGroup": true
+    },
+    {
+      "id": "rtl-child",
+      "value": "Inherited RTL",
+      "scale": 1,
+      "fit": "exact",
+      "layoutPreference": "horizontal",
+      "parentId": "rtl",
+      "parentDir": "backward",
+      "alignment": "none",
+      "axisOverlap": "default",
+      "bidi": "inherit",
+      "paintGroup": false
+    },
+    {
+      "id": "rtl-content",
+      "value": "Content on the left",
+      "scale": 1,
+      "fit": "exact",
+      "layoutPreference": "horizontal",
+      "parentId": "rtl",
+      "parentDir": "outward",
+      "alignment": "none",
+      "axisOverlap": "default",
+      "bidi": "inherit",
+      "paintGroup": false
+    }
+  ],
+  "capabilities": {
+    "presentation/1": {
+      "text": {
+        "fontFamily": "sans-serif",
+        "fontSize": 10,
+        "lineHeight": 10
+      },
+      "styles": {
+        "block": {
+          "minWidth": 10,
+          "minHeight": 15,
+          "paddingX": 3,
+          "paddingY": 2.5,
+          "square": false
+        },
+        "bud": {
+          "minWidth": 7.5,
+          "minHeight": 7.5,
+          "paddingX": 0,
+          "paddingY": 0,
+          "square": false
+        },
+        "slot": {
+          "minWidth": 10,
+          "minHeight": 15,
+          "paddingX": 3,
+          "paddingY": 2.5,
+          "square": false
+        }
+      },
+      "defaultStyle": "block",
+      "nodeStyles": {},
+      "spacing": {
+        "horizontal": 5,
+        "vertical": 5,
+        "inward": 5
+      }
+    }
+  },
+  "metadata": {
+    "example": "Mixed inherited directions and horizontal inward labels; explicit LTR nested within RTL."
+  }
+}

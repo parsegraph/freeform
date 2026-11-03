@@ -6,7 +6,7 @@ import {
   Fit,
   SHRINK_SCALE,
 } from "parsegraph";
-import { documentState, graphNodes } from "./graphDocument";
+import { CURRENT_DOCUMENT_VERSION, documentState, graphNodes } from "./graphDocument";
 
 // The graph stores content and order; metadata supplies its language roles.
 // The temporary tree used by commands is decoded afresh, never saved separately.
@@ -445,7 +445,7 @@ function build(tree, previousRoot, selected) {
           : (before.scale() * newDefault) / oldDefault
       );
       after.setNodeFit(before.nodeFit());
-      after.setRightToLeft(before.rightToLeft());
+      after.setBidi(before.bidi());
       // Separation belongs to concrete directions on the node, including
       // currently absent and parent-facing edges. Copy EXACT too: a deliberate
       // tightening must not be replaced by a new bud's loose default.
@@ -481,9 +481,9 @@ function build(tree, previousRoot, selected) {
       if (!after.neighbors().isRoot()) {
         if (!before.neighbors().isRoot() && before.paintGroups().isPaintGroup())
           after.paintGroups().crease();
-        // uncrease() on an ordinary member removes its owning ancestor group.
-        // Only undo an actual crease on this node, and retain a new first-bud
-        // crease when reordering changes the structural INWARD boundary.
+        // Retain a new first-bud crease when reordering changes the structural
+        // INWARD boundary. Only copy an uncreased declaration when that
+        // boundary remains the same.
         else if (after.paintGroups().isPaintGroup() &&
             before.neighbors().parentDirection() === after.neighbors().parentDirection())
           after.paintGroups().uncrease();
@@ -501,7 +501,8 @@ function build(tree, previousRoot, selected) {
       ignoredCapabilities: [],
       hasUnsupportedContent: false,
       ...previous,
-      version: 1,
+      version: CURRENT_DOCUMENT_VERSION,
+      sourceVersion: previous?.sourceVersion ?? CURRENT_DOCUMENT_VERSION,
       root,
       capabilities: copy(previous?.capabilities ?? {}),
       metadata,

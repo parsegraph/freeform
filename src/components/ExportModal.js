@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 import * as exporters from "../exporters";
-import { writeGraph, documentState } from "../graphDocument";
+import { CURRENT_DOCUMENT_VERSION, writeGraph } from "../graphDocument";
 import { isStructuredJson } from "../structuredJson";
 import { isStructuredLisp } from "../structuredLisp";
 
@@ -64,7 +64,7 @@ function ExportForm({
   );
   const [exportError, setExportError] = useState(null);
 
-  const exportParsegraph = (version = 1) =>
+  const exportParsegraph = (version = CURRENT_DOCUMENT_VERSION) =>
     writeGraph(graph, viewport.node(), viewport.toJSON(), version);
 
   const performExport = () => {
@@ -190,8 +190,8 @@ function ExportForm({
         >
           <option value="parsegraph">
             {structured
-              ? "Parsegraph v1 draft (preserves slots)"
-              : "Parsegraph v1"}
+              ? `Parsegraph v${CURRENT_DOCUMENT_VERSION} draft (preserves slots)`
+              : `Parsegraph v${CURRENT_DOCUMENT_VERSION}`}
           </option>
           {!structured && (
             <>
@@ -224,13 +224,12 @@ function ExportForm({
         </p>
       )}
       {exportError && <p role="alert">Could not export: {exportError}</p>}
-      {exportType === "parsegraph-v0" &&
-        documentState(graph)?.version === 1 && (
-          <p className="document-note document-warning" role="status">
-            Legacy export discards presentation, appearance, generation recipes,
-            and other v1 capabilities.
-          </p>
-        )}
+      {exportType === "parsegraph-v0" && (
+        <p className="document-note document-warning" role="status">
+          Legacy export discards writing directions, presentation, appearance,
+          generation recipes, and other native document capabilities.
+        </p>
+      )}
       <div className="buttons">
         <input className="document-primary" type="submit" value="Save" />
         {onClose && (

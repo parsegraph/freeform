@@ -1,7 +1,7 @@
-import { CommitLayout, Direction } from "parsegraph";
+import { Bidi, CommitLayout, Direction } from "parsegraph";
 import { buildProportionDocument } from "./index";
 import { createDocumentLayout } from "../graphPresentation";
-import { documentState, graphNodes, readGraph } from "../graphDocument";
+import { documentState, graphNodes, readGraph, writeGraph } from "../graphDocument";
 import fixture from "../fixtures/v1/proportion-proportional.json";
 import fixtureGeometry from "../fixtures/v1/proportion-proportional.geometry.json";
 
@@ -10,30 +10,39 @@ function commit(graph) {
     save() {}, restore() {}, resetTransform() {},
     measureText: (line) => ({ width: Array.from(line).length * 6 }),
   };
-  const layout = new CommitLayout(graph, createDocumentLayout(documentState(graph).presentation, context));
+  const layout = new CommitLayout(graph, createDocumentLayout(documentState(graph).presentation, context), "ltr");
   while (layout.crank());
   return graph;
 }
 
-test("default proportion document preserves the 25-node v1 fixture and its geometry", () => {
-  // Node-table order is not semantic; the current package traverses independent
-  // paint groups in a different order than the fixture's original generator.
-  const canonical = (document) => ({
-    ...document,
-    nodes: [...document.nodes].sort((a, b) => a.id.localeCompare(b.id)),
+test("the v2 proportion builder preserves the legacy fixture's topology, presentation, and LTR geometry", () => {
+  const generated = buildProportionDocument();
+  const legacy = readGraph(fixture);
+  expect(generated.version).toBe(2);
+  expect(generated.nodes.every((node) => node.bidi === Bidi.INHERIT)).toBe(true);
+  expect(documentState(legacy)).toMatchObject({ version: 2, sourceVersion: 1 });
+  expect(legacy.bidi()).toBe(Bidi.LTR);
+  expect(graphNodes(legacy).filter((node) => node !== legacy)
+    .every((node) => node.bidi() === Bidi.INHERIT)).toBe(true);
+  // The migrated root is explicitly LTR, while newly authored nodes inherit.
+  // All other declarations and topology must match by identity, independently
+  // of the current preferred-axis order of the serialized paint groups.
+  const content = (document) => ({
+    ...document, nodes: Object.fromEntries(document.nodes.map(({ bidi, ...node }) => [node.id, node])),
   });
-  expect(canonical(buildProportionDocument())).toEqual(canonical(fixture));
-  const graph = commit(readGraph(buildProportionDocument(3)));
-  expect(graphNodes(graph)).toHaveLength(25);
-  graphNodes(graph).forEach((node) => {
-    const expected = fixtureGeometry[node.id()];
-    const size = [];
-    node.layout().size(size);
-    expect(node.layout().absoluteX()).toBeCloseTo(expected.x, 5);
-    expect(node.layout().absoluteY()).toBeCloseTo(expected.y, 5);
-    expect(size[0]).toBeCloseTo(expected.width, 5);
-    expect(size[1]).toBeCloseTo(expected.height, 5);
-  });
+  expect(content(generated)).toEqual(content(writeGraph(legacy)));
+  for (const graph of [commit(readGraph(generated)), commit(legacy)]) {
+    expect(graphNodes(graph)).toHaveLength(25);
+    graphNodes(graph).forEach((node) => {
+      const expected = fixtureGeometry[node.id()];
+      const size = [];
+      node.layout().size(size);
+      expect(node.layout().absoluteX()).toBeCloseTo(expected.x, 5);
+      expect(node.layout().absoluteY()).toBeCloseTo(expected.y, 5);
+      expect(size[0]).toBeCloseTo(expected.width, 5);
+      expect(size[1]).toBeCloseTo(expected.height, 5);
+    });
+  }
 });
 
 test.each([1, 5, 12])("count %s creates that many paired columns with level endpoints", (count) => {

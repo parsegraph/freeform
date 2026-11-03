@@ -1,4 +1,4 @@
-import { Direction, DirectionNode } from "parsegraph";
+import { Bidi, Direction, DirectionNode, serializeParsegraph } from "parsegraph";
 import GraphStack from "./GraphStack";
 import { documentState, graphNodes, initializeGraphDocument, readGraph, writeGraph } from "./graphDocument";
 import appearanceFixture from "./fixtures/v1/appearance-colors.json";
@@ -253,8 +253,9 @@ test("clear ends grouping so new document edits cannot overwrite the departing h
 });
 
 test("legacy viewport colors and styles count as edits while its camera does not", () => {
-  const root = document("legacy", false);
-  const baseline = { ...camera(0), styles: { child: { backgroundColor: "#112233" } }, pageBackgroundColor: "#ffffff" };
+  const root = readGraph(serializeParsegraph(document("legacy", false)));
+  const baseline = { ...camera(0), defaultNodeStyle: appearanceFixture.capabilities["appearance/1"].defaults,
+    styles: { child: { backgroundColor: "#112233" } }, pageBackgroundColor: "#ffffff" };
   const stack = new GraphStack(); stack.save(root, "root", baseline);
   stack.beginGroup(root, "child", { ...baseline, ...camera(1) });
   stack.save(root, "root", { ...baseline, ...camera(2) });
@@ -262,6 +263,41 @@ test("legacy viewport colors and styles count as edits while its camera does not
   stack.beginGroup(root, "child", baseline);
   stack.save(root, "root", { ...baseline, pageBackgroundColor: "#000000" });
   expect(stack.endGroup()).toBe(true);
-  stack.undo(); expect(stack.viewportData().pageBackgroundColor).toBe("#ffffff");
-  stack.redo(); expect(stack.viewportData().pageBackgroundColor).toBe("#000000");
+  stack.undo(); expect(documentState(stack.widget()).appearance.pageBackgroundColor).toBe("#ffffff");
+  stack.redo(); expect(documentState(stack.widget()).appearance.pageBackgroundColor).toBe("#000000");
+});
+
+test("v2 history preserves all bidi declarations and treats a direction change as content", () => {
+  const root = document();
+  const child = graphNodes(root).find((node) => node.id() === "child");
+  root.setBidi(Bidi.INHERIT);
+  child.setBidi(Bidi.RTL);
+  const nested = new DirectionNode("nested"); nested.setId("nested"); nested.setBidi(Bidi.LTR);
+  child.connect(Direction.INWARD, nested);
+  documentState(root).capabilities["future/1"] = { preserved: true };
+  const stack = new GraphStack(); stack.save(root, "child", camera(1));
+  stack.beginGroup(root, "nested", camera(2));
+  child.setBidi(Bidi.LTR); stack.save(root, "child", camera(3));
+  expect(stack.endGroup()).toBe(true);
+  stack.undo();
+  const saved = writeGraph(stack.widget());
+  expect(saved.version).toBe(2);
+  expect(Object.fromEntries(saved.nodes.map((node) => [node.id, node.bidi]))).toEqual({ root: "inherit", child: "rtl", nested: "ltr" });
+  expect(saved.capabilities["future/1"]).toEqual({ preserved: true });
+  expect(stack.selectedNode()).toBe("nested");
+  expect(stack.viewportData()).toEqual(camera(2));
+  stack.redo();
+  expect(graphNodes(stack.widget()).find((node) => node.id() === "child").bidi()).toBe(Bidi.LTR);
+});
+
+test("grouped equality does not depend on serialized node traversal order", () => {
+  const root = document();
+  const stack = new GraphStack(); stack.save(root);
+  // A valid native document permits any node record order. Current-axis
+  // traversal can produce a different order when that document is reloaded.
+  stack._actions[0].nodes.reverse();
+  stack.beginGroup(root, "child", camera(1));
+  stack.save(root, "root", camera(2));
+  expect(stack.endGroup()).toBe(false);
+  expect(stack.undoCount()).toBe(0);
 });

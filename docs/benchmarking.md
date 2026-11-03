@@ -82,7 +82,7 @@ no long tasks.
 
 The export records source metadata, available node and paint-group counts,
 timings, responsiveness, and environment
-(browser user agent, build mode, viewport, pixel ratio, and visibility). Source names may
+(Parsegraph version, browser user agent, build mode, viewport, pixel ratio, and visibility). Source names may
 include the imported filename. It does not include imported file contents or
 the graph itself.
 
@@ -581,3 +581,79 @@ this does not eliminate occasional rendering stalls. These are one exploratory
 capture per version in Chrome 156, development mode, at 2400 × 1145, with detailed
 instrumentation enabled. Key-delivery timing and capture duration differed
 (4.06/3.73 seconds), so they establish the discarded-work fix, not an FPS speedup.
+
+### Parsegraph 8.2.1 adoption (2026-11-02)
+
+Freeform now pins `parsegraph@8.2.1` from the private VPN registry. Its lockfile
+integrity matches the release handoff:
+
+```text
+sha512-2jQd/qNgRvljm/LVvZ4Us7kc+4Ap/9ix4PIALeRMU3umfvhztoDvkkzpHqFuTc1wWyglk4+zTFHRNK4LkER7yA==
+```
+
+The application supplies an explicit LTR layout default while preserving
+inherited/LTR/RTL node declarations. Geometry-dependent camera, hit-testing,
+overlays, and frame publication wait for `LayoutOperation.DONE`. Native saves,
+history, and structured recovery migrate documents to v2; legacy inputs retain
+their explicit LTR root and sparse legacy color overrides. Capability `/1`
+identifiers and structured-language/recovery schema versions remain unchanged.
+JSON/Lisp rebuilds preserve all three direction declarations. Telemetry now
+records the installed Parsegraph version; existing renderer phase metrics are
+not interpreted as library operation counts.
+
+Local evidence is under `out/benchmarks/parsegraph-8.2.1-adoption/` (generated,
+not committed): `index.html`, `summary.json`, `before/after-construction.jsonl`,
+`before/after-camera.jsonl`, the identical saved-camera input, and bidi
+screenshots. The baseline is commit `c012e1140b60cb22b107ed07fa96a0745c7913bc`,
+production `main.dbee7783.js`; the upgraded working-tree build is
+`main.bdcc13e4.js`. Earlier exploratory traces in the same directory are retained
+but excluded: some used mismatched viewports/cameras, one baseline was truncated,
+and early timings suffered severe host contention.
+
+The corrected construction harness runs the actual builder and `readGraph`,
+validates records by ID/topology, and explicitly accounts for the legacy root's
+direction migration. Reconstruction holds the legacy v0 input fixed across
+versions; it is not a measurement of current v2 history serialization. The
+application remains installed from the registry; the old Yarn-cached package
+was selected only through the benchmark's package override.
+
+| Cross 11, five measurements after one warmup | 7.1.0 median | 8.2.1 median |
+| --- | ---: | ---: |
+| Construction | 597.1 ms | 56.8 ms |
+| Legacy deserialization | 325.7 ms | 93.5 ms |
+
+Both captures validate **32,765 nodes / 4,113 groups**. Construction ranges were
+589.7–601.1 and 55.4–59.9 ms; deserialization ranges were 319.7–335.4 and
+90.5–95.8 ms. These show about 10.5× faster construction and 3.5× faster
+deserialization on this host, excluding layout and rendering.
+
+The final browser pair used Chrome 156 production builds in the same visible
+1561 × 412 viewport, DPR 2, detailed timing enabled, identical saved graph and
+starting camera, six alternating wheel gestures, six alternating +/- keys,
+and one drag. All **17 baseline / 14 upgraded publications** visited all 4,113
+groups. Both captures recorded **zero abandoned passes, graph recounts, and
+repaints**, with no dropped trace events. Maximum frame gaps were 158.0/131.2 ms.
+Median publication ages were 118.8/230.7 ms: the latter is higher, and warrants
+repeated captures before attributing a rendering regression. Input delivery,
+intermediate culling trajectories, and capture lengths (7.0/11.5 s) differ;
+this single pair establishes completeness, not an FPS or latency improvement.
+Separate `cross_11` initial-load traces are diagnostic, not a controlled speed
+comparison.
+
+Visual checks covered inward labels under both surrounding directions, nested
+overrides, camera fit, selection, and visual arrow navigation. Unit coverage
+also runs both concrete layout defaults, legacy presentation/proportion
+geometry, root resize, current-axis traversal, crease/uncrease, reparenting,
+unfinished layout edits, native save/undo, and JSON/Lisp recovery. **905 app
+tests / 51 suites**, the production build, and all **22 template preview
+checks** passed. The Python deployment suite passed: **46 tests run, two
+Linux-only tests skipped** on macOS. Export tests were rerun after correcting
+the native format labels to v2.
+
+This record describes local verification, not a commit, push, or deployment.
+VPN registry version/integrity lookup was also verified from fritolaptop using
+its configured CA. Before the first new-lockfile deployment, update the
+installed controller so its configured CA reaches Node/Yarn; see
+[VPN hosting](vpn-hosting.md#manual-artifact-build). The nested old core in
+`parsegraph-showincamera@2.0.2` remains a dependency/bundle cleanup task; its used
+duck-typed geometry helper passed camera checks.

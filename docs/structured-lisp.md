@@ -123,6 +123,12 @@ independent of the JSON draft, so working in one language does not replace the
 other language's recovery entry. Undo and redo retain literal spellings, slots,
 selection, and the document's visual settings.
 
+Native saves and history use Parsegraph v2, preserving each node's `inherit`,
+`ltr`, or `rtl` direction. Legacy v0/v1 imports and v1 recovery documents remain
+readable; their root becomes explicitly LTR to retain historical layout. New
+graphs inherit Freeform's LTR layout default. The recovery wrapper and language
+metadata schemas stay at version 1 independently of the document envelope.
+
 The graph is authoritative. `metadata.freeform.structuredLisp`, version 1 with
 `layout: "direct-source-lines"`, declares each node's language role. Scalar
 source text lives on the node. Form roles store `leading` whitespace; container

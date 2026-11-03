@@ -7,6 +7,7 @@ import {
   getDirectionAxis,
   PreferredAxis,
   Fit,
+  Bidi,
   namePreferredAxis,
   nameDirection,
   nameAlignment,
@@ -32,6 +33,7 @@ import { handleStructuredJsonKey } from "./structuredJsonKeys";
 import { handleStructuredLispKey } from "./structuredLispKeys";
 import Carousel from "../Carousel";
 import { documentState, ensureStringIds } from "../../graphDocument";
+import { resolveNodeDirection } from "../../graphDirection";
 import {
   applyStructuredCommand as runStructuredCommand,
   inspectStructuredSelection,
@@ -63,6 +65,22 @@ const invalidateAll = (root) => {
   root.paintGroup().forEach((pg) => {
     pg.siblings().forEach((node) => node.invalidate());
   });
+};
+
+const physicalConnectionDirection = (node, direction, layoutReady) => {
+  const neighbors = node.neighbors();
+  // The parent owns the attachment side, even when its child starts an
+  // opposite writing context. Reversing at the child's context is incorrect.
+  const owner = !neighbors.isRoot() && neighbors.parentDirection() === direction
+    ? neighbors.parentNode() : node;
+  if (layoutReady && owner.effectiveBidi()) {
+    return owner.physicalDirection(direction);
+  }
+  // Keyboard actions can arrive before layout. Resolve declarations without
+  // consulting stale geometry or writing an override into inheriting nodes.
+  const bidi = resolveNodeDirection(owner);
+  return bidi === Bidi.RTL && getDirectionAxis(direction) === Axis.HORIZONTAL
+    ? reverseDirection(direction) : direction;
 };
 
 const nextAlignment = (alignment, childDir) => {
@@ -408,8 +426,28 @@ export default class Viewport {
   }
 
   moveToNeighbor(direction) {
-    if (!this.node().neighbors().hasNode(direction)) return false;
-    this.caret().move(direction);
+    const node = this.node();
+    const layoutReady = this.rendering()?.layoutReady?.() === true;
+    const directions = getDirectionAxis(direction) === Axis.HORIZONTAL
+      ? [direction, reverseDirection(direction)] : [direction];
+    const candidates = directions.filter((logical) =>
+      node.neighbors().hasNode(logical) &&
+      physicalConnectionDirection(node, logical, layoutReady) === direction
+    );
+    if (!candidates.length) return false;
+    if (candidates.length > 1 && layoutReady && !node.layout().needsAbsolutePos()) {
+      // At an opposite-direction boundary both neighbors can lie on the same
+      // side. Follow the nearer visible neighbor; logical traversal is intact.
+      const distance = (logical) => {
+        const layout = node.neighbors().nodeAt(logical).layout();
+        return layout.needsAbsolutePos() ? Infinity : Math.hypot(
+          layout.absoluteX() - node.layout().absoluteX(),
+          layout.absoluteY() - node.layout().absoluteY()
+        );
+      };
+      candidates.sort((a, b) => distance(a) - distance(b));
+    }
+    this.caret().move(candidates[0]);
     this._nodeNavigationRequested = true;
     this.repaint();
     return true;
@@ -609,8 +647,7 @@ export default class Viewport {
   }
 
   toJSON() {
-    if (documentState(this.widget())?.version === 1)
-      ensureStringIds(this.widget());
+    ensureStringIds(this.widget());
     const styles = Object.create(null);
     this._userCaret
       .root()
@@ -1017,6 +1054,21 @@ export default class Viewport {
     this.node().invalidate();
     this.save();
     this.repaint();
+  }
+
+  setNodeBidi(value) {
+    if (![Bidi.INHERIT, Bidi.LTR, Bidi.RTL].includes(value))
+      throw new Error("Layout direction must be inherit, ltr, or rtl.");
+    if (!this.hasWidget() || !this.finishStructuredEditing()) return false;
+    // Finishing a structured draft can rebuild the graph. Use the current
+    // selection rather than the node that existed before that flush.
+    const node = this.node();
+    if (node.bidi() === value) return true;
+    this.cancelCameraTravel();
+    node.setBidi(value);
+    this.save();
+    this.repaint();
+    return true;
   }
 
   toggleNodeScale() {

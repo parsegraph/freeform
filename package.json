@@ -17,7 +17,7 @@
     "eslint-config-prettier": "^8.6.0",
     "exif-parser": "^0.1.12",
     "exif-reader": "^2.0.1",
-    "parsegraph": "7.1.0",
+    "parsegraph": "8.2.1",
     "parsegraph-blockpainter": "^1.8.0",
     "parsegraph-camera": "^1.4.24",
     "parsegraph-checkglerror": "^1.5.8",

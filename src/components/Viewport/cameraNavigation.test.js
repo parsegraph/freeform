@@ -2,7 +2,7 @@ import Viewport from "./Viewport";
 import ViewportRendering from "./ViewportRendering";
 import { cameraPose } from "./ViewportCameraTravel";
 import { handleKeyDown } from "./handleKeyDown";
-import { Direction, LayoutPhase } from "parsegraph";
+import { Bidi, CommitLayout, Direction, DirectionCaret, DirectionNode, LayoutPhase } from "parsegraph";
 
 let viewport, renderer, frames, time;
 beforeEach(() => {
@@ -108,15 +108,14 @@ test("selecting the current node enables navigation and smoothly centers it", ()
 });
 
 test("neighbor navigation never spawns nodes and clearing selection cancels queued focus", () => {
-  const original = viewport.node();
-  let available = false;
-  const node = { ...original, neighbors: () => ({ hasNode: () => available }) };
-  const move = jest.fn();
-  viewport.caret = () => ({ node: () => node, move });
+  const node = new DirectionNode("root");
+  const caret = new DirectionCaret(node);
+  const move = jest.spyOn(caret, "move");
+  viewport.caret = () => caret;
   viewport.spawnMove = jest.fn();
   expect(viewport.moveToNeighbor(Direction.FORWARD)).toBe(false);
   expect(move).not.toHaveBeenCalled();
-  available = true;
+  node.connect(Direction.FORWARD, new DirectionNode("child"));
   expect(viewport.moveToNeighbor(Direction.FORWARD)).toBe(true);
   expect(move).toHaveBeenCalledWith(Direction.FORWARD);
   expect(viewport.spawnMove).not.toHaveBeenCalled();
@@ -124,4 +123,65 @@ test("neighbor navigation never spawns nodes and clearing selection cancels queu
   expect(viewport.navigatingNodes()).toBe(false);
   expect(viewport._nodeNavigationRequested).toBe(false);
   expect(viewport.ensuringVisible()).toBe(false);
+});
+
+function commitDirections(root, defaultDirection) {
+  const job = new CommitLayout(root, {
+    size: (node, out) => { out[0] = 30; out[1] = 20; },
+    getSeparation: () => 10,
+  }, defaultDirection);
+  while (job.crank()) {}
+  viewport.widget = () => root;
+  renderer._completedLayoutRoot = root;
+  renderer._completedLayoutRevision = renderer._revision;
+}
+
+test.each([Bidi.LTR, Bidi.RTL])("screen navigation respects inherited %s flow and the parent's side at a bidi boundary", (direction) => {
+  const root = new DirectionNode("root");
+  const child = new DirectionNode("opposite context");
+  root.connect(Direction.FORWARD, child);
+  child.setBidi(direction === Bidi.LTR ? Bidi.RTL : Bidi.LTR);
+  const caret = new DirectionCaret(root);
+  viewport.caret = () => caret;
+  commitDirections(root, direction);
+  const forward = direction === Bidi.RTL ? Direction.BACKWARD : Direction.FORWARD;
+  const back = direction === Bidi.RTL ? Direction.FORWARD : Direction.BACKWARD;
+  expect(viewport.moveToNeighbor(back)).toBe(false);
+  expect(viewport.moveToNeighbor(forward)).toBe(true);
+  expect(viewport.node()).toBe(child);
+  expect(viewport.moveToNeighbor(back)).toBe(true);
+  expect(viewport.node()).toBe(root);
+  expect(root.bidi()).toBe(Bidi.INHERIT);
+  expect(root.neighbors().nodeAt(Direction.FORWARD)).toBe(child);
+});
+
+test("navigation resolves changed declarations before relayout instead of using the previous direction", () => {
+  const root = new DirectionNode("root");
+  const child = new DirectionNode("child");
+  root.connect(Direction.FORWARD, child);
+  viewport.caret = () => caret;
+  const caret = new DirectionCaret(root);
+  commitDirections(root, Bidi.LTR);
+  root.setBidi(Bidi.RTL);
+  expect(root.effectiveBidi()).toBe(Bidi.LTR);
+  expect(viewport.moveToNeighbor(Direction.FORWARD)).toBe(false);
+  expect(viewport.moveToNeighbor(Direction.BACKWARD)).toBe(true);
+  expect(viewport.node()).toBe(child);
+});
+
+test("opposite-context neighbors on the same physical side choose the nearer visible node", () => {
+  const root = new DirectionNode("root");
+  const child = new DirectionNode("RTL");
+  const inner = new DirectionNode("inner");
+  root.connect(Direction.FORWARD, child);
+  child.setBidi(Bidi.RTL);
+  child.connect(Direction.FORWARD, inner);
+  commitDirections(root, Bidi.LTR);
+  expect(root.layout().absoluteX()).toBeLessThan(inner.layout().absoluteX());
+  expect(inner.layout().absoluteX()).toBeLessThan(child.layout().absoluteX());
+  const caret = new DirectionCaret(root);
+  caret.moveTo(child);
+  viewport.caret = () => caret;
+  expect(viewport.moveToNeighbor(Direction.BACKWARD)).toBe(true);
+  expect(viewport.node()).toBe(inner);
 });

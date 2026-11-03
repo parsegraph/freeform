@@ -390,6 +390,40 @@ test("View-mode touch taps select on release, while drags only pan", () => {
   expect(viewport.refresh).not.toHaveBeenCalled();
 });
 
+test.each([false, true])("unfinished layout suppresses mouse/touch hit tests while panning remains responsive (Edit %s)", (editing) => {
+  let ready = false;
+  const picked = {};
+  const hit = jest.fn(() => picked);
+  const moveTo = jest.fn();
+  viewport.rendering = () => ({ showingUI: () => editing, layoutReady: () => ready });
+  viewport.caret = () => ({
+    root: () => ({ layout: () => ({ nodeUnderCoords: hit }) }),
+    node: () => picked,
+    moveTo,
+  });
+  mouse(canvas, "mousemove", 40, 0);
+  mouse(canvas, "mousedown", 40);
+  mouse(canvas, "mouseup", 40, 0);
+  touch("touchstart", [[1, 40, 50]]);
+  touch("touchend", [[1, 40, 50]]);
+  expect(hit).not.toHaveBeenCalled();
+  expect(moveTo).not.toHaveBeenCalled();
+  expect(viewport.selectNode).not.toHaveBeenCalled();
+  expect(viewport.clearNodeSelection).not.toHaveBeenCalled();
+  expect(viewport.toggleEditor).not.toHaveBeenCalled();
+
+  mouse(canvas, "mousedown", 40);
+  advance(20);
+  mouse(canvas, "mousemove", 60);
+  mouse(canvas, "mouseup", 60, 0);
+  expect(position[0]).toBeGreaterThan(0);
+  expect(hit).not.toHaveBeenCalled();
+  ready = true;
+  mouse(canvas, "mousemove", 80, 0);
+  expect(hit).toHaveBeenCalledTimes(1);
+  expect(input.hoveredNode()).toBe(picked);
+});
+
 test("hover changes only refresh the overlay while a graph frame can finish", () => {
   const hovered = {};
   viewport.caret = () => ({

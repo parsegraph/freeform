@@ -6,12 +6,27 @@ camera's current orientation.
 
 ## Directions and buds
 
-- **FORWARD / BACKWARD**: right / left.
+- **FORWARD / BACKWARD**: logical forward / backward. They map to right / left
+  in an LTR scope and left / right in an RTL scope. A node's `bidi` declaration
+  is `inherit`, `ltr`, or `rtl`; new nodes inherit. Freeform supplies an explicit
+  LTR surrounding direction at the layout boundary. Layout resolves inherited
+  direction without overwriting declarations. Read physical directions and
+  coordinates only after layout completes.
 - **DOWNWARD / UPWARD**: down / up.
 - **INWARD / OUTWARD**: containment / return from containment. “Inner” refers
   to an INWARD connection.
 - **Bud**: an empty node, normally created with `new DirectionNode()`. It is a
   real, navigable node used to organize connections, rather than XML content.
+
+In Freeform's **Edit** inspector, **Layout direction** changes the selected
+node's declaration: **Inherit**, **Left to right**, or **Right to left**. The
+readout shows the direction inherited from its parent, or Freeform's LTR default
+for an inheriting root. Select the root to change the whole graph's flow;
+explicit descendant overrides retain their own direction. These controls also
+work in structured JSON and Lisp/Scheme documents, with undo/redo and native
+draft recovery. Source export keeps the original logical order; layout direction
+is saved in the native v2 document. It controls horizontal graph layout, not
+language detection or text shaping.
 
 ## Slots
 
@@ -76,7 +91,7 @@ parent
 child 0    child 1    child 2
 ```
 
-These diagrams describe connections, not exact layout positions. A downward
+These diagrams show connections in an LTR scope, not exact layout positions. A downward
 connection from the parent to the first bud is the **dog-leg** used by the XML
 mapping. The spine always connects buds to buds. A chain such as
 `bud -> child -> bud -> sibling` is not a multislot: its children sit along the
@@ -133,9 +148,10 @@ Neither operation changes node fit or alignment. Loose separation is a
 conservative comparison of complete subtrees, including the remaining spine;
 it does not force a gap when their perpendicular spans do not overlap.
 
-These directional settings are preserved by Parsegraph v1's `separation/1`
-capability. Legacy v0 saves discard them, so builders using this spacing must
-initialize their document as v1 before creating history snapshots.
+These directional settings are preserved by the `separation/1` capability in
+Parsegraph v1 and v2. Current native saves use v2 and also retain all three bidi
+declarations. Legacy v0 exports discard these settings. Builders initialize
+native document state before creating history snapshots.
 
 ## XML mapping
 

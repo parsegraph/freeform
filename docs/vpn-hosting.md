@@ -123,7 +123,29 @@ untrusted pull-request branches. The website's pipeline and runtime are separate
 
 ## Manual artifact build
 
-Commit the selected changes, including the exact `parsegraph@7.1.0` dependency
+Parsegraph 8.2.1 comes from the private VPN registry at
+`https://parsegraph.fritonet.home.arpa/npm/`. The committed lockfile pins its
+archive and integrity; other dependencies retain their public registry URLs.
+Anonymous reads require VPN connectivity and Node-compatible CA trust, but no
+publisher credential. Keep TLS verification enabled and the default npm/Yarn
+registry public. For a deliberate dependency update, use:
+
+```sh
+NODE_EXTRA_CA_CERTS=/path/to/vpn-ca.pem yarn add parsegraph@8.2.1 --exact \
+  --registry=https://parsegraph.fritonet.home.arpa/npm/
+```
+
+The controller now passes its configured `ca_file` as `NODE_EXTRA_CA_CERTS` to
+child processes. The artifact builder preserves that environment for all three
+frozen installs and their build commands. With no configured `ca_file`, existing
+environment trust is preserved. **Upgrade the installed controller before the
+first private-registry build** using the reviewed pipeline installer above;
+pushing application source does not upgrade the running controller. A reviewed
+service environment override supplying the same certificate is an alternative
+bootstrap. For a manual build, export `NODE_EXTRA_CA_CERTS` before starting the
+builder. The CA path must exist on the build host, not just the developer's Mac.
+
+Commit the selected changes, including the exact `parsegraph@8.2.1` dependency
 and lockfile, without collecting unrelated work. Push the reviewed commit to
 `fritolaptop:repo/freeform.git` and record its full Git SHA. Build that commit in
 a disposable, host-local checkout on fritolaptop, never through SSHFS or from an

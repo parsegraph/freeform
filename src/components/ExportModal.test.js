@@ -83,7 +83,7 @@ test("unfinished Lisp forms block source downloads but save as native drafts", (
   ).toMatchObject({ validStructure: true, complete: false });
 });
 
-test("incomplete JSON blocks source export but can be downloaded as a recoverable v1 draft", () => {
+test("incomplete JSON blocks source export but can be downloaded as a recoverable v2 draft", () => {
   const root = createJsonDraft();
   const downloads = [];
   jest.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function () {
@@ -99,7 +99,7 @@ test("incomplete JSON blocks source export but can be downloaded as a recoverabl
   fireEvent.change(screen.getByRole("combobox"), { target: { value: "parsegraph" } });
   fireEvent.click(screen.getByRole("button", { name: "Save", exact: true }));
   expect(downloads).toHaveLength(1);
-  expect(downloads[0].version).toBe(1);
+  expect(downloads[0].version).toBe(2);
   expect(structuredJsonStatus(readGraph(downloads[0]))).toMatchObject({ complete: false, slotCount: 2 });
 });
 
@@ -118,7 +118,7 @@ test("complete structured JSON exports its content rather than graph metadata", 
   expect(filename).toBe("project-settings.json");
 });
 
-test("export writes the edited v1 document and makes legacy export explicitly lossy", () => {
+test("export migrates the edited v1 document to v2 and makes legacy export explicitly lossy", () => {
   const data = JSON.parse(JSON.stringify(fixture));
   data.capabilities["future/1"] = { payload: [true, "preserved"] };
   const root = readGraph(data);
@@ -148,7 +148,7 @@ test("export writes the edited v1 document and makes legacy export explicitly lo
   render(<ExportModal graph={root} viewport={viewport} />);
   fireEvent.click(screen.getByRole("button", { name: "Save", exact: true }));
   expect(downloads).toHaveLength(1);
-  expect(downloads[0].version).toBe(1);
+  expect(downloads[0].version).toBe(2);
   expect(downloads[0].nodes.find((node) => node.id === "root").value).toBe(
     "Edited on screen"
   );
@@ -157,6 +157,7 @@ test("export writes the edited v1 document and makes legacy export explicitly lo
     target: { value: "parsegraph-v0" },
   });
   expect(screen.getByRole("status")).toHaveTextContent("discards");
+  expect(screen.getByRole("status")).toHaveTextContent("writing directions");
   fireEvent.click(screen.getByRole("button", { name: "Save", exact: true }));
   expect(downloads[1].version).toBeUndefined();
   expect(downloads[1].viewport.styles).toEqual(appearance.nodeStyles);

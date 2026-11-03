@@ -1,6 +1,7 @@
 import {
   Direction,
   CommitLayout,
+  LayoutOperation,
   LayoutPhase,
   Axis,
   getDirectionAxis,
@@ -38,6 +39,7 @@ import {
   SHOW_NODE_SPOTLIGHTS,
   MAX_PAINT_TIME_MS,
   WORLD_LABEL_SIZE,
+  DEFAULT_LAYOUT_DIRECTION,
 } from "../../settings";
 import { WorldLabels } from "../WorldLabel";
 import { createLayoutPainter } from "./createLayoutPainter";
@@ -631,7 +633,7 @@ export default class ViewportRendering {
     if (checkScale) {
       this.viewport()._checkScale = true;
       // Zoom limits change the live camera, never the immutable drawing pose.
-      if (this.widget()?.layout().phase() === LayoutPhase.COMMITTED) this.focusCamera();
+      if (this.layoutReady()) this.focusCamera();
     }
     if (this.isDone()) this.restart();
   }
@@ -651,7 +653,7 @@ export default class ViewportRendering {
 
   publishFrame() {
     const frame = this._frame;
-    if (!this.validFrame(frame)) return false;
+    if (!this.validFrame(frame) || !this.layoutReady()) return false;
     const data = this._renderData;
     frame.offscreen = data.i === 0 && data.dirtyGroups === 0 &&
       data.offscreenGroups === data.allGroups && data.allGroups > 0;
@@ -719,7 +721,7 @@ export default class ViewportRendering {
     ctx.clearRect(0, 0, overlay.width, overlay.height);
     this._drawingOverlay = true;
     try {
-      if (this.node() && !this.layout().needsCommit() && !this.layout().needsAbsolutePos()) {
+      if (this.layoutReady() && this.node() && !this.layout().needsCommit() && !this.layout().needsAbsolutePos()) {
         this.renderUI();
       }
     } finally {
@@ -922,7 +924,8 @@ export default class ViewportRendering {
         this._benchmark,
         this._documentFont.get(root, provider, this._benchmark),
         isStructuredJson(root) ? (node) => jsonNodeKind(root, node) : undefined
-      )
+      ),
+      DEFAULT_LAYOUT_DIRECTION
     );
   }
 
@@ -930,7 +933,20 @@ export default class ViewportRendering {
     if (!this._layout || this._layout.startingNode() !== this.widget()) {
       this._layout = this.createLayout();
     }
-    return this._layout.crank();
+    const operation = this._layout.crank();
+    if (operation === LayoutOperation.DONE) {
+      this._completedLayoutRoot = this.widget();
+      this._completedLayoutRevision = this._revision;
+    }
+    return operation;
+  }
+
+  layoutReady() {
+    // A committed root can still have groups awaiting positioning. Only DONE
+    // authorizes camera reads, overlays, and publication of this revision.
+    return this._completedLayoutRoot === this.widget() &&
+      this._completedLayoutRevision === this._revision &&
+      this.widget()?.layout().phase() === LayoutPhase.COMMITTED;
   }
 
   collectWorldLabel(node, label, camera, renderData, fontSize = FONT_SIZE) {

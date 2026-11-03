@@ -99,8 +99,14 @@ class Pipeline:
             self.log.write("\n$ " + " ".join(map(str, args)) + "\n")
             self.log.flush()
         # Separate process group lets command timeouts terminate npm/podman children.
+        environment = clean_env()
+        if self.config.get("ca_file"):
+            # The configured VPN CA serves both HTTPS health checks and the
+            # private npm registry. Node reads this at startup; the builder
+            # carries it into the app and worker frozen Yarn installations.
+            environment["NODE_EXTRA_CA_CERTS"] = str(self.config["ca_file"])
         with tempfile.TemporaryFile(mode="w+") as output:
-            proc = subprocess.Popen(list(map(str, args)), cwd=cwd, env=clean_env(),
+            proc = subprocess.Popen(list(map(str, args)), cwd=cwd, env=environment,
                                     stdout=output, stderr=subprocess.STDOUT, text=True,
                                     start_new_session=True)
             try:

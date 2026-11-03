@@ -4,21 +4,24 @@ import {
   serializeParsegraph,
 } from "parsegraph";
 import Color from "parsegraph-color";
+import { DEFAULT_NODE_STYLE, PAGE_BACKGROUND_COLOR } from "./settings";
 
 // Keep state on the graph so live reload cannot detach its capabilities.
 // Symbols are ignored by the graph serializers and do not enter document JSON.
 const DOCUMENT_STATE = Symbol.for("parsegraph.freeform.document");
+export const CURRENT_DOCUMENT_VERSION = 2;
 export const documentState = (root) => root?.[DOCUMENT_STATE];
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const own = (object, key) =>
   Object.prototype.hasOwnProperty.call(object ?? {}, key);
 
-// Builders using v1-only node settings must opt into v1 before their first
-// history snapshot. Attach state directly, without serializing and rebuilding.
+// Attach native document state without serializing and rebuilding. New nodes
+// retain their inherited direction; only legacy imports acquire an LTR root.
 export function initializeGraphDocument(root) {
   Object.defineProperty(root, DOCUMENT_STATE, {
     value: {
-      version: 1,
+      version: CURRENT_DOCUMENT_VERSION,
+      sourceVersion: CURRENT_DOCUMENT_VERSION,
       root,
       capabilities: {},
       ignoredCapabilities: [],
@@ -36,6 +39,8 @@ export function initializeGraphDocument(root) {
 
 export function readGraph(data) {
   const loaded = deserializeParsegraphDocument(data);
+  loaded.sourceVersion = loaded.version;
+  loaded.version = CURRENT_DOCUMENT_VERSION;
   const formats = loaded.metadata?.freeform;
   if (own(formats, "structuredJson") && own(formats, "structuredLisp"))
     throw new Error(
@@ -119,11 +124,23 @@ export function ensureStringIds(root) {
 }
 
 export function appearanceFromViewport(viewport) {
-  const page = viewport.pageBackgroundColor.startsWith("#")
-    ? Color.fromHex(viewport.pageBackgroundColor)
-    : Color.fromRGB(viewport.pageBackgroundColor);
+  const pageColor = viewport.pageBackgroundColor;
+  const page = pageColor
+    ? pageColor.startsWith("#")
+      ? Color.fromHex(pageColor)
+      : Color.fromRGB(pageColor)
+    : PAGE_BACKGROUND_COLOR;
+  // Legacy files and generated color examples may supply only sparse styles.
+  // Their first history snapshot precedes viewport.show(), so fill the same
+  // defaults that the viewport would have applied before writing native data.
+  const defaults = Object.fromEntries(
+    COLOR_FIELDS.flatMap((name) => [
+      [name, DEFAULT_NODE_STYLE[name].asHex()],
+      [name.replace("Color", "Alpha"), DEFAULT_NODE_STYLE[name].a()],
+    ])
+  );
   return {
-    defaults: appearanceFields(viewport.defaultNodeStyle),
+    defaults: appearanceFields({ ...defaults, ...viewport.defaultNodeStyle }),
     nodeStyles: Object.fromEntries(
       Object.entries(viewport.styles ?? {}).map(([id, style]) => [
         id,
@@ -160,7 +177,7 @@ export function writeGraph(
   root,
   selectedNode,
   viewport,
-  version = documentState(root)?.version ?? 0
+  version = CURRENT_DOCUMENT_VERSION
 ) {
   const state = documentState(root);
   const selection =
@@ -173,7 +190,7 @@ export function writeGraph(
       state?.metadata?.freeform?.structuredLisp !== undefined
     ) {
       throw new Error(
-        "Structured drafts require Parsegraph v1 to preserve slots and node types."
+        "Structured drafts require the native Parsegraph format to preserve slots and node types."
       );
     }
     return {
@@ -182,12 +199,21 @@ export function writeGraph(
       ...(viewport !== undefined ? { viewport } : {}),
     };
   }
+  // Older callers requested v1 explicitly. The library's native writer now
+  // migrates those saves to v2; only the explicit v0 branch is a legacy export.
+  if (version !== 1 && version !== CURRENT_DOCUMENT_VERSION)
+    throw new Error(`Unsupported Parsegraph export version: ${version}`);
   const ids = ensureStringIds(root);
   const capabilities = clone(state?.capabilities ?? {});
+  const legacyAppearance = !state || state.sourceVersion === 0;
   if (
-    viewport?.defaultNodeStyle &&
-    viewport?.pageBackgroundColor &&
-    (state?.appearance || state?.version !== 1 || viewport.appearanceChanged)
+    (viewport?.defaultNodeStyle &&
+      viewport?.pageBackgroundColor &&
+      (state?.appearance || legacyAppearance || viewport.appearanceChanged)) ||
+    (legacyAppearance &&
+      (viewport?.defaultNodeStyle ||
+        viewport?.styles ||
+        viewport?.pageBackgroundColor))
   ) {
     capabilities["appearance/1"] = appearanceFromViewport(viewport);
   }

@@ -6,7 +6,7 @@ import {
   screen,
   within,
 } from "@testing-library/react";
-import { Direction, DirectionNode } from "parsegraph";
+import { Bidi, Direction, DirectionNode } from "parsegraph";
 import Viewport from "./Viewport/Viewport";
 import {
   graphNodes,
@@ -19,6 +19,7 @@ import {
   applyJsonCommand,
   createStructuredJson,
   inspectJsonSelection,
+  exportStructuredJson,
 } from "../structuredJson";
 import {
   JSON_RECOVERY_KEY,
@@ -87,7 +88,15 @@ jest.mock("./Viewport/Viewport", () =>
         notify();
       },
       widget: () => root,
+      hasWidget: () => !!root,
       node: () => selected,
+      finishStructuredEditing: () => true,
+      cancelCameraTravel: jest.fn(),
+      save: () => { onSave?.(root, selected); notify(); },
+      repaint: jest.fn(),
+      setNodeBidi(value) {
+        return jest.requireActual("./Viewport/Viewport").default.prototype.setNodeBidi.call(this, value);
+      },
       toJSON: () => ({ cam, showingUI }),
       showingStyling: () => false,
       setOnDocumentChange: (listener) => {
@@ -207,6 +216,7 @@ test("App keeps source edits live while grouping undo and restores clean state a
   });
   // Recovery still sees the newest text before the insertion session ends.
   expect(exportStructuredLisp(readGraph(readLispRecovery().document))).toBe("answer");
+  expect(readLispRecovery().document.version).toBe(2);
   act(() => viewport.endHistoryGroup());
   expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Undo", exact: true }));
@@ -482,6 +492,94 @@ test("JSON sidebar sessions keep recovery live and undo all typed text in one st
   expect(screen.getByRole("textbox", { name: "Number", exact: true })).toHaveValue("123");
 });
 
+test("App preserves v2 bidi and opaque capabilities through editing, undo, recovery, and native save", () => {
+  const original = saveRecovery();
+  const root = readGraph(original);
+  graphNodes(root).forEach((node, index) => node.setBidi([Bidi.INHERIT, Bidi.RTL, Bidi.LTR][index % 3]));
+  documentState(root).capabilities["future/5"] = { payload: [false, "keep"] };
+  documentState(root).metadata.project = { name: "mixed direction" };
+  const data = writeGraph(root);
+  const declarations = (document) => Object.fromEntries(document.nodes.map((node) => [node.id, node.bidi]));
+  writeJsonRecovery(data);
+  renderApp(); recover();
+  const viewport = Viewport.mock.results.at(-1).value;
+  const field = screen.getByRole("textbox", { name: "Number", exact: true });
+  fireEvent.focus(field);
+  fireEvent.change(field, { target: { value: "9" } });
+  fireEvent.blur(field);
+  fireEvent.click(screen.getByRole("button", { name: "Undo", exact: true }));
+  expect(declarations(writeGraph(viewport.widget()))).toEqual(declarations(data));
+  fireEvent.click(screen.getByRole("button", { name: "Redo", exact: true }));
+  act(() => window.dispatchEvent(new Event("pagehide")));
+  const recovered = readJsonRecovery().document;
+  expect(recovered.version).toBe(2);
+  expect(declarations(recovered)).toEqual(declarations(data));
+  let downloaded;
+  jest.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function () {
+    downloaded = JSON.parse(decodeURIComponent(this.getAttribute("href").split(",").slice(1).join(",")));
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+  fireEvent.click(within(screen.getByRole("dialog", { name: "Save a copy" })).getByRole("button", { name: "Save", exact: true }));
+  expect(downloaded.version).toBe(2);
+  expect(downloaded.metadata.freeform.structuredJson.version).toBe(1);
+  expect(downloaded.metadata.project).toEqual(data.metadata.project);
+  expect(downloaded.capabilities["future/5"]).toEqual(data.capabilities["future/5"]);
+  expect(declarations(downloaded)).toEqual(declarations(data));
+});
+
+test.each(["JSON", "Lisp/Scheme"])("%s direction controls preserve inheritance, source, undo, and recovery", (language) => {
+  const json = language === "JSON";
+  const root = json ? createStructuredJson({ answer: 1 }) : createStructuredLisp("(define answer 1)\n");
+  root.setBidi(Bidi.RTL);
+  const child = graphNodes(root).find((node) => node.value() === "1");
+  const writeRecovery = json ? writeJsonRecovery : writeLispRecovery;
+  const readRecovery = json ? readJsonRecovery : readLispRecovery;
+  const source = json ? exportStructuredJson : exportStructuredLisp;
+  const originalSource = source(root);
+  writeRecovery(writeGraph(root, child, { showingUI: true }));
+  renderApp();
+  fireEvent.click(screen.getByRole("button", { name: `Recover ${language} draft` }));
+  const viewport = Viewport.mock.results.at(-1).value;
+  const direction = () => screen.getByRole("combobox", { name: "Layout direction" });
+  expect(direction()).toHaveValue(Bidi.INHERIT);
+  expect(screen.getByText(/Right to left · inherited from parent/)).toBeInTheDocument();
+
+  fireEvent.change(direction(), { target: { value: Bidi.LTR } });
+  expect(viewport.node().bidi()).toBe(Bidi.LTR);
+  expect(viewport.widget().bidi()).toBe(Bidi.RTL);
+  expect(source(viewport.widget())).toEqual(originalSource);
+  expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Undo", exact: true }));
+  expect(direction()).toHaveValue(Bidi.INHERIT);
+  fireEvent.click(screen.getByRole("button", { name: "Redo", exact: true }));
+  expect(direction()).toHaveValue(Bidi.LTR);
+  act(() => window.dispatchEvent(new Event("pagehide")));
+  const recovered = readRecovery().document;
+  expect(recovered.version).toBe(2);
+  expect(recovered.nodes.find((node) => node.id === child.id()).bidi).toBe(Bidi.LTR);
+
+  fireEvent.change(direction(), { target: { value: Bidi.INHERIT } });
+  expect(viewport.node().bidi()).toBe(Bidi.INHERIT);
+  act(() => viewport.moveToId(viewport.widget().id()));
+  fireEvent.change(direction(), { target: { value: Bidi.INHERIT } });
+  expect(screen.getByText(/Left to right · inherited from Freeform default/)).toBeInTheDocument();
+  expect(source(viewport.widget())).toEqual(originalSource);
+});
+
+test("ordinary nodes expose the same direction control in Edit mode", async () => {
+  renderApp();
+  await importOrdinaryGraph(false);
+  expect(screen.queryByRole("combobox", { name: "Layout direction" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Edit", exact: true }));
+  const viewport = Viewport.mock.results.at(-1).value;
+  const direction = screen.getByRole("combobox", { name: "Layout direction" });
+  expect(direction).toHaveValue(Bidi.INHERIT);
+  fireEvent.change(direction, { target: { value: Bidi.RTL } });
+  expect(viewport.node().bidi()).toBe(Bidi.RTL);
+  fireEvent.click(screen.getByRole("button", { name: "Undo", exact: true }));
+  expect(screen.getByRole("combobox", { name: "Layout direction" })).toHaveValue(Bidi.INHERIT);
+});
+
 test("a reverted or untouched JSON field session stays clean and preserves redo", () => {
   saveRecovery(); renderApp(); recover();
   const download = jest.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
@@ -513,7 +611,7 @@ test("a reverted or untouched JSON field session stays clean and preserves redo"
   download.mockRestore();
 });
 
-test("a rejected sidebar draft still blocks toolbar Save and Open after blur", () => {
+test("a rejected sidebar draft blocks Save, Open, and direction changes after blur", () => {
   saveRecovery(); renderApp(); recover();
   const viewport = Viewport.mock.results.at(-1).value;
   const apply = viewport.applyStructuredCommand;
@@ -529,6 +627,12 @@ test("a rejected sidebar draft still blocks toolbar Save and Open after blur", (
   expect(screen.queryByRole("dialog", { name: "Save a copy" })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Open", exact: true }));
   expect(screen.queryByRole("dialog", { name: "New document" })).not.toBeInTheDocument();
+  const beforeDirection = viewport.node().bidi();
+  fireEvent.change(screen.getByRole("combobox", { name: "Layout direction" }), {
+    target: { value: Bidi.RTL },
+  });
+  expect(viewport.node().bidi()).toBe(beforeDirection);
+  expect(screen.getByRole("combobox", { name: "Layout direction" })).toHaveValue(beforeDirection);
   expect(field).toHaveValue("rejected");
   expect(screen.getByRole("alert")).toHaveTextContent("Rejected field text");
   fireEvent.change(field, { target: { value: "12" } });

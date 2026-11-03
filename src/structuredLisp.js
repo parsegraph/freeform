@@ -1,5 +1,5 @@
 import { Alignment, Direction, DirectionCaret, DirectionNode, Fit, SHRINK_SCALE } from "parsegraph";
-import { documentState, graphNodes } from "./graphDocument";
+import { CURRENT_DOCUMENT_VERSION, documentState, graphNodes } from "./graphDocument";
 import {
   readLisp, LISP_CONTAINERS, LISP_PREFIXES, LISP_SCALARS,
   isLispComment, isSchemeByte, lispScalarProblem, MAX_LISP_DEPTH,
@@ -396,7 +396,7 @@ function build(tree, previousRoot, selected, repairSpacing = true) {
   for (const before of previousNodes) {
     const after = physical.get(before.id());
     if (!after) continue;
-    after.setNodeFit(before.nodeFit()); after.setRightToLeft(before.rightToLeft());
+    after.setNodeFit(before.nodeFit()); after.setBidi(before.bidi());
     // Old form nodes had no planar children: their unused planar defaults must
     // not override the row pull and clearance supplied by the removed buds.
     if (previousMetadata.layout === DIRECT_SOURCE_LINES) {
@@ -428,7 +428,9 @@ function build(tree, previousRoot, selected, repairSpacing = true) {
     structuredLisp: { version: 1, layout: DIRECT_SOURCE_LINES, innerScale: SHRINK_SCALE, nodes } };
   Object.defineProperty(root, DOCUMENT_STATE, { configurable: true, value: {
     ignoredCapabilities: [], hasUnsupportedContent: false, ...previous,
-    version: 1, root, capabilities: clone(previous?.capabilities || {}), metadata,
+    version: CURRENT_DOCUMENT_VERSION,
+    sourceVersion: previous?.sourceVersion ?? CURRENT_DOCUMENT_VERSION,
+    root, capabilities: clone(previous?.capabilities || {}), metadata,
   } });
   return { root, selectedNode: physical.get(selected?.id) || root };
 }

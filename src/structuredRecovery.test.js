@@ -1,5 +1,5 @@
-import { Direction, DirectionNode } from "parsegraph";
-import { graphNodes, readGraph, writeGraph } from "./graphDocument";
+import { Bidi, Direction, DirectionNode } from "parsegraph";
+import { documentState, graphNodes, readGraph, writeGraph } from "./graphDocument";
 import {
   createLispDraft,
   createStructuredLisp,
@@ -8,16 +8,60 @@ import {
   structuredLispStatus,
 } from "./structuredLisp";
 import { createJsonDraft } from "./structuredJson";
-import { JSON_RECOVERY_KEY, writeJsonRecovery } from "./structuredJsonRecovery";
+import { JSON_RECOVERY_KEY, readJsonRecovery, writeJsonRecovery } from "./structuredJsonRecovery";
 import {
   LISP_RECOVERY_KEY,
   readLispRecovery,
   readStructuredRecovery,
+  writeLispRecovery,
   writeStructuredRecovery,
 } from "./structuredRecovery";
 
 beforeEach(() => localStorage.clear());
 afterEach(() => jest.restoreAllMocks());
+
+test.each([
+  ["JSON", createJsonDraft, JSON_RECOVERY_KEY, readJsonRecovery, writeJsonRecovery, "structuredJson"],
+  ["Lisp", createLispDraft, LISP_RECOVERY_KEY, readLispRecovery, writeLispRecovery, "structuredLisp"],
+])("%s recovery reads legacy drafts without rewriting and upgrades only the native document on save", (_name, create, key, read, write, language) => {
+  const root = create();
+  const current = writeGraph(root, root, { cam: { cameraX: 10, cameraY: 20, scale: 3 }, showingUI: true });
+  const legacy = { ...current, version: 1,
+    nodes: current.nodes.map(({ bidi, ...node }) => ({ ...node, rightToLeft: true })),
+    capabilities: { ...current.capabilities, "future/1": { payload: [false, null] } },
+    metadata: { ...current.metadata, custom: { source: "keep" } },
+  };
+  const raw = JSON.stringify({ version: 1, savedAt: 100, document: legacy });
+  localStorage.setItem(key, raw);
+  expect(read().document).toEqual(legacy);
+  expect(localStorage.getItem(key)).toBe(raw);
+  expect(documentState(readGraph(read().document)).sourceVersion).toBe(1);
+  write(read().document);
+  const record = JSON.parse(localStorage.getItem(key));
+  expect(record.version).toBe(1);
+  expect(record.document.version).toBe(2);
+  expect(record.document.metadata.freeform[language].version).toBe(1);
+  expect(record.document.metadata).toEqual(legacy.metadata);
+  expect(record.document.capabilities).toEqual(legacy.capabilities);
+  expect(record.document.nodes.find((node) => node.id === record.document.root).bidi).toBe("ltr");
+  expect(record.document.nodes.filter((node) => node.id !== record.document.root).every((node) => node.bidi === "inherit")).toBe(true);
+});
+
+test.each([
+  ["JSON", createJsonDraft, JSON_RECOVERY_KEY, readJsonRecovery, writeJsonRecovery],
+  ["Lisp", createLispDraft, LISP_RECOVERY_KEY, readLispRecovery, writeLispRecovery],
+])("%s native recovery preserves bidi declarations and rejects malformed v2 without replacing the draft", (_name, create, key, read, write) => {
+  const root = create();
+  graphNodes(root).forEach((node, index) => node.setBidi([Bidi.INHERIT, Bidi.RTL, Bidi.LTR][index % 3]));
+  const data = writeGraph(root, root);
+  write(data);
+  expect(read().document).toEqual(data);
+  const before = localStorage.getItem(key);
+  const malformed = JSON.parse(JSON.stringify(data));
+  malformed.nodes[0].bidi = "automatic";
+  expect(() => write(malformed)).toThrow();
+  expect(localStorage.getItem(key)).toBe(before);
+});
 
 test("Lisp recovery preserves incomplete tokens and slots in native documents", () => {
   const source = '; heading\r\n(define name\r\n\t"complete")\r\n';

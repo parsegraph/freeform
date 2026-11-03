@@ -49,7 +49,11 @@ function comparableNode(node) {
 function contentKey(snapshot) {
   const data = { ...snapshot };
   if (data.format === "parsegraph") {
-    data.nodes = data.nodes.map(comparableNode);
+    // Group traversal follows the current preferred axis, so record order is
+    // not document content. IDs and parent connections describe the topology.
+    data.nodes = data.nodes.map(comparableNode).sort((a, b) =>
+      a.id < b.id ? -1 : a.id > b.id ? 1 : 0
+    );
     if (record(data.metadata)) {
       data.metadata = { ...data.metadata };
       if (record(data.metadata.freeform)) {
@@ -88,7 +92,7 @@ export default class GraphStack {
   constructor() {
     const loaded = loadGraph();
     if (loaded) {
-      this._actions = [loaded];
+      this._actions = [writeGraph(readGraph(loaded), graphSelection(loaded), graphViewport(loaded))];
     } else {
       this._actions = [];
     }

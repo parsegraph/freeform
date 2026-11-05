@@ -56,14 +56,23 @@ def main():
     package = json.loads((source / "package.json").read_text())
     if not re.fullmatch(r"\d+\.\d+\.\d+", package["dependencies"]["parsegraph"]):
         parser.error("The deployment requires an exact stable Parsegraph registry version")
-    output.mkdir(parents=True, exist_ok=False)
+    # The shared worker records its own steps in the attempt's directory first.
+    recording = bool(os.environ.get("FRITONET_DEPLOY_ATTEMPT_DIR"))
+    output.mkdir(parents=True, exist_ok=recording)
     logs = output / "logs"
-    logs.mkdir()
+    logs.mkdir(exist_ok=recording)
     env = dict(os.environ, NODE_OPTIONS="--max-old-space-size=2048",
                PUBLIC_URL="/freeform", GENERATE_SOURCEMAP="false", PYTHONDONTWRITEBYTECODE="1")
 
     def run(label, command, directory=source, extra=None):
         print(f"{label}: {' '.join(command)}", flush=True)
+        if recording:
+            title = label.replace("-", " ").capitalize()
+            step = ["fritonet-deploy", "step", "--title", title, "--timeout", "600", "--", *command]
+            # The step stops its own command at its timeout; this is only the backstop.
+            if run_process(step, cwd=directory, env={**env, **(extra or {})}, log=None, timeout=630):
+                raise RuntimeError(f"{label} failed; see its step log")
+            return
         with (logs / f"{label}.log").open("w") as log:
             try:
                 result = run_process(command, cwd=directory, env={**env, **(extra or {})}, log=log)

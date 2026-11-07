@@ -56,6 +56,13 @@ is useful for distinguishing a wrapper from the work it calls. The maximum is
 one instrumented call, which can be shorter than a complete browser task when
 several calls run back-to-back.
 
+Opening a document displays the graph that was built or read. "History
+serialization" is the undo baseline written alongside it. "Display
+reconstruction" appears on open only when the graph was not normalized (see
+`normalizeGraph` in `src/graphDocument.js`) and had to be rebuilt from its saved
+form; producers should normalize their output so it does not. Undo and redo
+still rebuild from history and report the same stage.
+
 Node sizing, separation, and paint preparation are measured inside the layout
 phase. These per-call timers add overhead, so compare runs with instrumentation
 enabled in both versions. The graph-statistics stage may read cached counts;

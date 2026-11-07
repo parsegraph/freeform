@@ -1,4 +1,5 @@
 import {
+  isNormalizedGraph,
   readGraph,
   writeGraph,
   graphViewport,
@@ -91,13 +92,28 @@ function contentKey(snapshot) {
 export default class GraphStack {
   constructor() {
     const loaded = loadGraph();
+    this._live = null;
     if (loaded) {
-      this._actions = [writeGraph(readGraph(loaded), graphSelection(loaded), graphViewport(loaded))];
+      const root = readGraph(loaded);
+      this._actions = [writeGraph(root, graphSelection(loaded), graphViewport(loaded))];
+      // Writing the snapshot assigned any missing IDs, so a normalized root
+      // now matches it and can be displayed without deserializing again.
+      if (isNormalizedGraph(root)) this._live = root;
     } else {
       this._actions = [];
     }
     this._actionIndex = this._actions.length - 1;
     this._group = null;
+  }
+
+  /**
+   * The graph to display for the current entry: the one already built for it
+   * when history has not moved since, otherwise a fresh copy. Handed out once.
+   */
+  liveWidget() {
+    const live = this._live;
+    this._live = null;
+    return live ?? this.widget();
   }
 
   undoCount() {
@@ -146,6 +162,7 @@ export default class GraphStack {
   }
 
   save(newGraph, selectedNode, viewport) {
+    this._live = null;
     const newGraphData = snapshot(newGraph, selectedNode, viewport);
     if (this._group) {
       const group = this._group;
@@ -182,6 +199,7 @@ export default class GraphStack {
 
   /** Start one reversible edit while retaining a redo branch until it changes. */
   beginGroup(newGraph, selectedNode, viewport) {
+    this._live = null;
     this.endGroup();
     const baseline = snapshot(newGraph, selectedNode, viewport);
     const content = contentKey(baseline);
@@ -208,6 +226,7 @@ export default class GraphStack {
   }
 
   undo() {
+    this._live = null;
     this.endGroup();
     if (this._actionIndex > 0) {
       --this._actionIndex;
@@ -215,6 +234,7 @@ export default class GraphStack {
   }
 
   redo() {
+    this._live = null;
     this.endGroup();
     if (this._actionIndex < this._actions.length - 1) {
       ++this._actionIndex;
@@ -222,6 +242,7 @@ export default class GraphStack {
   }
 
   clear() {
+    this._live = null;
     this.endGroup();
     this._actions = [];
     this._actionIndex = -1;

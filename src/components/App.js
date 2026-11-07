@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
+  adoptGraph,
+  isNormalizedGraph,
   readGraph,
   writeGraph,
   CURRENT_DOCUMENT_VERSION,
@@ -143,15 +145,17 @@ function App() {
     urlParams.has("document") ? null : urlParams.get("public")
   );
 
+  // Displays the current history entry. An opened document passes its adopted
+  // graph as `live` so it is shown directly instead of rebuilt from history.
   const refresh = useCallback(
-    (dontTouchCamera, benchmark) => {
+    (dontTouchCamera, benchmark, live) => {
       setHasWidget(graphs.hasWidget());
       if (graphs.hasWidget()) {
-        const displayed = measureBenchmark(
-          benchmark,
-          "Display reconstruction",
-          () => upgradeLispLayout(graphs.widget(), graphs.selectedNode())
-        );
+        const displayed = live
+          ? upgradeLispLayout(live, graphs.selectedNode())
+          : measureBenchmark(benchmark, "Display reconstruction", () =>
+              upgradeLispLayout(graphs.widget(), graphs.selectedNode())
+            );
         const root = attachBenchmark(displayed.root, benchmark);
         measureBenchmark(benchmark, "Viewport setup", () => {
           viewport.show(root, graphs.viewportData());
@@ -368,13 +372,20 @@ function App() {
                 : "Untitled graph"))
       );
       viewport.container()?.focus();
+      // Normalized graphs are displayed as built; anything else is rebuilt from
+      // its saved form here, so the benchmark shows when that fallback runs.
+      graph = isNormalizedGraph(graph)
+        ? graph
+        : measureBenchmark(benchmark, "Display reconstruction", () =>
+            adoptGraph(graph, selectedNode)
+          );
       graphs.clear();
       measureBenchmark(benchmark, "History serialization", () =>
         graphs.save(graph, selectedNode, viewportData)
       );
       setUndoSize(0);
       setRedoSize(0);
-      refresh(!!viewportData?.cam, benchmark);
+      refresh(!!viewportData?.cam, benchmark, graph);
       if (showingUI === false) viewport.rendering().hideUI();
       if (showingUI === true) viewport.rendering().showUI();
       // Imported files must not reopen an unrelated example or inherit its camera.
@@ -479,7 +490,7 @@ function App() {
     if (graphs._actionIndex < 0) {
       return;
     }
-    const root = graphs.widget();
+    const root = graphs.liveWidget();
     viewport.show(root, graphs.viewportData());
     setDocumentInfo(documentState(root));
   }, [

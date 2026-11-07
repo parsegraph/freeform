@@ -3,7 +3,7 @@ import * as builders from "./builders";
 import { DEFAULT_PRIMES_MAX } from "./builders/primes";
 import * as importers from "./importers";
 import { MAX_ROUNDS } from "./settings";
-import { readGraph } from "./graphDocument";
+import { initializeGraphDocument, readGraph } from "./graphDocument";
 import proportional from "./fixtures/v1/proportion-proportional.json";
 import standard from "./fixtures/v1/proportion-standard.json";
 import math from "./fixtures/v1/proportion-math.json";
@@ -131,7 +131,7 @@ export async function loadExample(value, benchmark) {
     let args;
     switch (example.type) {
       case "svg": args = [importers.graphXml(svgSource, benchmark)]; break;
-      case "blank": args = [new DirectionNode()]; break;
+      case "blank": args = [initializeGraphDocument(new DirectionNode())]; break;
       case "json":
       case "lisp": {
         const graph = example.type === "json"

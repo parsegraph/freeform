@@ -1,5 +1,8 @@
 import {
+  Axis,
+  PreferredAxis,
   deserializeParsegraphDocument,
+  getDirectionAxis,
   serializeParsegraphDocument,
   serializeParsegraph,
 } from "parsegraph";
@@ -37,6 +40,71 @@ export function initializeGraphDocument(root) {
   return root;
 }
 
+// Parsegraph stores a detached node's preference as an absolute axis and keeps
+// it when the node is connected. Both forms lay out identically; the document
+// reader stores the parent-relative form, so normalized graphs do too. Inward
+// children keep absolute preferences, as the reader also leaves them.
+function hasAbsolutePreference(node) {
+  if (node.neighbors().isRoot()) return false;
+  const preference = node.siblings().getLayoutPreference();
+  return (
+    (preference === PreferredAxis.HORIZONTAL ||
+      preference === PreferredAxis.VERTICAL) &&
+    getDirectionAxis(node.neighbors().parentDirection()) !== Axis.Z
+  );
+}
+
+/**
+ * Finish a graph that was built in memory so it matches what readGraph would
+ * produce for its saved document: attached document state and parent-relative
+ * layout preferences. Existing document state is kept. IDs are left alone:
+ * Parsegraph gives every node a unique string ID, and producers that replace
+ * them use unique strings; isNormalizedGraph rejects anything else.
+ */
+export function normalizeGraph(root) {
+  graphNodes(root).forEach((node) => {
+    if (hasAbsolutePreference(node))
+      node.siblings().setLayoutPreference(node.siblings().getLayoutPreference());
+  });
+  return documentState(root) ? root : initializeGraphDocument(root);
+}
+
+/** Whether a graph can be displayed without a serialization round trip. */
+export function isNormalizedGraph(root) {
+  if (documentState(root)?.version !== CURRENT_DOCUMENT_VERSION) return false;
+  const ids = new Set();
+  return graphNodes(root).every((node) => {
+    const id = node.id();
+    if (typeof id !== "string" || !id || ids.has(id)) return false;
+    ids.add(id);
+    return !hasAbsolutePreference(node);
+  });
+}
+
+/**
+ * Return a graph that is safe to display and edit as the open document. A
+ * normalized graph is used as-is; anything else is rebuilt from its saved form,
+ * so a producer that skips normalizeGraph still opens exactly as before.
+ */
+export function adoptGraph(root, selectedNode) {
+  return isNormalizedGraph(root) ? root : readGraph(writeGraph(root, selectedNode));
+}
+
+// A v0 document keeps its styles in its viewport. Convert them to appearance/1
+// once, on read, exactly as its first native save did, so the graph saves like
+// any native document afterwards. sourceVersion still records the v0 source.
+function migrateLegacyAppearance(loaded, viewport) {
+  if (!viewport?.defaultNodeStyle && !viewport?.styles && !viewport?.pageBackgroundColor)
+    return;
+  const ids = new Set(graphNodes(loaded.root).map((node) => String(node.id())));
+  const appearance = appearanceFromViewport(viewport);
+  appearance.nodeStyles = Object.fromEntries(
+    Object.entries(appearance.nodeStyles).filter(([id]) => ids.has(id))
+  );
+  loaded.capabilities = { ...loaded.capabilities, "appearance/1": appearance };
+  loaded.appearance = appearance;
+}
+
 export function readGraph(data) {
   const loaded = deserializeParsegraphDocument(data);
   loaded.sourceVersion = loaded.version;
@@ -52,6 +120,7 @@ export function readGraph(data) {
       typeof node.value() !== "string" &&
       typeof node.value() !== "number"
   );
+  if (loaded.sourceVersion === 0) migrateLegacyAppearance(loaded, data?.viewport);
   Object.defineProperty(loaded.root, DOCUMENT_STATE, {
     value: loaded,
     configurable: true,
@@ -205,7 +274,9 @@ export function writeGraph(
     throw new Error(`Unsupported Parsegraph export version: ${version}`);
   const ids = ensureStringIds(root);
   const capabilities = clone(state?.capabilities ?? {});
-  const legacyAppearance = !state || state.sourceVersion === 0;
+  // Graphs without document state predate native appearance; readGraph has
+  // already migrated v0 documents' viewport styles.
+  const legacyAppearance = !state;
   if (
     (viewport?.defaultNodeStyle &&
       viewport?.pageBackgroundColor &&

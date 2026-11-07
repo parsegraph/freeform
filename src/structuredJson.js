@@ -6,7 +6,7 @@ import {
   Fit,
   SHRINK_SCALE,
 } from "parsegraph";
-import { CURRENT_DOCUMENT_VERSION, documentState, graphNodes } from "./graphDocument";
+import { CURRENT_DOCUMENT_VERSION, documentState, graphNodes, normalizeGraph } from "./graphDocument";
 
 // The graph stores content and order; metadata supplies its language roles.
 // The temporary tree used by commands is decoded afresh, never saved separately.
@@ -508,6 +508,7 @@ function build(tree, previousRoot, selected) {
       metadata,
     },
   });
+  normalizeGraph(root);
   return { root, selectedNode: physical.get(selected?.id) ?? root };
 }
 

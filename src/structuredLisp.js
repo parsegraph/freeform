@@ -1,5 +1,5 @@
 import { Alignment, Direction, DirectionCaret, DirectionNode, Fit, SHRINK_SCALE } from "parsegraph";
-import { CURRENT_DOCUMENT_VERSION, documentState, graphNodes } from "./graphDocument";
+import { CURRENT_DOCUMENT_VERSION, documentState, graphNodes, normalizeGraph } from "./graphDocument";
 import {
   readLisp, LISP_CONTAINERS, LISP_PREFIXES, LISP_SCALARS,
   isLispComment, isSchemeByte, lispScalarProblem, MAX_LISP_DEPTH,
@@ -432,6 +432,7 @@ function build(tree, previousRoot, selected, repairSpacing = true) {
     sourceVersion: previous?.sourceVersion ?? CURRENT_DOCUMENT_VERSION,
     root, capabilities: clone(previous?.capabilities || {}), metadata,
   } });
+  normalizeGraph(root);
   return { root, selectedNode: physical.get(selected?.id) || root };
 }
 

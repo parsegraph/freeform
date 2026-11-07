@@ -253,9 +253,10 @@ test("clear ends grouping so new document edits cannot overwrite the departing h
 });
 
 test("legacy viewport colors and styles count as edits while its camera does not", () => {
-  const root = readGraph(serializeParsegraph(document("legacy", false)));
   const baseline = { ...camera(0), defaultNodeStyle: appearanceFixture.capabilities["appearance/1"].defaults,
     styles: { child: { backgroundColor: "#112233" } }, pageBackgroundColor: "#ffffff" };
+  // readGraph migrates the document's own legacy viewport styles to appearance.
+  const root = readGraph({ ...serializeParsegraph(document("legacy", false)), viewport: baseline });
   const stack = new GraphStack(); stack.save(root, "root", baseline);
   stack.beginGroup(root, "child", { ...baseline, ...camera(1) });
   stack.save(root, "root", { ...baseline, ...camera(2) });

@@ -6,7 +6,7 @@ import {
   Fit,
 } from "parsegraph";
 import { measureBenchmark } from "./benchmark";
-import { initializeGraphDocument } from "./graphDocument";
+import { normalizeGraph } from "./graphDocument";
 
 const XML_SPACE = "[\\x20\\t\\r\\n]";
 const DECLARATION = new RegExp(
@@ -262,7 +262,7 @@ export function graphXml(input, benchmark) {
       previous = appendChild(previous, node, previous === parent);
     }
   }
-  return initializeGraphDocument(root);
+  return normalizeGraph(root);
 }
 
 const DIRECTIONS = [

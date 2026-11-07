@@ -79,10 +79,25 @@ const readGraphSource = matchSource(
   /export (function readGraph\(data\) \{[\s\S]*?\n\})\s*\n\s*export function graphViewport/,
   "readGraph"
 );
+const migrateSource = matchSource(
+  documentSource,
+  /\n(function migrateLegacyAppearance\(loaded, viewport\) \{[\s\S]*?\n\})\s*\n\s*export function readGraph/,
+  "migrateLegacyAppearance"
+);
 const graphNodes = new Function(`return (${graphNodesSource});`)();
+// The fixed v0 input carries no viewport styles, so migration returns before
+// it would need the app's appearance conversion.
+const migrateLegacyAppearance = new Function(
+  "graphNodes",
+  "appearanceFromViewport",
+  `return (${migrateSource});`
+)(graphNodes, () => {
+  throw new Error("Benchmark input unexpectedly carries legacy viewport styles.");
+});
 const readGraph = new Function(
   "deserializeParsegraphDocument",
   "graphNodes",
+  "migrateLegacyAppearance",
   "DOCUMENT_STATE",
   "own",
   "CURRENT_DOCUMENT_VERSION",
@@ -90,6 +105,7 @@ const readGraph = new Function(
 )(
   parsegraph.deserializeParsegraphDocument,
   graphNodes,
+  migrateLegacyAppearance,
   Symbol.for("parsegraph.freeform.document"),
   (value, key) => Object.prototype.hasOwnProperty.call(value ?? {}, key),
   Number(documentSource.match(/export const CURRENT_DOCUMENT_VERSION = (\d+);/)?.[1] ?? 1)

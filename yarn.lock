@@ -7224,10 +7224,10 @@ parsegraph-unicode@^1.6.5:
   dependencies:
     node-localstorage "^2.1.6"
 
-parsegraph@8.2.1:
-  version "8.2.1"
-  resolved "https://parsegraph.fritonet.home.arpa/npm/parsegraph/-/parsegraph-8.2.1.tgz#92f4baa312b8bda790fd132e78dc60451389fb52"
-  integrity sha512-2jQd/qNgRvljm/LVvZ4Us7kc+4Ap/9ix4PIALeRMU3umfvhztoDvkkzpHqFuTc1wWyglk4+zTFHRNK4LkER7yA==
+parsegraph@9.0.0:
+  version "9.0.0"
+  resolved "https://parsegraph.fritonet.home.arpa/npm/parsegraph/-/parsegraph-9.0.0.tgz#695b127c7d669f492bfad2942bbd112d25095830"
+  integrity sha512-EIg7GRUe+tWk5BO1b9qEJjJcf0bZZ11zGpk8XjC4o8giZTRjq05voXw3XgI3Z6+jSI329AuLZqh3q9rJgewi+Q==
 
 parsegraph@^6.1.4:
   version "6.1.4"

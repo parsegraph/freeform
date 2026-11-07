@@ -1,5 +1,5 @@
 import * as builders from "./builders";
-import { normalizeGraph } from "../graphDocument";
+import { attachViewportAppearance, normalizeGraph } from "../graphDocument";
 
 export { buildProportionDocument } from "./proportion";
 export {
@@ -9,13 +9,15 @@ export {
   PRIMES_SLIDER_MAX,
 } from "./primes";
 
-// Builders return a graph, or [graph, selectedNode, , viewportData]. They are
-// finished as documents here rather than in their bodies, which stay free of
-// app imports so the construction benchmarks can run their exact source.
+// Builders return a graph, or [graph, selectedNode, , viewportData] when they
+// color it. They are finished as documents here rather than in their bodies,
+// which stay free of app imports so the construction benchmarks can run their
+// exact source. Colors become the document's appearance, so the graph shows
+// them without passing through a legacy save.
 const finished = (build) => (...args) => {
   const result = build(...args);
   if (Array.isArray(result)) {
-    normalizeGraph(result[0]);
+    attachViewportAppearance(normalizeGraph(result[0]), result[3]);
     return result;
   }
   return normalizeGraph(result);

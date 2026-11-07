@@ -90,6 +90,17 @@ export function adoptGraph(root, selectedNode) {
   return isNormalizedGraph(root) ? root : readGraph(writeGraph(root, selectedNode));
 }
 
+/**
+ * Store viewport-style colors (`styles`, `defaultNodeStyle`,
+ * `pageBackgroundColor`) as the document's appearance/1, as the first native
+ * save of a stateless graph did. Builders that color their graphs this way
+ * call it when they finish the graph.
+ */
+export function attachViewportAppearance(root, viewport) {
+  migrateLegacyAppearance(documentState(root), viewport);
+  return root;
+}
+
 // A v0 document keeps its styles in its viewport. Convert them to appearance/1
 // once, on read, exactly as its first native save did, so the graph saves like
 // any native document afterwards. sourceVersion still records the v0 source.

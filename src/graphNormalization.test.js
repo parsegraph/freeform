@@ -92,6 +92,36 @@ describe.each(producers)("%s", (name, load) => {
   });
 });
 
+// How openGraph displayed an example before graphs were shown as built: the
+// first history entry was written from the graph and the example's own
+// viewport data (stateless graphs under the legacy appearance rule), and the
+// display was rebuilt from that entry.
+function openedBefore(graph, selectedNode, viewportData, stateless) {
+  const copy = readGraph(writeGraph(graph, selectedNode));
+  if (stateless) delete copy[Symbol.for("parsegraph.freeform.document")];
+  return readGraph(writeGraph(copy, selectedNode, viewportData));
+}
+
+// Examples whose producers returned graphs without document state.
+const STATELESS = new Set([
+  "blank", "grid", "daily_planner_15", "random", "alt_columns", "march_madness",
+  "march_madness_vert", "playoffs", "playoffs_vert", "march", "rainbow",
+  "rainbow_vert", "rainbow_random", "cross", "json",
+]);
+
+describe.each(producers.filter(([name]) => name.startsWith("example ")))("%s", (name, load) => {
+  test("opens with the same appearance and saves as before", async () => {
+    const { graph, selectedNode, viewportData } = await load();
+    const selected = selection(selectedNode);
+    const type = name.slice("example ".length);
+    const before = openedBefore(graph, selected, viewportData, STATELESS.has(type));
+    expect(documentState(graph).appearance).toEqual(documentState(before).appearance);
+    for (const data of [viewportData ?? undefined, viewport(false), viewport(true)]) {
+      expect(json(writeGraph(graph, selected, data))).toBe(json(writeGraph(before, selected, data)));
+    }
+  });
+});
+
 function absoluteGraph() {
   // Preferences set before connecting stay absolute, as parsegraph leaves them.
   const root = new DirectionNode("root");
